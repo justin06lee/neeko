@@ -1,0 +1,11 @@
+{
+  "name": "neeko",
+  "private": true,
+  "license": "MPL-2.0",
+  "scripts": {
+    "surfer": "surfer"
+  },
+  "devDependencies": {
+    "@zen-browser/surfer": "1.14.9"
+  }
+}

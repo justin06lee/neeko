@@ -1,0 +1,13 @@
+# Firefox source and build output (managed by Surfer)
+engine/
+.surfer/
+dist/
+firefox-*/
+
+# Personal build overrides (Surfer reads this; never commit it)
+/mozconfig
+
+node_modules/
+.DS_Store
+.env
+.env.*
