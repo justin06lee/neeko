@@ -133,7 +133,9 @@ Add to it whenever something costs you time.
   (checked 2026-09-23): permission prompts still open, but pinned to the
   window's top-left corner because their anchor icon is hidden. Downloads
   finish silently: the downloads panel anchors on the hidden toolbar button
-  and never opens. Both are on the roadmap.
+  and never opens. Web page fullscreen (a video's fullscreen button) makes
+  the window fullscreen, but the page stays in the UI's content slot, with
+  the UI around it. All three are on the roadmap.
 
 ## Neeko API
 
