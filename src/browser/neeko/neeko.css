@@ -54,15 +54,16 @@
 /* Web page fullscreen (a video's fullscreen button, say): the page fills the
    window over the UI, which isn't drawn meanwhile. Firefox sets the attribute
    until the page exits fullscreen. !important beats the inline position and
-   size NeekoWindow gives the page area. */
-:root[neeko][inDOMFullscreen] #tabbrowser-tabbox {
+   size NeekoWindow gives the page area. A UI that listens for the API's
+   "fullscreen.page" event lays this out itself (neeko-ui-fullscreen). */
+:root[neeko][inDOMFullscreen]:not([neeko-ui-fullscreen]) #tabbrowser-tabbox {
   inset: 0 !important;
   width: auto !important;
   height: auto !important;
   border-radius: 0 !important;
 }
 
-:root[neeko][inDOMFullscreen] #neeko-ui {
+:root[neeko][inDOMFullscreen]:not([neeko-ui-fullscreen]) #neeko-ui {
   visibility: hidden;
 }
 

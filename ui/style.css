@@ -224,3 +224,24 @@ main {
   border-radius: 10px;
 }
 
+/* A fullscreen window has no window buttons, so the tab list moves up. */
+body.window-fullscreen aside {
+  padding-top: 12px;
+}
+
+body.window-fullscreen [data-neeko-window-buttons] {
+  display: none;
+}
+
+/* A web page is fullscreen (a video, say): this UI steps aside and the page
+   fills the window. */
+body.page-fullscreen main {
+  position: fixed;
+  inset: 0;
+  margin: 0;
+  border-radius: 0;
+}
+
+body.page-fullscreen :is(aside, header, #prompt) {
+  visibility: hidden;
+}

@@ -22,50 +22,49 @@ get added as it needs them.
 - [x] **Permission prompts**: location, notifications, storage, VR, MIDI,
   local network: the UI gets the request and answers it, with Firefox's
   delay against clickjacking. Fallback: Firefox's own prompt.
+- [x] **Fullscreen**: the UI hears when a page or the window goes
+  fullscreen, can lay out page fullscreen itself, and can exit it or make
+  the window fullscreen. Fallback: the page fills the screen over the UI.
 
 ## API features, in order
 
 1. [ ] **Camera, microphone, passwords and add-on installs.** Permission
-   prompts are done (below); these doorhangers stay Firefox's for now,
+   prompts are done (see Done); these doorhangers stay Firefox's for now,
    hanging from the top of the page. Camera and microphone prompts let the
    user pick a device inside Firefox's panel (`WebRTCParent.sys.mjs` reads
    the choice from it), so the API would need device lists; password saving
    and add-on installs show forms and permission lists.
-2. [ ] **Fullscreen.** Web page fullscreen (videos) and window fullscreen:
-   the UI hears about it and can get out of the way, or animate. Fallback
-   (done): the page fills the screen over the UI, which isn't drawn until
-   the page exits fullscreen.
-3. [ ] **Downloads.** List, progress, open, show in Finder, cancel, and a
+2. [ ] **Downloads.** List, progress, open, show in Finder, cancel, and a
    "download started" event. Fallback (done): Firefox's downloads panel
    opens at the page's top right when a download starts. It only opens by
    itself for the first of several downloads at once; Firefox animates its
    hidden toolbar button for the rest.
-4. [ ] **Favicons, by reference.** Each tab's icon as a URL the UI can put
+3. [ ] **Favicons, by reference.** Each tab's icon as a URL the UI can put
    in an `<img>`, never image data copied through the API.
-5. [ ] **Context menus.** The UI can draw its own menu for pages, links,
+4. [ ] **Context menus.** The UI can draw its own menu for pages, links,
    images and selections, with Firefox's actions available. Fallback:
    Firefox's own context menu.
-6. [ ] **Find in page.** Find, next, previous, match count. Fallback:
+5. [ ] **Find in page.** Find, next, previous, match count. Fallback:
    Firefox's find bar.
-7. [ ] **Address bar suggestions.** History, bookmark and open-tab matches
+6. [ ] **Address bar suggestions.** History, bookmark and open-tab matches
    for what the user types, and search suggestions, fetched only when the
    UI asks (search suggestions send what you type to the search engine,
    which is why they're off in Firefox's hidden address bar).
-8. [ ] **History.** Search and list visits, delete entries.
-9. [ ] **Bookmarks.** Read, add, edit, remove, with change events.
-10. [ ] **Tab sleeping.** Unload a tab to save memory, and a `sleeping`
-    field on tabs. Needed for "a bajillion tabs".
-11. [ ] **Tab previews, by reference.** Thumbnails the UI shows without
+7. [ ] **History.** Search and list visits, delete entries.
+8. [ ] **Bookmarks.** Read, add, edit, remove, with change events.
+9. [ ] **Tab sleeping.** Unload a tab to save memory, and a `sleeping`
+   field on tabs. Needed for "a bajillion tabs".
+10. [ ] **Tab previews, by reference.** Thumbnails the UI shows without
     copying image data.
-12. [ ] **Extensions UI.** List extensions' toolbar buttons, show their
+11. [ ] **Extensions UI.** List extensions' toolbar buttons, show their
     badges and open their popups from the UI. Today: extensions work, but
     their buttons live in the hidden toolbar.
-13. [ ] **DevTools.** Open and close DevTools for the page, and the Browser
+12. [ ] **DevTools.** Open and close DevTools for the page, and the Browser
     Toolbox for the UI (dev builds already allow it).
-14. [ ] **Performance test with a budget.** Automated: hundreds of tabs,
+13. [ ] **Performance test with a budget.** Automated: hundreds of tabs,
     memory and tab-switch time, measured against stock Firefox, failing
     when Neeko gets slower.
-15. [ ] **"Trick" mode.** Run the UI as a sandboxed, unprivileged page that
+14. [ ] **"Trick" mode.** Run the UI as a sandboxed, unprivileged page that
     can only use the API. The API is already messages of plain data, so
     this swaps the channel, not the calls.
 

@@ -7,6 +7,7 @@ const back = document.getElementById("back");
 const forward = document.getElementById("forward");
 const reload = document.getElementById("reload");
 const promptBar = document.getElementById("prompt");
+const fullscreenButton = document.getElementById("fullscreen");
 
 // The latest description of every tab, and its list item, by tab id.
 const tabs = new Map();
@@ -181,6 +182,14 @@ neeko.prompts.on("close", ({ id }) => {
     promptsChanged(prompt.tabId);
   }
 });
+// Listening for "page" also tells Neeko this UI lays out page fullscreen
+// itself (style.css: it steps aside and the page fills the window).
+neeko.fullscreen.on("page", ({ fullscreen }) =>
+  document.body.classList.toggle("page-fullscreen", fullscreen)
+);
+neeko.fullscreen.on("window", ({ fullscreen }) =>
+  document.body.classList.toggle("window-fullscreen", fullscreen)
+);
 
 tabList.addEventListener("click", event => {
   let item = event.target.closest("li");
@@ -205,6 +214,10 @@ tabList.addEventListener("auxclick", event => {
 
 document.getElementById("new-tab").addEventListener("click", () => {
   neeko.tabs.open();
+});
+fullscreenButton.addEventListener("click", () => {
+  let fullscreen = document.body.classList.contains("window-fullscreen");
+  neeko.fullscreen.setWindow(!fullscreen);
 });
 back.addEventListener("click", () => neeko.nav.back());
 forward.addEventListener("click", () => neeko.nav.forward());
@@ -235,6 +248,9 @@ address.addEventListener("blur", () => {
 for (let prompt of await neeko.prompts.list()) {
   prompts.set(prompt.id, prompt);
 }
+let fullscreen = await neeko.fullscreen.state();
+document.body.classList.toggle("page-fullscreen", fullscreen.page);
+document.body.classList.toggle("window-fullscreen", fullscreen.window);
 let list = await neeko.tabs.list();
 tabList.replaceChildren();
 items.clear();

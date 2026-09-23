@@ -4,7 +4,7 @@ Your UI talks to Firefox through one global object, `neeko`. It's there
 before your first script runs, in your UI page (`ui/index.html`) and nowhere
 else. Web pages never get it.
 
-So far it covers tabs, navigation and permission prompts. Features get
+So far it covers tabs, navigation, permission prompts and fullscreen. Features get
 added one at a time as browsers built on Neeko need them. The demo UI in
 `ui/` uses every one of them.
 
@@ -175,6 +175,39 @@ Camera, microphone and screen sharing prompts stay Firefox's (the user picks
 a device in them), and so do password saving and add-on installs. They
 appear hanging from the top of the page (see [Fallbacks](#fallbacks)).
 
+## Fullscreen
+
+Two things can be fullscreen: a web page (a video's fullscreen button), and
+the window itself (the green button, or Ctrl+Cmd+F). A page going
+fullscreen makes the window fullscreen too.
+
+```js
+neeko.fullscreen.on("page", ({ fullscreen }) =>
+  document.body.classList.toggle("page-fullscreen", fullscreen)
+);
+```
+
+While a page is fullscreen, Neeko makes it fill the window over your UI.
+Listen for `page` and your UI does that instead: make your content slot
+cover the window (and animate it, if you like), and the page follows it as
+always. Your UI stays drawn, so anything outside the slot still shows.
+
+### Methods
+
+| Method | What it does |
+| --- | --- |
+| `neeko.fullscreen.state()` | `{ page, window }`: whether a web page is fullscreen, and whether the window is. |
+| `neeko.fullscreen.exit()` | Ends page fullscreen, as Escape does. Resolves once it's over. |
+| `neeko.fullscreen.setWindow(fullscreen)` | Makes the window fullscreen (`true`) or not (`false`), like View > Enter Full Screen. |
+| `neeko.fullscreen.on(event, listener)` | Listens for an event, as `tabs.on` does. |
+
+### Events
+
+| Event | Data | When |
+| --- | --- | --- |
+| `page` | `{ fullscreen }` | A web page went fullscreen, or left it. Listening for this is how your UI says it lays page fullscreen out itself. |
+| `window` | `{ fullscreen }` | The window went fullscreen, or left it. On macOS its window buttons are gone meanwhile. |
+
 ## Fallbacks
 
 Firefox keeps running underneath your UI, so a browser built on Neeko works
@@ -197,10 +230,11 @@ even where its UI has no controls yet.
 - **Downloads.** When a download starts, Firefox's downloads panel opens at
   the top right of the web page, with its progress. Cmd+Shift+Y shows every
   download, in Firefox's Library window.
-- **Fullscreen.** When a web page goes fullscreen (a video's fullscreen
-  button, say), it fills the screen over your UI, and goes back into your
-  content slot when it exits. Your UI stays loaded and its scripts keep
-  running, but it isn't drawn meanwhile.
+- **Fullscreen.** If your UI doesn't listen for `fullscreen` `page`, a web
+  page that goes fullscreen (a video's fullscreen button, say) fills the
+  screen over your UI, and goes back into your content slot when it exits.
+  Your UI stays loaded and its scripts keep running, but it isn't drawn
+  meanwhile.
 
 ## Security
 

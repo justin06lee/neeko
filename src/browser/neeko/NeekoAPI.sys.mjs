@@ -65,6 +65,20 @@ const EVENTS = [
   "nav.addressbar",
   "prompts.open",
   "prompts.close",
+  "fullscreen.page",
+  "fullscreen.window",
+];
+
+// Set on the window's root while the UI lays out page fullscreen itself, which
+// turns off neeko.css's fallback (the page filling the window over the UI).
+const UI_FULLSCREEN = "neeko-ui-fullscreen";
+
+// Window events for fullscreen: a web page entering or leaving it, and the
+// window itself ("fullscreen" fires once window.fullScreen has changed).
+const FULLSCREEN_EVENTS = [
+  "MozDOMFullscreen:Entered",
+  "MozDOMFullscreen:Exited",
+  "fullscreen",
 ];
 
 // Fields whose changes arrive as "update" events. Selection has its own
@@ -118,6 +132,9 @@ const METHODS = {
     }
     if (event == "prompts.open") {
       NeekoPanels.setUIShowsPrompts(this.win, listening);
+    } else if (event == "fullscreen.page") {
+      let root = this.win.document.documentElement;
+      root.toggleAttribute(UI_FULLSCREEN, listening);
     }
   },
 
@@ -209,6 +226,29 @@ const METHODS = {
     }
     NeekoPanels.answerPrompt(this.win, id, action, !!options?.remember);
   },
+
+  "fullscreen.state"() {
+    return this.fullscreenState();
+  },
+
+  /**
+   * Ends web page fullscreen, as Escape does. Resolves once it has ended.
+   */
+  async "fullscreen.exit"() {
+    if (this.win.document.fullscreenElement) {
+      await this.win.document.exitFullscreen();
+    }
+  },
+
+  /**
+   * Makes the window fullscreen, or not, like View > Enter Full Screen.
+   */
+  "fullscreen.setWindow"(fullscreen) {
+    if (typeof fullscreen != "boolean") {
+      throw new TypeError("Expected true or false.");
+    }
+    this.win.fullScreen = fullscreen;
+  },
 };
 
 export class NeekoAPI {
@@ -216,6 +256,8 @@ export class NeekoAPI {
   #lastSent = new WeakMap();
   /** The events the UI listens for. */
   listening = new Set();
+  /** The fullscreen state the UI last heard about. */
+  #fullscreen;
   #send;
   #destroyed = false;
 
@@ -232,6 +274,10 @@ export class NeekoAPI {
       this.gBrowser.tabContainer.addEventListener(type, this);
     }
     this.gBrowser.addTabsProgressListener(this);
+    this.#fullscreen = this.fullscreenState();
+    for (let type of FULLSCREEN_EVENTS) {
+      win.addEventListener(type, this, true);
+    }
   }
 
   destroy() {
@@ -242,6 +288,13 @@ export class NeekoAPI {
     // Firefox's own panel shows the prompts again.
     if (this.listening.has("prompts.open")) {
       NeekoPanels.setUIShowsPrompts(this.win, false);
+    }
+    // And neeko.css lays out page fullscreen again.
+    if (this.listening.has("fullscreen.page")) {
+      this.win.document.documentElement.removeAttribute(UI_FULLSCREEN);
+    }
+    for (let type of FULLSCREEN_EVENTS) {
+      this.win.removeEventListener(type, this, true);
     }
     for (let type of TAB_EVENTS) {
       this.gBrowser.tabContainer.removeEventListener(type, this);
@@ -292,6 +345,29 @@ export class NeekoAPI {
     }
     this.#emit("nav.addressbar", {});
     return true;
+  }
+
+  /**
+   * Whether a web page is fullscreen, and whether the window is.
+   */
+  fullscreenState() {
+    return {
+      page: !!this.win.document.fullscreenElement,
+      window: !!this.win.fullScreen,
+    };
+  }
+
+  /**
+   * Tells the UI what changed about fullscreen, if anything did.
+   */
+  #fullscreenChanged(page) {
+    let now = { ...this.fullscreenState(), page };
+    for (let kind of ["page", "window"]) {
+      if (now[kind] != this.#fullscreen[kind]) {
+        this.#fullscreen[kind] = now[kind];
+        this.#emit(`fullscreen.${kind}`, { fullscreen: now[kind] });
+      }
+    }
   }
 
   /**
@@ -355,6 +431,17 @@ export class NeekoAPI {
   }
 
   handleEvent(event) {
+    switch (event.type) {
+      case "MozDOMFullscreen:Entered":
+        this.#fullscreenChanged(true);
+        return;
+      case "MozDOMFullscreen:Exited":
+        this.#fullscreenChanged(false);
+        return;
+      case "fullscreen":
+        this.#fullscreenChanged(this.#fullscreen.page);
+        return;
+    }
     let tab = event.target;
     switch (event.type) {
       case "TabOpen":

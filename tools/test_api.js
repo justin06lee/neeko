@@ -262,6 +262,57 @@ await waitFor(
 check(getComputedStyle(frame).visibility == "visible", "the UI is drawn again");
 await neeko.tabs.close(pageTab.id);
 
+// A UI that listens for "page" lays out page fullscreen itself: the page
+// stays in its slot, wherever the UI puts it, and the UI stays drawn.
+let fullscreen = [];
+let stopPage = neeko.fullscreen.on("page", ({ fullscreen: on }) =>
+  fullscreen.push(`page ${on}`)
+);
+let stopWindow = neeko.fullscreen.on("window", ({ fullscreen: on }) =>
+  fullscreen.push(`window ${on}`)
+);
+let heardFullscreen = what => fullscreen.includes(what);
+let fullscreenState = async () => JSON.stringify(await neeko.fullscreen.state());
+check(
+  (await fullscreenState()) == `{"page":false,"window":false}`,
+  `state() before (${await fullscreenState()})`
+);
+pageTab = await neeko.tabs.open(`${BASE}/fullscreen`);
+await waitFor(() => heardFullscreen("page true"), "the UI hears a page go fullscreen");
+await waitFor(() => heardFullscreen("window true"), "and the window with it");
+check((await fullscreenState()) == `{"page":true,"window":true}`, `state() (${await fullscreenState()})`);
+await new Promise(r => setTimeout(r, 300));
+check(
+  `${rectOf(tabbox)}` == `${slotRect()}` &&
+    `${rectOf(tabbox)}` != `0,0,${innerWidth},${innerHeight}`,
+  `the page stays in the UI's slot (${rectOf(tabbox)})`
+);
+check(getComputedStyle(frame).visibility == "visible", "the UI stays drawn");
+await neeko.fullscreen.exit();
+await waitFor(
+  () => heardFullscreen("page false") && heardFullscreen("window false"),
+  "exit() ends page fullscreen, and the window's"
+);
+await neeko.tabs.close(pageTab.id);
+
+await neeko.fullscreen.setWindow(true);
+await waitFor(() => fullScreen && fullscreen.at(-1) == "window true", "setWindow(true)");
+check(
+  (await fullscreenState()) == `{"page":false,"window":true}`,
+  `a fullscreen window without a fullscreen page (${await fullscreenState()})`
+);
+await neeko.fullscreen.setWindow(false);
+await waitFor(() => !fullScreen && fullscreen.at(-1) == "window false", "setWindow(false)");
+check(fullscreen.filter(e => e.startsWith("page")).length == 2, "no extra page events");
+await rejects(neeko.fullscreen.setWindow("yes"), /true or false/, "setWindow() with a string");
+stopPage();
+stopWindow();
+await neeko.tabs.current();
+check(
+  !document.documentElement.hasAttribute("neeko-ui-fullscreen"),
+  "once the UI stops listening, the fallback is back"
+);
+
 // Firefox's own panels hang from the top edge of the page, 8px in, since the
 // toolbar icons they'd hang from are hidden: the address bar's panels on the
 // left, the toolbar buttons' on the right.
