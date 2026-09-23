@@ -19,13 +19,13 @@ get added as it needs them.
   fullscreen fills the screen; permission prompts and other panels hang
   from the top of the page; the downloads panel opens when a download
   starts.
-- [x] **Permission prompts**: location, notifications, storage, VR, MIDI,
+- [x] **Permission prompts** (v0.2.0): location, notifications, storage, VR, MIDI,
   local network: the UI gets the request and answers it, with Firefox's
   delay against clickjacking. Fallback: Firefox's own prompt.
-- [x] **Fullscreen**: the UI hears when a page or the window goes
+- [x] **Fullscreen** (v0.2.0): the UI hears when a page or the window goes
   fullscreen, can lay out page fullscreen itself, and can exit it or make
   the window fullscreen. Fallback: the page fills the screen over the UI.
-- [x] **Downloads**: list, progress, open, show in Finder, cancel, retry,
+- [x] **Downloads** (v0.2.0): list, progress, open, show in Finder, cancel, retry,
   remove, and start, update and remove events. Fallback: Firefox's
   downloads panel.
 

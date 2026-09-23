@@ -345,5 +345,7 @@ This launches the dev build with a fresh profile and a bare test UI of its
 own (so it doesn't depend on what's in `ui/`), serves a few test pages from
 localhost (no internet needed), and drives every method and event through
 `neeko`. That includes checks that web pages can't see it, that sleeping tabs
-stay asleep, and that the address bar fallback appears only when nobody
-listens.
+stay asleep, and that each fallback (the address bar, prompts, fullscreen,
+the downloads panel) steps in only when nobody listens. It asks for a
+location, goes fullscreen (the screen switches for a moment) and downloads a
+few small files, all from localhost, into its throwaway profile.
