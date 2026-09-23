@@ -19,9 +19,10 @@ default, so a browser built on Neeko is always complete.
 
 ## Status
 
-Early foundation work. Right now this repo builds and runs stock Firefox
-156.0.1 through [Surfer](https://github.com/zen-browser/surfer). Neeko's UI
-layer and API come next.
+Early foundation work, on Firefox 156.0.1. Neeko hides Firefox's interface and
+loads a custom UI from `ui/`, with the web page placed wherever that UI says.
+The JavaScript API (tabs, navigation) comes next; for now `ui/` holds a
+placeholder that only moves the page around.
 
 ## Requirements
 
@@ -36,15 +37,32 @@ make
 ```
 
 The first run installs dependencies, downloads the Firefox source into
-`engine/`, builds it, and launches it with a throwaway dev profile. That takes
-about 15 minutes, mostly unpacking Firefox and snapshotting it into git. After
-that, a rebuild takes under a minute.
+`engine/`, builds it, and launches it with your UI from `ui/` and a throwaway
+dev profile. That takes about 15 minutes, mostly unpacking Firefox and
+snapshotting it into git. After that, a rebuild takes under a minute.
 
 | Command       | What it does                                       |
 | ------------- | -------------------------------------------------- |
 | `make`        | Set up if needed, build, and launch                |
 | `make build`  | Build only                                         |
 | `make update` | Quit a running dev build, rebuild, and relaunch it |
+
+## Building a UI
+
+Your UI is an ordinary web page: `ui/index.html` plus whatever CSS and JS it
+loads. Neeko shows it in place of Firefox's interface, filling the window.
+Changes to `ui/` only need a relaunch, not a rebuild.
+
+- Mark the element where the website should appear with
+  `data-neeko-content`. Neeko keeps the real page on top of it, matching its
+  position, size and corner rounding, and follows it when it moves or
+  animates.
+- On macOS, the window's close, minimize and zoom buttons appear wherever you
+  put an element with `data-neeko-window-buttons`.
+- Scripts must be separate files (the page's security policy blocks inline
+  scripts). They load from `chrome://neeko-ui/content/`, which maps to `ui/`.
+- If there's no UI configured, Neeko stays out of the way and Firefox looks as
+  usual. Pop-up windows, such as sign-in pop-ups, keep Firefox's minimal UI.
 
 ## How it works
 
@@ -58,15 +76,34 @@ release and only builds the frontend layer locally (minutes). Neeko works
 entirely in that frontend layer. Set `NEEKO_FULL_BUILD=1` to compile
 everything from source instead.
 
+Neeko uses **hide and plug**. Firefox keeps running exactly as it is, logic
+and all, so tabs, extensions, session restore and prompts all keep working.
+Neeko hooks into Firefox's official per-window startup hook, before the
+window is first drawn, and does three things:
+
+1. It hides Firefox's toolbars and sidebar. The elements are never laid out or
+   painted, which in a 300-tab test made opening tabs faster than stock
+   Firefox, with no measurable difference in memory or tab switching.
+2. It mounts your UI in a frame filling the window.
+3. It places Firefox's real page area over your content slot.
+
+The only change to a Firefox file is one line (plus a comment) that adds Neeko's folder
+to the build (`src/browser/moz-build.patch`).
+
 Because of artifact builds, the program inside the app bundle keeps the name
-`firefox`. The app's visible name and its profile folder are "Neeko", so dev
-builds never touch a regular Firefox profile.
+`firefox`. The profile folder is named "Neeko", so dev builds never touch a
+regular Firefox profile. The visible name and icon come from branding, which
+is still Firefox's unofficial "Nightly" branding for now.
 
 ```
 neeko/
 ├── surfer.json   Firefox version pin and app name
 ├── configs/      Build settings Surfer merges into engine/mozconfig
-├── src/          Neeko's own files and patches, layered onto engine/ (empty for now)
+├── ui/           The custom UI (yours to replace)
+├── src/          Neeko's own files, layered onto engine/ by Surfer
+│   └── browser/
+│       ├── neeko/            Window hook, hide styles, default prefs
+│       └── moz-build.patch   The one line that adds neeko/ to the build
 ├── docs/         Research notes (so far: what Firefox connects to)
 ├── assets/       README artwork
 ├── Makefile
