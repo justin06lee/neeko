@@ -25,6 +25,9 @@ get added as it needs them.
 - [x] **Fullscreen**: the UI hears when a page or the window goes
   fullscreen, can lay out page fullscreen itself, and can exit it or make
   the window fullscreen. Fallback: the page fills the screen over the UI.
+- [x] **Downloads**: list, progress, open, show in Finder, cancel, retry,
+  remove, and start, update and remove events. Fallback: Firefox's
+  downloads panel.
 
 ## API features, in order
 
@@ -34,37 +37,32 @@ get added as it needs them.
    user pick a device inside Firefox's panel (`WebRTCParent.sys.mjs` reads
    the choice from it), so the API would need device lists; password saving
    and add-on installs show forms and permission lists.
-2. [ ] **Downloads.** List, progress, open, show in Finder, cancel, and a
-   "download started" event. Fallback (done): Firefox's downloads panel
-   opens at the page's top right when a download starts. It only opens by
-   itself for the first of several downloads at once; Firefox animates its
-   hidden toolbar button for the rest.
-3. [ ] **Favicons, by reference.** Each tab's icon as a URL the UI can put
+2. [ ] **Favicons, by reference.** Each tab's icon as a URL the UI can put
    in an `<img>`, never image data copied through the API.
-4. [ ] **Context menus.** The UI can draw its own menu for pages, links,
+3. [ ] **Context menus.** The UI can draw its own menu for pages, links,
    images and selections, with Firefox's actions available. Fallback:
    Firefox's own context menu.
-5. [ ] **Find in page.** Find, next, previous, match count. Fallback:
+4. [ ] **Find in page.** Find, next, previous, match count. Fallback:
    Firefox's find bar.
-6. [ ] **Address bar suggestions.** History, bookmark and open-tab matches
+5. [ ] **Address bar suggestions.** History, bookmark and open-tab matches
    for what the user types, and search suggestions, fetched only when the
    UI asks (search suggestions send what you type to the search engine,
    which is why they're off in Firefox's hidden address bar).
-7. [ ] **History.** Search and list visits, delete entries.
-8. [ ] **Bookmarks.** Read, add, edit, remove, with change events.
-9. [ ] **Tab sleeping.** Unload a tab to save memory, and a `sleeping`
+6. [ ] **History.** Search and list visits, delete entries.
+7. [ ] **Bookmarks.** Read, add, edit, remove, with change events.
+8. [ ] **Tab sleeping.** Unload a tab to save memory, and a `sleeping`
    field on tabs. Needed for "a bajillion tabs".
-10. [ ] **Tab previews, by reference.** Thumbnails the UI shows without
-    copying image data.
-11. [ ] **Extensions UI.** List extensions' toolbar buttons, show their
+9. [ ] **Tab previews, by reference.** Thumbnails the UI shows without
+   copying image data.
+10. [ ] **Extensions UI.** List extensions' toolbar buttons, show their
     badges and open their popups from the UI. Today: extensions work, but
     their buttons live in the hidden toolbar.
-12. [ ] **DevTools.** Open and close DevTools for the page, and the Browser
+11. [ ] **DevTools.** Open and close DevTools for the page, and the Browser
     Toolbox for the UI (dev builds already allow it).
-13. [ ] **Performance test with a budget.** Automated: hundreds of tabs,
+12. [ ] **Performance test with a budget.** Automated: hundreds of tabs,
     memory and tab-switch time, measured against stock Firefox, failing
     when Neeko gets slower.
-14. [ ] **"Trick" mode.** Run the UI as a sandboxed, unprivileged page that
+13. [ ] **"Trick" mode.** Run the UI as a sandboxed, unprivileged page that
     can only use the API. The API is already messages of plain data, so
     this swaps the channel, not the calls.
 

@@ -4,7 +4,8 @@ Your UI talks to Firefox through one global object, `neeko`. It's there
 before your first script runs, in your UI page (`ui/index.html`) and nowhere
 else. Web pages never get it.
 
-So far it covers tabs, navigation, permission prompts and fullscreen. Features get
+So far it covers tabs, navigation, permission prompts, fullscreen and
+downloads. Features get
 added one at a time as browsers built on Neeko need them. The demo UI in
 `ui/` uses every one of them.
 
@@ -208,6 +209,61 @@ always. Your UI stays drawn, so anything outside the slot still shows.
 | `page` | `{ fullscreen }` | A web page went fullscreen, or left it. Listening for this is how your UI says it lays page fullscreen out itself. |
 | `window` | `{ fullscreen }` | The window went fullscreen, or left it. On macOS its window buttons are gone meanwhile. |
 
+## Downloads
+
+The window's downloads, the same list Firefox's downloads panel and
+Library window show (private ones in a private window). Listen for `start`
+and Firefox's downloads panel no longer opens when a download starts: your
+UI shows it instead.
+
+```js
+neeko.downloads.on("start", ({ download }) => add(download));
+neeko.downloads.on("update", ({ download }) => redraw(download));
+```
+
+A download looks like this:
+
+```js
+{
+  id: 5,
+  url: "https://example.com/report.pdf",   // where it's from
+  filename: "report.pdf",
+  path: "/Users/you/Downloads/report.pdf",  // where it goes
+  state: "downloading",   // or "paused", "done", "failed", "canceled", "blocked"
+  received: 1200000,      // bytes so far; once done, the file's size
+  total: 4000000,         // or null if the site didn't say
+  speed: 350000,          // bytes per second, Firefox's estimate
+  startTime: 1790000000000,
+  error: null,            // why it failed: "network", "file" or "other"
+}
+```
+
+`update` comes whenever something changes, at most every 400 milliseconds
+for progress (Firefox's own pace). `paused` downloads were paused from
+Firefox's panel or Library window; retrying resumes them.
+
+### Methods
+
+Every method but `list` takes a download's `id`.
+
+| Method | What it does |
+| --- | --- |
+| `neeko.downloads.list()` | Every download in the list, oldest first. |
+| `neeko.downloads.open(downloadId)` | Opens the downloaded file, with the app the system would use (or Firefox, for files it shows itself, like PDFs). Rejects if the download isn't done. |
+| `neeko.downloads.show(downloadId)` | Shows the file in Finder. |
+| `neeko.downloads.cancel(downloadId)` | Stops a download and deletes what it had so far. |
+| `neeko.downloads.retry(downloadId)` | Starts a failed, canceled or paused download again. |
+| `neeko.downloads.remove(downloadId)` | Takes a download off the list and out of history. The file stays. |
+| `neeko.downloads.on(event, listener)` | Listens for an event, as `tabs.on` does. |
+
+### Events
+
+| Event | Data | When |
+| --- | --- | --- |
+| `start` | `{ download }` | A download started. Listening for this is how your UI says it shows downloads itself. |
+| `update` | `{ download }` | A download progressed, finished, failed or was canceled. |
+| `remove` | `{ id }` | A download left the list. |
+
 ## Fallbacks
 
 Firefox keeps running underneath your UI, so a browser built on Neeko works
@@ -227,9 +283,10 @@ even where its UI has no controls yet.
   prompts, on the right for the toolbar buttons' notices, and they follow
   the page if your UI moves it. If your UI stops listening while prompts are
   waiting, Firefox's prompt shows them.
-- **Downloads.** When a download starts, Firefox's downloads panel opens at
-  the top right of the web page, with its progress. Cmd+Shift+Y shows every
-  download, in Firefox's Library window.
+- **Downloads.** If your UI doesn't listen for `downloads` `start`, Firefox's
+  downloads panel opens at the top right of the web page when a download
+  starts, with its progress. Cmd+Shift+Y always shows every download, in
+  Firefox's Library window.
 - **Fullscreen.** If your UI doesn't listen for `fullscreen` `page`, a web
   page that goes fullscreen (a video's fullscreen button, say) fills the
   screen over your UI, and goes back into your content slot when it exits.

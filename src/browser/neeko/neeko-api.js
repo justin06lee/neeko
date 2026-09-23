@@ -114,6 +114,15 @@ port => {
       setWindow: fullscreen => call("fullscreen.setWindow", fullscreen),
       on: events("fullscreen", ["page", "window"]),
     }),
+    downloads: Object.freeze({
+      list: () => call("downloads.list"),
+      open: downloadId => call("downloads.open", downloadId),
+      show: downloadId => call("downloads.show", downloadId),
+      cancel: downloadId => call("downloads.cancel", downloadId),
+      retry: downloadId => call("downloads.retry", downloadId),
+      remove: downloadId => call("downloads.remove", downloadId),
+      on: events("downloads", ["start", "update", "remove"]),
+    }),
   });
 
   Object.defineProperty(window, "neeko", { value: neeko, enumerable: true });

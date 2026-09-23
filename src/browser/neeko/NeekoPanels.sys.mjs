@@ -13,7 +13,9 @@
  * This is the fallback for UIs that don't show these things themselves. A
  * UI that listens for the API's "prompts.open" shows permission prompts
  * itself: this module tells it about them, keeps Firefox's panel closed
- * meanwhile, and carries out the UI's answers.
+ * meanwhile, and carries out the UI's answers. One that listens for
+ * "downloads.start" shows new downloads itself, so Firefox's downloads panel
+ * doesn't open for them.
  */
 
 const HTML_NS = "http://www.w3.org/1999/xhtml";
@@ -136,6 +138,24 @@ function anchorDownloadsPanel(win) {
     let getAnchor = button.getAnchor;
     button.getAnchor = function () {
       return getAnchor.call(this) ?? win.document.getElementById(ANCHOR_ID);
+    };
+  });
+}
+
+/**
+ * Firefox opens its downloads panel by itself when a download starts
+ * (DownloadsCommon.sys.mjs calls showPanel() with no arguments). While the
+ * UI shows downloads itself, it doesn't. Opening it on purpose still works.
+ */
+function watchDownloadsPanel(win, state) {
+  whenCreated(win, "DownloadsPanel", panel => {
+    let showPanel = panel.showPanel;
+    panel.showPanel = function (openedManually = false, ...rest) {
+      let api = state.getAPI();
+      if (!openedManually && api?.listening.has("downloads.start")) {
+        return;
+      }
+      showPanel.call(this, openedManually, ...rest);
     };
   });
 }
@@ -318,6 +338,7 @@ export const NeekoPanels = {
     let state = { prompts: new Map(), getAPI, popups: null };
     windows.set(win, state);
     watchPrompts(win, state);
+    watchDownloadsPanel(win, state);
   },
 
   /**

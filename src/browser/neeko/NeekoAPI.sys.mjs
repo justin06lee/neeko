@@ -18,6 +18,7 @@
  * UI steps in.
  */
 
+import { NeekoDownloads } from "moz-src:///browser/neeko/NeekoDownloads.sys.mjs";
 import { NeekoPanels } from "moz-src:///browser/neeko/NeekoPanels.sys.mjs";
 
 // Tab ids are small numbers, unique for the whole session, so they stay the
@@ -67,6 +68,9 @@ const EVENTS = [
   "prompts.close",
   "fullscreen.page",
   "fullscreen.window",
+  "downloads.start",
+  "downloads.update",
+  "downloads.remove",
 ];
 
 // Set on the window's root while the UI lays out page fullscreen itself, which
@@ -130,7 +134,10 @@ const METHODS = {
     } else {
       this.listening.delete(event);
     }
-    if (event == "prompts.open") {
+    if (event.startsWith("downloads.")) {
+      // Download events come from following the window's list.
+      this.downloads();
+    } else if (event == "prompts.open") {
       NeekoPanels.setUIShowsPrompts(this.win, listening);
     } else if (event == "fullscreen.page") {
       let root = this.win.document.documentElement;
@@ -249,6 +256,30 @@ const METHODS = {
     }
     this.win.fullScreen = fullscreen;
   },
+
+  "downloads.list"() {
+    return this.downloads().list();
+  },
+
+  "downloads.open"(id) {
+    return this.downloads().open(id);
+  },
+
+  "downloads.show"(id) {
+    return this.downloads().show(id);
+  },
+
+  "downloads.cancel"(id) {
+    return this.downloads().cancel(id);
+  },
+
+  "downloads.retry"(id) {
+    return this.downloads().retry(id);
+  },
+
+  "downloads.remove"(id) {
+    return this.downloads().remove(id);
+  },
 };
 
 export class NeekoAPI {
@@ -258,6 +289,8 @@ export class NeekoAPI {
   listening = new Set();
   /** The fullscreen state the UI last heard about. */
   #fullscreen;
+  /** The window's downloads, once the UI asks about them. */
+  #downloads = null;
   #send;
   #destroyed = false;
 
@@ -296,6 +329,7 @@ export class NeekoAPI {
     for (let type of FULLSCREEN_EVENTS) {
       this.win.removeEventListener(type, this, true);
     }
+    this.#downloads?.destroy();
     for (let type of TAB_EVENTS) {
       this.gBrowser.tabContainer.removeEventListener(type, this);
     }
@@ -345,6 +379,17 @@ export class NeekoAPI {
     }
     this.#emit("nav.addressbar", {});
     return true;
+  }
+
+  /**
+   * The window's downloads (NeekoDownloads), followed from the first time
+   * the UI asks about them.
+   */
+  downloads() {
+    this.#downloads ??= new NeekoDownloads(this.win, (event, data) =>
+      this.#emit(event, data)
+    );
+    return this.#downloads;
   }
 
   /**

@@ -1,5 +1,6 @@
-// The demo UI: a tab list, an address bar and a bar for permission prompts,
-// built only on the Neeko API (the global `neeko` object, see docs/api.md).
+// The demo UI: a tab list, an address bar, a bar for permission prompts and
+// a downloads list, built only on the Neeko API (the global `neeko` object,
+// see docs/api.md).
 
 const tabList = document.getElementById("tabs");
 const address = document.getElementById("address");
@@ -8,6 +9,7 @@ const forward = document.getElementById("forward");
 const reload = document.getElementById("reload");
 const promptBar = document.getElementById("prompt");
 const fullscreenButton = document.getElementById("fullscreen");
+const downloadList = document.querySelector("#downloads ol");
 
 // The latest description of every tab, and its list item, by tab id.
 const tabs = new Map();
@@ -155,6 +157,82 @@ function promptsChanged(tabId) {
   }
 }
 
+// 1234567 -> "1.2 MB"
+function formatBytes(bytes) {
+  let units = ["bytes", "KB", "MB", "GB"];
+  let unit = 0;
+  while (bytes >= 1000 && unit < units.length - 1) {
+    bytes /= 1000;
+    unit++;
+  }
+  return `${unit ? bytes.toFixed(1) : bytes} ${units[unit]}`;
+}
+
+const DOWNLOAD_STATUS = {
+  paused: "Paused",
+  canceled: "Canceled",
+  blocked: "Blocked",
+  failed: "Failed",
+};
+
+// A download's row, made or updated from its latest description.
+function showDownload(download) {
+  let item = downloadList.querySelector(`[data-id="${download.id}"]`);
+  if (!item) {
+    item = document.createElement("li");
+    item.dataset.id = download.id;
+    item.innerHTML =
+      '<span class="name"></span><span class="buttons"></span>' +
+      '<progress max="1"></progress><span class="status"></span>';
+    downloadList.prepend(item);
+  }
+  item.className = download.state;
+  let name = item.querySelector(".name");
+  name.textContent = download.filename || download.url;
+  name.title = download.state == "done" ? "Open" : download.url;
+
+  let progress = item.querySelector("progress");
+  progress.hidden = download.state != "downloading";
+  if (download.total) {
+    progress.value = download.received / download.total;
+  } else {
+    progress.removeAttribute("value");
+  }
+  let status = item.querySelector(".status");
+  if (download.state == "downloading") {
+    status.textContent = download.total
+      ? `${formatBytes(download.received)} of ${formatBytes(download.total)}`
+      : formatBytes(download.received);
+  } else if (download.state == "done") {
+    status.textContent = formatBytes(download.received);
+  } else {
+    status.textContent = DOWNLOAD_STATUS[download.state];
+  }
+
+  // What each state offers, as in Firefox's downloads panel.
+  let actions = {
+    downloading: [["×", "Cancel", "cancel"]],
+    done: [["⌕", "Show in Finder", "show"], ["×", "Remove from list", "remove"]],
+  }[download.state] ?? [["↻", "Retry", "retry"], ["×", "Remove from list", "remove"]];
+  if (download.state == "blocked") {
+    actions = [["×", "Remove from list", "remove"]];
+  }
+  let buttons = actions.map(([label, title, action]) => {
+    let button = document.createElement("button");
+    button.textContent = label;
+    button.title = title;
+    button.dataset.action = action;
+    return button;
+  });
+  item.querySelector(".buttons").replaceChildren(...buttons);
+  downloadList.parentNode.hidden = false;
+}
+
+function removeDownload(id) {
+  downloadList.querySelector(`[data-id="${id}"]`)?.remove();
+  downloadList.parentNode.hidden = !downloadList.children.length;
+}
+
 function focusAddressBar() {
   address.focus();
   address.select();
@@ -190,6 +268,11 @@ neeko.fullscreen.on("page", ({ fullscreen }) =>
 neeko.fullscreen.on("window", ({ fullscreen }) =>
   document.body.classList.toggle("window-fullscreen", fullscreen)
 );
+// Listening for "start" also tells Neeko not to open Firefox's downloads
+// panel when a download starts.
+neeko.downloads.on("start", ({ download }) => showDownload(download));
+neeko.downloads.on("update", ({ download }) => showDownload(download));
+neeko.downloads.on("remove", ({ id }) => removeDownload(id));
 
 tabList.addEventListener("click", event => {
   let item = event.target.closest("li");
@@ -215,6 +298,20 @@ tabList.addEventListener("auxclick", event => {
 document.getElementById("new-tab").addEventListener("click", () => {
   neeko.tabs.open();
 });
+downloadList.addEventListener("click", event => {
+  let item = event.target.closest("li");
+  if (!item) {
+    return;
+  }
+  let id = Number(item.dataset.id);
+  let action = event.target.closest("button")?.dataset.action;
+  if (action) {
+    neeko.downloads[action](id).catch(reportError);
+  } else if (event.target.closest(".name") && item.classList.contains("done")) {
+    neeko.downloads.open(id).catch(reportError);
+  }
+});
+
 fullscreenButton.addEventListener("click", () => {
   let fullscreen = document.body.classList.contains("window-fullscreen");
   neeko.fullscreen.setWindow(!fullscreen);
@@ -247,6 +344,9 @@ address.addEventListener("blur", () => {
 // lists up to date.
 for (let prompt of await neeko.prompts.list()) {
   prompts.set(prompt.id, prompt);
+}
+for (let download of await neeko.downloads.list()) {
+  showDownload(download);
 }
 let fullscreen = await neeko.fullscreen.state();
 document.body.classList.toggle("page-fullscreen", fullscreen.page);

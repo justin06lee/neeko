@@ -253,6 +253,26 @@ Add to it whenever something costs you time.
     answered without it.
   - `displayURI` is false for some prompts (location); the site is then only
     `options.name`, the `<>` in the message.
+- **Downloads come from `Downloads.getList()`** (`Downloads.PUBLIC`, or
+  `PRIVATE` in private windows); a view added with `addView` hears
+  `onDownloadAdded` for every download already there first, so Neeko only
+  sends `start` for ones added after.
+  - Firefox reports progress at most every 400ms
+    (`kProgressUpdateIntervalMs`), so the last update before success can
+    be behind. Once a download succeeds, `target.size` is the file's size.
+  - Firefox opens its downloads panel by itself with `showPanel()` and no
+    arguments (`DownloadsCommon.sys.mjs`); the toolbar button passes
+    `openedManually`. `NeekoPanels` skips the first kind while the UI shows
+    downloads.
+  - `DownloadsCommon` is `moz-src:///browser/components/downloads/`, not
+    `resource:///modules/`, in Firefox 156.
+  - Tests can replace `DownloadIntegration.launchFile` and
+    `showContainingDirectory` (Firefox's own tests do) to check "open" and
+    "show" without launching an app or Finder.
+  - A download that's cut short can look finished. The API test's broken
+    download resets the connection (`SO_LINGER` 0) instead, which fails it
+    as `becauseSourceFailed`.
+  - PDFs open in a Firefox tab when they finish downloading, by default.
 - **Events caused by a call arrive before its reply**, because they share one
   ordered port. Events from anything else (links, shortcuts) arrive a moment
   after the fact, so tests must wait for them.
