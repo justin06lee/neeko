@@ -1,4 +1,5 @@
-neeko.jar:
+# In Firefox's own browser.jar, which packaged builds already include.
+browser.jar:
 % content neeko %content/neeko/
     content/neeko/neeko.css (neeko.css)
     content/neeko/neeko-ui.css (neeko-ui.css)

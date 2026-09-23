@@ -3,8 +3,9 @@
  * first layout, so Firefox's own UI never flashes on screen:
  *
  * 1. Hides Firefox's UI with neeko.css. Firefox's logic keeps running.
- * 2. Mounts the custom UI (index.html from the folder in the `neeko.ui.path`
- *    pref) in a frame that fills the window.
+ * 2. Mounts the custom UI (index.html, from the folder in the `neeko.ui.path`
+ *    pref, or else the UI bundled inside the app) in a frame that fills the
+ *    window.
  * 3. Keeps the web page area on top of the UI, exactly over the element the
  *    UI marks with the `data-neeko-content` attribute.
  * 4. Gives the UI page the Neeko API, as its global `neeko` object.
@@ -25,27 +26,60 @@ const API_CLIENT_URL = "chrome://neeko/content/neeko-api.js";
 // Set on the window's root while Firefox's own address bar is showing.
 const ADDRESS_BAR_FALLBACK = "neeko-firefox-address-bar";
 
-// Keeps chrome://neeko-ui/ registered for the whole session.
+// Whether there's a custom UI, decided once per session: null until then.
+let hasUI = null;
+
+// Keeps a UI folder registered at chrome://neeko-ui/ for the whole session.
 let uiRegistration = null;
 
 // The NeekoAPI of each window's current UI page.
 const apis = new WeakMap();
 
 /**
- * Serves the UI folder at chrome://neeko-ui/content/. Browser windows only
- * allow frames from chrome: URLs, so this is how the UI gets its privileges.
- * Also starts watching for UI documents (see onDocumentCreated).
+ * Finds the custom UI, once per session, and starts watching for UI
+ * documents (see onDocumentCreated). Browser windows only allow frames from
+ * chrome: URLs, so the UI is always served at chrome://neeko-ui/content/,
+ * which is also how it gets its privileges:
  *
- * @returns {boolean} false if there is no usable UI folder.
+ * - With the `neeko.ui.path` pref set (dev launches), from that folder.
+ * - Otherwise from inside the app, where the build bundles the app's ui/
+ *   folder (packaged browsers).
+ *
+ * @returns {boolean} false if there is no usable UI.
  */
-function registerUIFolder() {
-  if (uiRegistration) {
-    return true;
+function findUI() {
+  if (hasUI === null) {
+    let path = Services.prefs.getStringPref("neeko.ui.path", "");
+    hasUI = path ? registerUIFolder(path) : hasBundledUI();
+    if (hasUI) {
+      Services.obs.addObserver(onDocumentCreated, "document-element-inserted");
+    }
   }
-  let path = Services.prefs.getStringPref("neeko.ui.path", "");
-  if (!path) {
+  return hasUI;
+}
+
+/**
+ * Whether the build bundled a UI (tools/app.ts puts the app's ui/ folder in
+ * browser.jar as the neeko-ui chrome package).
+ */
+function hasBundledUI() {
+  try {
+    Cc["@mozilla.org/chrome/chrome-registry;1"]
+      .getService(Ci.nsIChromeRegistry)
+      .convertChromeURL(Services.io.newURI(UI_URL));
+    return true;
+  } catch (e) {
     return false;
   }
+}
+
+/**
+ * Serves a UI folder at chrome://neeko-ui/content/, in place of any bundled
+ * UI, so dev launches pick up UI changes without a rebuild.
+ *
+ * @returns {boolean} false if the folder has no index.html.
+ */
+function registerUIFolder(path) {
   let dir = Cc["@mozilla.org/file/local;1"].createInstance(Ci.nsIFile);
   try {
     dir.initWithPath(path);
@@ -70,7 +104,6 @@ function registerUIFolder() {
   uiRegistration = aomStartup.registerChrome(manifestURI, [
     ["content", "neeko-ui", "./"],
   ]);
-  Services.obs.addObserver(onDocumentCreated, "document-element-inserted");
   return true;
 }
 
@@ -306,7 +339,7 @@ export const NeekoWindow = {
     if (!win.toolbar.visible) {
       return;
     }
-    if (!registerUIFolder()) {
+    if (!findUI()) {
       return;
     }
 

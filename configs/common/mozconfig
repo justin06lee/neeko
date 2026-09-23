@@ -1,22 +1,27 @@
 # Build settings shared by every platform. Surfer merges this file with
 # configs/<os>/mozconfig and writes the result to engine/mozconfig.
-# Surfer replaces the name, binName and appId placeholders with values from
-# surfer.json.
+# Surfer replaces the binName placeholder with the value in surfer.json.
 
 ac_add_options --enable-application=browser
 
 # The program stays "firefox" because artifact builds download Mozilla's
-# prebuilt binaries, which carry that name. The prebuilt launcher also has
-# Firefox's app name compiled in, which decides the profile folder, so these
-# only name the locally built parts (see docs/plan.md).
+# prebuilt binaries, which carry that name.
 ac_add_options --with-app-name=${binName}
-ac_add_options --with-app-basename=${name}
-ac_add_options --with-distribution-id=${appId}
+
+# The app's identity: its name (which decides the profile folder), vendor,
+# bundle id and version. tools/app.ts generates this file from the app's
+# browser.json, inside the app's branding folder. Artifact builds only use it
+# for the parts they build locally: Mozilla's prebuilt launcher has Firefox's
+# name compiled in. Full builds (make release) use it everywhere.
+. "$topsrcdir/browser/branding/release/app.mozconfig"
 
 # Artifact build: download Mozilla's prebuilt C++/Rust for this exact release
 # and build only the frontend (JS/HTML/CSS) locally. Minutes, not hours.
-# Set NEEKO_FULL_BUILD=1 to compile everything from source instead.
-if test -z "$NEEKO_FULL_BUILD"; then
+# NEEKO_FULL_BUILD=1 (make release) compiles everything from source instead,
+# in its own folder, so the everyday dev build stays as it is.
+if test -n "$NEEKO_FULL_BUILD"; then
+  mk_add_options MOZ_OBJDIR=@TOPSRCDIR@/obj-release
+else
   ac_add_options --enable-artifact-builds
 
   # engine/ is a Surfer snapshot, not a Mozilla checkout, so the artifact

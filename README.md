@@ -20,10 +20,12 @@ default, so a browser built on Neeko is always complete.
 ## Status
 
 Early foundation work, on Firefox 156.0.1. Neeko hides Firefox's interface,
-loads a custom UI from `ui/` with the web page placed wherever that UI says,
-and gives the UI a first small JavaScript API for tabs and navigation. `ui/`
-holds a deliberately plain demo UI built only on that API: a tab list, back,
-forward and reload, and an address bar.
+loads a custom UI with the web page placed wherever that UI says, and gives
+the UI a first small JavaScript API for tabs and navigation. `ui/` holds a
+deliberately plain demo UI built only on that API: a tab list, back, forward
+and reload, and an address bar. A browser built on Neeko keeps Neeko as a
+submodule and brings its own UI, name and icon, and `make release` turns it
+into a packaged app with its own identity.
 
 ## Requirements
 
@@ -43,17 +45,38 @@ The first run installs dependencies, downloads the Firefox source into
 dev profile. That takes about 15 minutes, mostly unpacking Firefox and
 snapshotting it into git. After that, a rebuild takes under a minute.
 
-| Command       | What it does                                       |
-| ------------- | -------------------------------------------------- |
-| `make`        | Set up if needed, build, and launch                |
-| `make build`  | Build only                                         |
-| `make update` | Quit a running dev build, rebuild, and relaunch it |
+| Command        | What it does                                             |
+| -------------- | -------------------------------------------------------- |
+| `make`         | Set up if needed, build, and launch                      |
+| `make build`   | Build only                                               |
+| `make update`  | Quit a running dev build, rebuild, and relaunch it       |
+| `make release` | Full build from source, packaged into `dist/` (hours)    |
+
+## Starting a browser
+
+Your browser lives in its own repo, with Neeko inside it as a pinned git
+submodule, so updating Neeko (and Firefox with it) never conflicts with your
+work:
+
+```sh
+bun tools/new-browser.ts ../mybrowser --name MyBrowser
+cd ../mybrowser && make
+```
+
+That repo holds `browser.json` (name, vendor, app id, version), `ui/` (a copy
+of the demo UI to start from), `branding/` (`prefs.js`, and `icon.png` when
+you have one), and a Makefile that hands everything to `neeko/`.
+[docs/using-neeko.md](docs/using-neeko.md) explains how it all fits, how to
+update Neeko, and how releases work. Neeko's own repo is built the same way:
+its `browser.json`, `ui/` and `branding/` are the demo app.
 
 ## Building a UI
 
 Your UI is an ordinary web page: `ui/index.html` plus whatever CSS and JS it
 loads. Neeko shows it in place of Firefox's interface, filling the window.
-Changes to `ui/` only need a relaunch, not a rebuild.
+Dev launches load it straight from `ui/`, so changes only need a relaunch,
+not a rebuild. Builds also bundle it inside the app, which is what packaged
+browsers use.
 
 - Mark the element where the website should appear with
   `data-neeko-content`. Neeko keeps the real page on top of it, matching its
@@ -66,15 +89,17 @@ Changes to `ui/` only need a relaunch, not a rebuild.
   [docs/api.md](docs/api.md), and `ui/app.js` shows all of it in use.
 - Scripts must be separate files (the page's security policy blocks inline
   scripts). They load from `chrome://neeko-ui/content/`, which maps to `ui/`.
-- If there's no UI configured, Neeko stays out of the way and Firefox looks as
-  usual. Pop-up windows, such as sign-in pop-ups, keep Firefox's minimal UI.
+  File names may only use letters, digits and `. _ - @ +`.
+- If an app has no `ui/index.html`, Neeko stays out of the way and Firefox
+  looks as usual. Pop-up windows, such as sign-in pop-ups, keep Firefox's
+  minimal UI.
 
 ## Testing
 
 After `make build`:
 
 ```sh
-python3 tools/test_api.py       # every API call and event, about a minute
+python3 tools/test_api.py       # every API call and event, and the bundled UI, 10 seconds
 python3 tools/test_privacy.py   # every connection a fresh profile makes, about 6 minutes
 ```
 
@@ -83,11 +108,19 @@ The privacy test runs the browser through mitmproxy (fetched by `uvx`, so
 anything reaches an endpoint Neeko turns off. Run it after every Firefox
 update.
 
+After `make release`, `python3 tools/test_release.py` checks the packaged app
+is its own browser (its own name and profile folder, telemetry compiled out,
+Neeko's prefs packaged), and both tests above take `--app dist/Neeko.app` to
+run against it.
+
 ## How it works
 
 Surfer (the tool Zen Browser uses to build its Firefox fork) downloads the
-Firefox release pinned in `surfer.json`, applies this repo's changes to it, and
-drives Firefox's own build tool.
+Firefox release pinned in `neeko.json`, applies this repo's changes to it, and
+drives Firefox's own build tool. Before it runs, `tools/app.ts` turns the app
+folder (`browser.json`, `ui/`, `branding/`) into Surfer's `surfer.json` and a
+Firefox branding folder, so the build carries the app's name, icon, prefs,
+version and UI.
 
 Builds are **artifact builds**: instead of compiling Firefox's C++ and Rust
 (hours), the build downloads Mozilla's prebuilt binaries for the exact same
@@ -108,16 +141,17 @@ window is first drawn, and does four things:
 4. It gives your UI the `neeko` API. Every call is a message to Firefox, so
    UIs will later be able to run sandboxed without changing their code.
 
-The only change to a Firefox file is one line (plus a comment) that adds Neeko's folder
-to the build (`src/browser/moz-build.patch`).
+Neeko changes two Firefox files, each by a few clearly marked lines: one adds
+Neeko's folder to the build (`src/browser/moz-build.patch`), and one adds
+Neeko's pref files to the list of files packaged builds include
+(`src/browser/installer/package-manifest-in.patch`).
 
-Because of artifact builds, the program inside the app bundle keeps the name
+Because of artifact builds, the program inside a dev build keeps the name
 `firefox`, and Mozilla's prebuilt launcher still reports itself as Firefox.
 That means a dev build started on its own would use your regular Firefox
 profile folder, so always start it with `make` (or the test tools), which
-give it a separate profile. Shipped browsers need their own launcher; that's
-part of deciding how browsers get Neeko. The visible name and icon come from
-branding, which is still Firefox's unofficial "Nightly" branding for now.
+give it a separate profile. Release builds (`make release`) compile the
+launcher too, so they carry the app's own name and profile folder.
 
 Privacy is on by default: nothing is sent to Mozilla for telemetry, studies,
 ads or crash reports, from the first launch, in every browser built on Neeko.
@@ -127,18 +161,22 @@ that's left and why.
 
 ```
 neeko/
-├── surfer.json   Firefox version pin and app name
+├── neeko.json    The Firefox release Neeko is built on
+├── browser.json  The demo app's identity: name, vendor, app id, version
+├── ui/           The demo UI (a browser brings its own)
+├── branding/     The demo app's icon and prefs
 ├── configs/      Build settings Surfer merges into engine/mozconfig
-├── ui/           The demo UI (yours to replace)
 ├── src/          Neeko's own files, layered onto engine/ by Surfer
 │   └── browser/
 │       ├── neeko/            Window hook, API, hide styles, prefs, privacy defaults
-│       └── moz-build.patch   The one line that adds neeko/ to the build
+│       ├── moz-build.patch   Adds neeko/ to the build
+│       └── installer/        Adds Neeko's prefs to packaged builds
 ├── docs/         API reference, build plan, using Neeko in a browser, privacy
-├── tools/        Tests (test_api.py, test_privacy.py) and marionette.py
+├── tools/        The app step (app.ts), the starter (new-browser.ts), tests
 ├── assets/       README artwork
 ├── Makefile
-└── engine/       Firefox source, downloaded by Surfer (not committed)
+├── engine/       Firefox source, downloaded by Surfer (not committed)
+└── dist/         Release packages from make release (not committed)
 ```
 
 ## License
