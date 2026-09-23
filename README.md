@@ -67,6 +67,7 @@ neeko/
 ├── surfer.json   Firefox version pin and app name
 ├── configs/      Build settings Surfer merges into engine/mozconfig
 ├── src/          Neeko's own files and patches, layered onto engine/ (empty for now)
+├── docs/         Research notes (so far: what Firefox connects to)
 ├── assets/       README artwork
 ├── Makefile
 └── engine/       Firefox source, downloaded by Surfer (not committed)
