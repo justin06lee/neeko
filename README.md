@@ -155,9 +155,10 @@ launcher too, so they carry the app's own name and profile folder.
 
 Privacy is on by default: nothing is sent to Mozilla for telemetry, studies,
 ads or crash reports, from the first launch, in every browser built on Neeko.
-`src/browser/neeko/firefox-neeko-privacy.js` holds those defaults, and
-[docs/privacy/](docs/privacy/implementation.md) explains every connection
-that's left and why.
+`src/browser/neeko/firefox-neeko-privacy.js` holds those defaults.
+[PRIVACY.md](PRIVACY.md) lists every connection that's left and why, in
+plain language, and [docs/privacy/](docs/privacy/implementation.md) has the
+details.
 
 ```
 neeko/
