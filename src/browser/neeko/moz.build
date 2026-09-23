@@ -4,9 +4,13 @@
 # Registers NeekoWindow on Firefox's per-window startup hook.
 EXTRA_COMPONENTS += ["Neeko.manifest"]
 
-MOZ_SRC_FILES += ["NeekoWindow.sys.mjs"]
+MOZ_SRC_FILES += [
+    "NeekoAPI.sys.mjs",
+    "NeekoWindow.sys.mjs",
+]
 
-# chrome://neeko/content/ (the stylesheet that hides Firefox's UI).
+# chrome://neeko/content/: the stylesheets that hide Firefox's UI and help
+# custom UIs, and neeko-api.js, the UI's side of the Neeko API.
 JAR_MANIFESTS += ["jar.mn"]
 
 # Installed into browser/defaults/preferences, which Firefox reads at startup.

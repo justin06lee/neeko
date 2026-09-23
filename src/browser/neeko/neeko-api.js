@@ -1,0 +1,92 @@
+/**
+ * The Neeko API, the UI's side: the global `neeko` object. Neeko runs this
+ * file inside the custom UI page before any of the page's own scripts.
+ *
+ * Every call becomes a message to Firefox and returns a promise of the reply,
+ * and events arrive as messages too. Nothing here touches Firefox directly, so
+ * the same file works when the UI runs sandboxed. docs/api.md documents the
+ * API and the messages.
+ *
+ * The file's value is a function Neeko calls with the MessagePort that
+ * carries the messages, so nothing else leaks into the page's globals.
+ */
+
+port => {
+  "use strict";
+
+  let nextId = 1;
+  let pending = new Map();
+  // "tabs.update" -> Set of listeners
+  let listeners = new Map();
+
+  port.onmessage = ({ data }) => {
+    if (data.event) {
+      for (let listener of listeners.get(data.event) ?? []) {
+        try {
+          listener(data.data);
+        } catch (e) {
+          reportError(e);
+        }
+      }
+      return;
+    }
+    let call = pending.get(data.id);
+    pending.delete(data.id);
+    if (data.error) {
+      call.reject(new Error(data.error.message));
+    } else {
+      call.resolve(data.result);
+    }
+  };
+
+  function call(method, ...params) {
+    return new Promise((resolve, reject) => {
+      let id = nextId++;
+      port.postMessage({ id, method, params });
+      pending.set(id, { resolve, reject });
+    });
+  }
+
+  /**
+   * Makes the `on` function for one part of the API. Returns a function that
+   * removes the listener again.
+   */
+  function events(namespace, types) {
+    return (type, listener) => {
+      if (!types.includes(type)) {
+        throw new TypeError(
+          `neeko.${namespace} has no "${type}" event. ` +
+            `Its events are: ${types.join(", ")}.`
+        );
+      }
+      if (typeof listener != "function") {
+        throw new TypeError("The listener must be a function.");
+      }
+      let key = `${namespace}.${type}`;
+      if (!listeners.has(key)) {
+        listeners.set(key, new Set());
+      }
+      listeners.get(key).add(listener);
+      return () => listeners.get(key).delete(listener);
+    };
+  }
+
+  let neeko = Object.freeze({
+    tabs: Object.freeze({
+      list: () => call("tabs.list"),
+      current: () => call("tabs.current"),
+      open: url => call("tabs.open", url),
+      close: tabId => call("tabs.close", tabId),
+      select: tabId => call("tabs.select", tabId),
+      on: events("tabs", ["open", "close", "select", "move", "update"]),
+    }),
+    nav: Object.freeze({
+      go: (input, tabId) => call("nav.go", input, tabId),
+      back: tabId => call("nav.back", tabId),
+      forward: tabId => call("nav.forward", tabId),
+      reload: tabId => call("nav.reload", tabId),
+    }),
+  });
+
+  Object.defineProperty(window, "neeko", { value: neeko, enumerable: true });
+};

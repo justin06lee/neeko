@@ -1,0 +1,299 @@
+/**
+ * The Neeko API, Firefox's side: what a custom UI can ask its window to do,
+ * and the events it hears back. Each UI page gets its own NeekoAPI, which
+ * lives exactly as long as the page does.
+ *
+ * Everything crosses as messages of plain data, never live Firefox objects,
+ * so a UI running in a sandbox later ("Trick" mode) can use the same API over
+ * a different channel. The UI's side is neeko-api.js; docs/api.md documents
+ * both.
+ *
+ *   UI to Neeko:   { id, method: "tabs.open", params: [...] }
+ *   Neeko to UI:   { id, result }  or  { id, error: { message } }
+ *   Neeko to UI:   { event: "tabs.update", data }
+ */
+
+// Tab ids are small numbers, unique for the whole session, so they stay the
+// same when the UI reloads.
+let nextTabId = 1;
+const tabIds = new WeakMap();
+
+function tabId(tab) {
+  let id = tabIds.get(tab);
+  if (!id) {
+    id = nextTabId++;
+    tabIds.set(tab, id);
+  }
+  return id;
+}
+
+/**
+ * What the UI knows about a tab. Tabs that are asleep (restored but never
+ * shown, or unloaded to save memory) have no page yet, and asking about their
+ * history would wake them, so they report no back or forward.
+ */
+function describeTab(tab) {
+  let browser = tab.linkedBrowser;
+  let asleep = !tab.linkedPanel;
+  let uri = browser.currentURI;
+  return {
+    id: tabId(tab),
+    // Without any user:password@ part.
+    url: uri ? Services.io.createExposableURI(uri).spec : "",
+    title: tab.label,
+    loading: tab.hasAttribute("busy"),
+    canGoBack: !asleep && browser.canGoBack,
+    canGoForward: !asleep && browser.canGoForward,
+    selected: tab.selected,
+  };
+}
+
+// Fields whose changes arrive as "update" events. Selection has its own
+// "select" event instead.
+const UPDATE_FIELDS = ["url", "title", "loading", "canGoBack", "canGoForward"];
+
+// Tab attributes Firefox reports changing that affect a tab's description.
+const WATCHED_ATTRIBUTES = ["label", "busy"];
+
+const TAB_EVENTS = [
+  "TabOpen",
+  "TabClose",
+  "TabSelect",
+  "TabMove",
+  "TabAttrModified",
+  "TabBrowserInserted",
+  "TabBrowserDiscarded",
+];
+
+/**
+ * Takes what a user typed into an address bar.
+ */
+function addressInput(input) {
+  if (typeof input != "string" || !input.trim()) {
+    throw new TypeError("Expected a URL or search terms.");
+  }
+  return input.trim();
+}
+
+/**
+ * The API's methods, by the name the UI calls them with. They run with the
+ * NeekoAPI as `this`, take and return plain data, and throw to reject the
+ * UI's call.
+ */
+const METHODS = {
+  "tabs.list"() {
+    return this.gBrowser.tabs
+      .filter(tab => !tab.closing)
+      .map(tab => this.describe(tab));
+  },
+
+  "tabs.current"() {
+    return this.describe(this.gBrowser.selectedTab);
+  },
+
+  /**
+   * Opens a tab and selects it, the way the address bar or Cmd+T would. With
+   * no input it shows the New Tab page.
+   */
+  "tabs.open"(input) {
+    let url =
+      input === undefined ? this.win.BROWSER_NEW_TAB_URL : addressInput(input);
+    let browser = null;
+    this.win.openTrustedLinkIn(url, "tab", {
+      allowThirdPartyFixup: true,
+      resolveOnNewTabCreated: b => (browser = b),
+    });
+    let tab = browser && this.gBrowser.getTabForBrowser(browser);
+    if (!tab) {
+      throw new Error("The tab didn't open in this window.");
+    }
+    return this.describe(tab);
+  },
+
+  "tabs.close"(id) {
+    this.gBrowser.removeTab(this.findTab(id));
+  },
+
+  "tabs.select"(id) {
+    if (id === undefined) {
+      throw new TypeError("Expected a tab id.");
+    }
+    this.gBrowser.selectedTab = this.findTab(id);
+  },
+
+  /**
+   * Loads what a user typed into an address bar: a URL, or anything Firefox
+   * can turn into one ("example.com"), or else search terms for the default
+   * search engine.
+   */
+  "nav.go"(input, id) {
+    let url = addressInput(input);
+    this.win.openTrustedLinkIn(url, "current", {
+      targetBrowser: this.findTab(id).linkedBrowser,
+      allowThirdPartyFixup: true,
+      allowInheritPrincipal: false,
+      allowPinnedTabHostChange: true,
+      indicateErrorPageLoad: true,
+    });
+  },
+
+  "nav.back"(id) {
+    this.findTab(id).linkedBrowser.goBack();
+  },
+
+  "nav.forward"(id) {
+    this.findTab(id).linkedBrowser.goForward();
+  },
+
+  "nav.reload"(id) {
+    this.gBrowser.reloadTab(this.findTab(id));
+  },
+};
+
+export class NeekoAPI {
+  /** What each tab looked like when the UI last heard about it. */
+  #lastSent = new WeakMap();
+  #send;
+  #destroyed = false;
+
+  /**
+   * @param {Window} win The browser window whose tabs the UI controls. Its
+   *   gBrowser must already exist.
+   * @param {Function} send Delivers a message to the UI.
+   */
+  constructor(win, send) {
+    this.win = win;
+    this.gBrowser = win.gBrowser;
+    this.#send = send;
+    for (let type of TAB_EVENTS) {
+      this.gBrowser.tabContainer.addEventListener(type, this);
+    }
+    this.gBrowser.addTabsProgressListener(this);
+  }
+
+  destroy() {
+    if (this.#destroyed) {
+      return;
+    }
+    this.#destroyed = true;
+    for (let type of TAB_EVENTS) {
+      this.gBrowser.tabContainer.removeEventListener(type, this);
+    }
+    this.gBrowser.removeTabsProgressListener(this);
+  }
+
+  /**
+   * Handles a message from the UI and sends back the result or the error.
+   */
+  async receive(message) {
+    let { id, method, params } = message ?? {};
+    try {
+      if (!Object.hasOwn(METHODS, method)) {
+        throw new TypeError(`Unknown method "${method}".`);
+      }
+      if (!Array.isArray(params)) {
+        throw new TypeError("params must be an array.");
+      }
+      let result = await METHODS[method].apply(this, params);
+      this.#reply({ id, result });
+    } catch (e) {
+      this.#reply({ id, error: { message: e.message } });
+    }
+  }
+
+  #reply(message) {
+    if (!this.#destroyed) {
+      this.#send(message);
+    }
+  }
+
+  #emit(event, data) {
+    if (!this.#destroyed) {
+      this.#send({ event, data });
+    }
+  }
+
+  /**
+   * Describes a tab for the UI and remembers what it was told.
+   */
+  describe(tab) {
+    let description = describeTab(tab);
+    this.#lastSent.set(tab, description);
+    return description;
+  }
+
+  /**
+   * The tab with this id in this window. With no id, the selected tab.
+   */
+  findTab(id) {
+    if (id === undefined) {
+      return this.gBrowser.selectedTab;
+    }
+    let tab = this.gBrowser.tabs.find(t => tabIds.get(t) === id);
+    if (!tab || tab.closing) {
+      throw new Error(`No tab with id ${id} in this window.`);
+    }
+    return tab;
+  }
+
+  /**
+   * Tells the UI what changed about a tab, if anything did.
+   */
+  #update(tab) {
+    if (tab.closing) {
+      return;
+    }
+    let before = this.#lastSent.get(tab);
+    let now = this.describe(tab);
+    let changed = UPDATE_FIELDS.filter(field => now[field] !== before?.[field]);
+    if (changed.length) {
+      this.#emit("tabs.update", { tab: now, changed });
+    }
+  }
+
+  handleEvent(event) {
+    let tab = event.target;
+    switch (event.type) {
+      case "TabOpen":
+        this.#emit("tabs.open", { tab: this.describe(tab), index: tab.index });
+        break;
+      case "TabClose":
+        this.#lastSent.delete(tab);
+        this.#emit("tabs.close", { id: tabId(tab) });
+        break;
+      case "TabSelect": {
+        let previous = event.detail.previousTab;
+        this.#emit("tabs.select", {
+          id: tabId(tab),
+          previousId: previous ? tabId(previous) : null,
+        });
+        break;
+      }
+      case "TabMove":
+        this.#emit("tabs.move", { id: tabId(tab), index: tab.index });
+        break;
+      case "TabAttrModified":
+        if (event.detail.changed.some(a => WATCHED_ATTRIBUTES.includes(a))) {
+          this.#update(tab);
+        }
+        break;
+      default:
+        // A tab woke up or went to sleep, which changes its back/forward.
+        this.#update(tab);
+    }
+  }
+
+  /**
+   * Tabs progress listener: a tab's page changed its address, which can also
+   * change whether it can go back or forward.
+   */
+  onLocationChange(browser, webProgress) {
+    if (!webProgress.isTopLevel) {
+      return;
+    }
+    let tab = this.gBrowser.getTabForBrowser(browser);
+    if (tab) {
+      this.#update(tab);
+    }
+  }
+}

@@ -7,15 +7,19 @@
  *    pref) in a frame that fills the window.
  * 3. Keeps the web page area on top of the UI, exactly over the element the
  *    UI marks with the `data-neeko-content` attribute.
+ * 4. Gives the UI page the Neeko API, as its global `neeko` object.
  *
  * With no custom UI configured, it does nothing and Firefox looks as usual.
  */
+
+import { NeekoAPI } from "moz-src:///browser/neeko/NeekoAPI.sys.mjs";
 
 const HTML_NS = "http://www.w3.org/1999/xhtml";
 const UI_ORIGIN = "chrome://neeko-ui/";
 const UI_URL = `${UI_ORIGIN}content/index.html`;
 const UI_FRAME_ID = "neeko-ui";
 const SLOT_SELECTOR = "[data-neeko-content]";
+const API_CLIENT_URL = "chrome://neeko/content/neeko-api.js";
 
 // Keeps chrome://neeko-ui/ registered for the whole session.
 let uiRegistration = null;
@@ -66,9 +70,10 @@ function registerUIFolder() {
 /**
  * Runs as soon as any document gets its root element, before its scripts or
  * first paint. For UI documents (every load, including reloads) it adds
- * Neeko's UI helper styles and starts tracking the content slot once the
- * page is parsed. The frame's own "load" event never reaches the browser
- * window for chrome frames, which is why this hooks the document instead.
+ * Neeko's UI helper styles, connects the API, and starts tracking the content
+ * slot once the page is parsed. The frame's own "load" event never reaches
+ * the browser window for chrome frames, which is why this hooks the document
+ * instead.
  */
 function onDocumentCreated(doc) {
   if (!doc.URL?.startsWith(UI_ORIGIN)) {
@@ -83,11 +88,61 @@ function onDocumentCreated(doc) {
     "chrome://neeko/content/neeko-ui.css",
     uiWin.windowUtils.AGENT_SHEET
   );
-  doc.addEventListener(
-    "DOMContentLoaded",
-    () => trackContentSlot(frame.ownerDocument.defaultView, frame),
+  let win = frame.ownerDocument.defaultView;
+  connectAPI(win, uiWin);
+  doc.addEventListener("DOMContentLoaded", () => trackContentSlot(win, frame), {
+    once: true,
+  });
+}
+
+/**
+ * Gives the UI page its `neeko` object before any of the page's scripts run,
+ * and connects it to a NeekoAPI for this window until the page unloads.
+ *
+ * The UI runs in Firefox's own process here ("Become" mode), so the messages
+ * go over a MessageChannel. A sandboxed UI would carry the same messages over
+ * a different channel, with the same neeko-api.js on its end.
+ */
+function connectAPI(win, uiWin) {
+  let { port1, port2 } = new uiWin.MessageChannel();
+  let install = Services.scriptloader.loadSubScriptWithOptions(API_CLIENT_URL, {
+    target: uiWin,
+    wantReturnValue: true,
+  });
+  install(port2);
+
+  let api = null;
+  let unloaded = false;
+  uiWin.addEventListener(
+    "unload",
+    () => {
+      unloaded = true;
+      api?.destroy();
+      port1.close();
+    },
     { once: true }
   );
+
+  // gBrowser appears at the window's DOMContentLoaded. So far the UI page has
+  // always started after that, but if it ever starts first, its calls wait
+  // in the port until gBrowser exists.
+  let start = () => {
+    if (unloaded || api) {
+      return;
+    }
+    api = new NeekoAPI(win, message => port1.postMessage(message));
+    port1.onmessage = event => api.receive(event.data);
+  };
+  if (win.gBrowser) {
+    start();
+  } else {
+    win.addEventListener("DOMContentLoaded", function onLoaded() {
+      if (win.gBrowser) {
+        win.removeEventListener("DOMContentLoaded", onLoaded);
+        start();
+      }
+    });
+  }
 }
 
 /**
