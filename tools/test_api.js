@@ -101,6 +101,12 @@ check(now.url == `${BASE}/one`, `url (${now.url})`);
 check(!now.canGoBack && !now.canGoForward, "a new tab can't go back or forward");
 
 // Navigating. A bare host:port/path gets fixed up like the address bar would.
+// Back skips pages the user never clicked, typed or scrolled in (Firefox's
+// browser.navigation.requireUserInteraction), so Page one counts as used, as
+// after a click. Without this, whether stray input reached it decided the
+// back() checks.
+let history = gBrowser.selectedBrowser.browsingContext.sessionHistory;
+history.getEntryAtIndex(history.index).hasUserInteraction = true;
 await neeko.nav.go(`${HOST}/two`);
 await waitFor(
   () => updated(tab.id, t => t.url == `${BASE}/two` && t.title == "Page two"),

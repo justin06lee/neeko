@@ -215,6 +215,12 @@ Add to it whenever something costs you time.
   `busy` for title and loading; a tabs progress listener's
   `onLocationChange` for URL and back/forward; `TabBrowserInserted` and
   `TabBrowserDiscarded` for tabs waking and sleeping.
+- **Back skips pages nobody interacted with.** Firefox's
+  `browser.navigation.requireUserInteraction` (on by default) leaves history
+  entries without a click, key, scroll or tap in the page out of Back, so
+  `canGoBack` is false when every earlier page is untouched (a tab opened on
+  one page, then sent to another by `nav.go()`). Neeko reports Firefox's
+  answer. An entry's `hasUserInteraction` is writable from chrome code.
 - **Events caused by a call arrive before its reply**, because they share one
   ordered port. Events from anything else (links, shortcuts) arrive a moment
   after the fact, so tests must wait for them.
@@ -247,10 +253,13 @@ Add to it whenever something costs you time.
 - **Much of Firefox only works in the active window.** Keyboard focus,
   permission prompts, the downloads panel opening by itself, and web page
   fullscreen (refused otherwise). Under heavy load macOS can take seconds to
-  bring a freshly launched app to the front; the one flaky API test run
-  (2026-09-23, right after a long release build) failed two address bar
-  focus checks that way. `tools/test_api.js` now waits for its window to be
-  active before any check.
+  bring a freshly launched app to the front, so `tools/test_api.js` waits
+  for its window to be active before any check.
+- **The flaky `back()` checks** (2026-09-23, under load: about 4 runs in 10
+  with 8 busy CPU threads) weren't Neeko's doing. Firefox's Back skips pages
+  nobody interacted with (see the Neeko API section), and Page one usually,
+  but not always, ended up marked as used by something outside the test. The
+  test now marks it itself; 8 runs in 8 passed under the same load.
 - **Marionette's recommended prefs stop the downloads panel opening by
   itself** (`browser.download.alwaysOpenPanel` false,
   `browser.download.panel.shown` true). They're only applied where the

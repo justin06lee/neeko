@@ -57,6 +57,10 @@ that are asleep (restored from the last session but never opened, or unloaded
 to save memory) report `canGoBack` and `canGoForward` as false; finding out
 would wake them.
 
+`canGoBack` is Firefox's own answer, the same as its Back button: it skips
+pages the user never clicked, typed or scrolled in, so a tab that went from
+one untouched page to another can't go back.
+
 ### Methods
 
 | Method | What it does |

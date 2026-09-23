@@ -55,6 +55,14 @@ DOWNLOAD = "/download"
 
 
 class Pages(http.server.BaseHTTPRequestHandler):
+    def handle(self):
+        # The browser sometimes drops a connection early (a tab closing or
+        # navigating away mid-load), which is fine.
+        try:
+            super().handle()
+        except ConnectionError:
+            pass
+
     def do_GET(self):
         if self.path == DOWNLOAD:
             body = b"A test download from tools/test_api.py\n"
