@@ -95,6 +95,38 @@ Add to it whenever something costs you time.
   artifact build's folder. `configs/common/mozconfig` sets
   `MOZ_OBJDIR=@TOPSRCDIR@/obj-release` when `NEEKO_FULL_BUILD` is set.
 
+## Full (release) builds
+
+- **Firefox builds a release version with release-grade optimization by
+  default.** For a version like 156.0.1, `--enable-release` is on unless
+  turned off, so `DEVELOPER_OPTIONS` is off, and
+  `config/makefiles/rust.mk` compiles the final Rust library (`gkrust`)
+  with `-Clto` in one codegen unit. That single step needs about 10 GB of
+  memory. Turning `--enable-release` off also changes C++ flags, so it
+  recompiles everything.
+- **An 8 GB, 8-core M1 can't do that step.** The first `make release`
+  (2026-09-23) ran one job per core: compiles that take a minute took
+  twenty, the Glean crate took four hours, and after six hours `gkrust`
+  had used 3 minutes of CPU in an hour at 9.7 GB (9 GB of it compressed).
+  Pausing all but the oldest jobs (SIGSTOP/SIGCONT) got everything else
+  through; `gkrust` never would have.
+- **Skipping Rust LTO without touching Firefox:** a make variable given on
+  the command line beats the makefile's own, and GNU make takes
+  command-line variables from the `MAKEFLAGS` environment variable, so
+  `MAKEFLAGS=" -- cargo_rustc_flags="` drops `-Clto` for the final crate
+  only. Its dependencies keep their fingerprints and don't recompile.
+  `gkrust` then took 20 seconds and the rest of the build 40 minutes.
+  `make release` does this automatically below 16 GB (`RUST_LTO=0`), and
+  runs one job per 2 GB. Check `cargo_rustc_flags` still exists in
+  `rust.mk` after Firefox updates.
+- **Local full builds compile Firefox's tests too** (gtests, about 140
+  files). `ac_add_options --disable-tests` in the full-build branch of
+  `configs/common/mozconfig` would skip them; not tried yet.
+- **A release creates `~/Library/Application Support/<name>` and
+  `~/Library/Caches/<name>` at startup,** even with `-profile`. The test
+  tools remove them afterwards if they were new and are still empty
+  (`LeaveNoTrace` in `tools/builds.py`).
+
 ## Surfer quirks
 
 - It needs `src/` to exist.

@@ -25,7 +25,7 @@ import threading
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from builds import ROOT, dev_app, program  # noqa: E402
+from builds import ROOT, LeaveNoTrace, dev_app, program  # noqa: E402
 from marionette import Marionette  # noqa: E402
 
 # A UI with nothing but a content slot.
@@ -138,7 +138,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--app", help="a .app to test (default: the dev build)")
     args = parser.parse_args()
-    binary = program(os.path.abspath(args.app) if args.app else dev_app())
+    app = os.path.abspath(args.app) if args.app else dev_app()
+    binary = program(app)
 
     server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Pages)
     threading.Thread(target=server.serve_forever, daemon=True).start()
@@ -146,8 +147,9 @@ def main():
     try:
         with open(os.path.join(ROOT, "tools/test_api.js")) as f:
             script = f.read().replace("__BASE__", base)
-        results = run_in(binary, {"neeko.ui.path": "TEST_UI"}, script)
-        results += run_in(binary, {}, BUNDLED_CHECK, timeout=30000)
+        with LeaveNoTrace(app):
+            results = run_in(binary, {"neeko.ui.path": "TEST_UI"}, script)
+            results += run_in(binary, {}, BUNDLED_CHECK, timeout=30000)
     finally:
         server.shutdown()
     print("\n".join(results))

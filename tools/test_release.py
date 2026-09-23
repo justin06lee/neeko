@@ -30,7 +30,7 @@ import tempfile
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from builds import ROOT, program  # noqa: E402
+from builds import ROOT, LeaveNoTrace, program  # noqa: E402
 from marionette import Marionette  # noqa: E402
 
 CHECK = """
@@ -91,6 +91,7 @@ def main():
     with open(os.path.join(app, "Contents/Info.plist"), "rb") as f:
         plist = plistlib.load(f)
 
+    tidy = LeaveNoTrace(app)
     port = free_port()
     profile = tempfile.mkdtemp(prefix="neeko-release-test-")
     with open(os.path.join(profile, "user.js"), "w") as f:
@@ -121,6 +122,7 @@ def main():
         if browser.poll() is None:
             browser.kill()
         shutil.rmtree(profile, ignore_errors=True)
+        tidy.__exit__()
     if not isinstance(got, dict):
         sys.exit(f"The check itself failed: {got}")
 

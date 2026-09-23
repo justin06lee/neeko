@@ -140,7 +140,7 @@ Surfer and Firefox's build need. Firefox's own files stay untouched.
 ## Release builds
 
 ```sh
-make release          # hours: a full build, then a package
+make release          # hours: a full build, then a package (RUST_LTO=0|1 to choose)
 python3 tools/test_release.py
 python3 tools/test_api.py --app dist/Neeko.app
 python3 tools/test_privacy.py --app dist/Neeko.app
@@ -161,6 +161,21 @@ and checks it is its own browser: program name and profile folder, bundle
 id, versions, telemetry, crash reporter and updater compiled out, Neeko's
 prefs packaged, and the bundled UI running with the API. Then the API and
 privacy tests run against the same app with `--app`.
+
+**Verified on 2026-09-23** with Neeko's demo app, on an 8 GB M1:
+`tools/test_release.py` passed all 13 checks (program name `Neeko`, profile
+folder `~/Library/Application Support/Neeko`, bundle id `dev.neeko.demo`,
+About version 0.1.0 on Firefox 156.0.1, telemetry, crash reporter and
+updater compiled out, prefs and UI packaged), the API test passed all 52
+checks against `dist/Neeko.app`, and so did the privacy test: while idle,
+only the three kept Remote Settings hosts; while browsing, only the
+websites; nothing around the proxy; upload disabled, no pings waiting.
+
+**Build machines:** a full build with all optimizations needs 16 GB of
+memory or more. On smaller machines `make release` runs fewer jobs and
+skips Rust link-time optimization, which alone needs about 10 GB; the
+browser is the same, its Rust code a little bigger and slower. The 8 GB
+machine above took about six hours; see [lessons.md](lessons.md) for why.
 
 The packages aren't signed or notarized yet; that needs the browser's own
 Apple Developer ID and belongs with distribution (updates, crash reports) in

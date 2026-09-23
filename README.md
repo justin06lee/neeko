@@ -111,7 +111,9 @@ update.
 After `make release`, `python3 tools/test_release.py` checks the packaged app
 is its own browser (its own name and profile folder, telemetry compiled out,
 Neeko's prefs packaged), and both tests above take `--app dist/Neeko.app` to
-run against it.
+run against it. Release builds want 16 GB of memory or more for full
+optimization; on smaller machines `make release` skips Rust link-time
+optimization so the build can finish.
 
 ## How it works
 
