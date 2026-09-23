@@ -133,8 +133,9 @@ and sends events, but only the ones the UI listens for.
 
 **The UI doesn't handle something.** Neeko's rule is that listening means
 "my UI handles this". If nobody listens for the `addressbar` event, Cmd+L
-shows Firefox's own address bar instead, and if nobody listens for
-permission prompts, Firefox's own prompt asks. Every future feature with a
+shows Firefox's own address bar instead; if nobody listens for
+permission prompts, Firefox's own prompt asks; and if nobody lays out page
+fullscreen, the page fills the window over the UI. Every future feature with a
 Firefox fallback (context menus, downloads) works the same way. Until then,
 Firefox's own versions of those already work, with their panels hanging
 from the top of the page.

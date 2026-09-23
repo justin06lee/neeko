@@ -161,6 +161,15 @@ Add to it whenever something costs you time.
   gets the remote page.
 - **Measured with 300 tabs:** same memory and tab-switch time as stock Firefox,
   and faster to open tabs.
+- **Fullscreen has two signals.** `MozDOMFullscreen:Entered` and
+  `:Exited` on the browser window for web page fullscreen (the chrome
+  document's `fullscreenElement` is the page's `<browser>` meanwhile), and
+  `fullscreen` for the window itself, fired once `window.fullScreen` has
+  changed. A page going fullscreen fires both.
+- **Window fullscreen on macOS is native**: setting `window.fullScreen`
+  moves the window to its own Space with the system animation, even though
+  page fullscreen isn't (`full-screen-api.macos-native-full-screen` is
+  false). The API test does it once; expect the screen to switch.
 - **Firefox's panels hang from toolbar icons, which Neeko hides** (checked
   2026-09-23):
   - `PopupNotifications` (permission prompts, password saving, add-on

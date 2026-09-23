@@ -21,10 +21,10 @@ default, so a browser built on Neeko is always complete.
 
 Early foundation work, on Firefox 156.0.1. Neeko hides Firefox's interface,
 loads a custom UI with the web page placed wherever that UI says, and gives
-the UI a small JavaScript API for tabs, navigation and permission prompts.
-`ui/` holds a deliberately plain demo UI built only on that API: a tab list,
-back, forward and reload, an address bar, and a bar for permission
-prompts. A browser built on Neeko keeps Neeko as a
+the UI a small JavaScript API for tabs, navigation, permission prompts and
+fullscreen. `ui/` holds a deliberately plain demo UI built only on that
+API: a tab list, back, forward and reload, an address bar, a bar for
+permission prompts, and a layout that steps aside for fullscreen videos. A browser built on Neeko keeps Neeko as a
 submodule and brings its own UI, name and icon, and `make release` turns it
 into a packaged app with its own identity.
 
@@ -86,8 +86,8 @@ browsers use.
 - On macOS, the window's close, minimize and zoom buttons appear wherever you
   put an element with `data-neeko-window-buttons`.
 - Your scripts get a global `neeko` object, the Neeko API: list, open, close
-  and switch tabs, navigate, answer sites' permission requests, and hear
-  about every change. It's documented in
+  and switch tabs, navigate, answer sites' permission requests, lay out
+  fullscreen, and hear about every change. It's documented in
   [docs/api.md](docs/api.md), and `ui/app.js` shows all of it in use.
 - Scripts must be separate files (the page's security policy blocks inline
   scripts). They load from `chrome://neeko-ui/content/`, which maps to `ui/`.

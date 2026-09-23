@@ -126,6 +126,7 @@ aside {
 }
 
 header {
+  grid-area: 1 / 2;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -155,6 +156,7 @@ header {
 /* A permission prompt for the selected tab: a site asking for the
    location, say. */
 #prompt {
+  grid-area: 2 / 2;
   display: flex;
   align-items: center;
   gap: 12px;
@@ -214,8 +216,32 @@ header {
   color: #fff;
 }
 
-/* Where the website shows. */
+/* Where the website shows. Placed explicitly, so it keeps its row while the
+   prompt bar is hidden. */
 main {
+  grid-area: 3 / 2;
   margin: 0 12px 12px 0;
   border-radius: 10px;
+}
+
+/* A fullscreen window has no window buttons, so the tab list moves up. */
+body.window-fullscreen aside {
+  padding-top: 12px;
+}
+
+body.window-fullscreen [data-neeko-window-buttons] {
+  display: none;
+}
+
+/* A web page is fullscreen (a video, say): this UI steps aside and the page
+   fills the window. */
+body.page-fullscreen main {
+  position: fixed;
+  inset: 0;
+  margin: 0;
+  border-radius: 0;
+}
+
+body.page-fullscreen :is(aside, header, #prompt) {
+  visibility: hidden;
 }

@@ -108,6 +108,12 @@ port => {
         call("prompts.answer", promptId, action, options),
       on: events("prompts", ["open", "close"]),
     }),
+    fullscreen: Object.freeze({
+      state: () => call("fullscreen.state"),
+      exit: () => call("fullscreen.exit"),
+      setWindow: fullscreen => call("fullscreen.setWindow", fullscreen),
+      on: events("fullscreen", ["page", "window"]),
+    }),
   });
 
   Object.defineProperty(window, "neeko", { value: neeko, enumerable: true });
