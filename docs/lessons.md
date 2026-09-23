@@ -161,11 +161,26 @@ Add to it whenever something costs you time.
   gets the remote page.
 - **Measured with 300 tabs:** same memory and tab-switch time as stock Firefox,
   and faster to open tabs.
-- **What happens to Firefox UI that anchors on hidden toolbars**
-  (checked 2026-09-23): permission prompts still open, but pinned to the
-  window's top-left corner because their anchor icon is hidden. Downloads
-  finish silently: the downloads panel anchors on the hidden toolbar button
-  and never opens. Both are on the roadmap.
+- **Firefox's panels hang from toolbar icons, which Neeko hides** (checked
+  2026-09-23):
+  - `PopupNotifications` (permission prompts, password saving, add-on
+    installs) looks for a visible anchor, finds none and opens
+    `#notification-popup` with no anchor: the window's top-left corner.
+  - `ConfirmationHint`, the menu button's notices and the bookmark panel open
+    against their hidden icon. The "add-on added" notice didn't appear at
+    all.
+  - `NeekoPanels` moves them to an anchor along the top of the page:
+    `panel.moveToAnchor()` in a capturing `popupshowing` listener works,
+    because the popup is "showing" and not positioned yet.
+  - The anchor follows the page by CSS anchor positioning (`anchor-name` on
+    `#tabbrowser-tabbox`), which Firefox 156 has on without a pref. The
+    anchored element must come after the page area in the document. Open
+    panels follow it when the UI moves the page.
+  - A panel lines up on the right if its hidden anchor is after the address
+    bar in `#nav-bar` (a toolbar button), otherwise on the left.
+  - After Firefox updates, check `#notification-popup` is still
+    `PopupNotifications`' panel (`browser.js`); `tools/test_api.js` checks
+    a real location prompt.
 - **Web page fullscreen** sets `inDOMFullscreen` on the window's root and
   makes the window fullscreen, but Firefox's own layout is what makes the
   page fill it. Neeko's page area keeps the inline position and size

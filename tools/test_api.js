@@ -256,6 +256,47 @@ await waitFor(
 check(getComputedStyle(frame).visibility == "visible", "the UI is drawn again");
 await neeko.tabs.close(pageTab.id);
 
+// Firefox's own panels hang from the top edge of the page, 8px in, since the
+// toolbar icons they'd hang from are hidden: the address bar's panels on the
+// left, the toolbar buttons' on the right.
+let hangsFrom = (panel, side) => {
+  let [left, top, right] = rectOf(panel);
+  let [pageLeft, pageTop, pageRight] = rectOf(tabbox);
+  let inset = side == "left" ? left - pageLeft : pageRight - right;
+  return (
+    panel.anchorNode?.id == "neeko-panel-anchor" &&
+    Math.abs(inset - 8) <= 1 &&
+    Math.abs(top - pageTop - 8) <= 1
+  );
+};
+let where = panel => `at ${rectOf(panel)}, the page at ${rectOf(tabbox)}`;
+
+let promptTab = await neeko.tabs.open(`${BASE}/geo`);
+let prompt = await waitFor(
+  () =>
+    PopupNotifications.panel.state == "open" &&
+    PopupNotifications.getNotification("geolocation"),
+  "the location prompt"
+);
+check(
+  hangsFrom(PopupNotifications.panel, "left"),
+  `it hangs from the page's top left (${where(PopupNotifications.panel)})`
+);
+PopupNotifications.remove(prompt);
+
+let notice = PanelUI.notificationPanel;
+AppMenuNotifications.showNotification("addon-installed", { callback() {} }, null, {
+  name: "Test add-on",
+  customElementOptions: { addonId: "test@neeko" },
+});
+await waitFor(() => notice.state == "open", "an add-on added notice");
+check(
+  hangsFrom(notice, "right"),
+  `the menu button's notices hang from the top right (${where(notice)})`
+);
+AppMenuNotifications.removeNotification("addon-installed");
+await neeko.tabs.close(promptTab.id);
+
 // Neeko sends only the events the UI listens for.
 let heardSelect = 0;
 let stopSelect = neeko.tabs.on("select", () => heardSelect++);

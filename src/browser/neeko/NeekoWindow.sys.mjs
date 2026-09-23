@@ -11,11 +11,14 @@
  * 4. Gives the UI page the Neeko API, as its global `neeko` object.
  * 5. Sends Cmd+L to the UI's address bar, or shows Firefox's own address bar
  *    if the UI doesn't have one.
+ * 6. Hangs Firefox's own panels (permission prompts and the like) from the
+ *    top of the web page, since their toolbar icons are hidden (NeekoPanels).
  *
  * With no custom UI configured, it does nothing and Firefox looks as usual.
  */
 
 import { NeekoAPI } from "moz-src:///browser/neeko/NeekoAPI.sys.mjs";
+import { NeekoPanels } from "moz-src:///browser/neeko/NeekoPanels.sys.mjs";
 
 const HTML_NS = "http://www.w3.org/1999/xhtml";
 const UI_ORIGIN = "chrome://neeko-ui/";
@@ -356,5 +359,6 @@ export const NeekoWindow = {
     doc.body.prepend(frame);
 
     handleOpenLocation(win);
+    NeekoPanels.init(win);
   },
 };
