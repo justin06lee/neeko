@@ -18,6 +18,7 @@ import json
 import os
 import shutil
 import socket
+import struct
 import subprocess
 import sys
 import tempfile
@@ -53,8 +54,12 @@ PAGES = {
     "onload = () => document.documentElement.requestFullscreen()</script>",
 }
 
-# Served as a file to download.
+# Served as files to download: one at once, one slowly (3 seconds), and one
+# that breaks off.
 DOWNLOAD = "/download"
+SLOW_DOWNLOAD = "/download-slow"
+SLOW_SIZE = 300_000
+BROKEN_DOWNLOAD = "/download-broken"
 
 
 class Pages(http.server.BaseHTTPRequestHandler):
@@ -66,7 +71,33 @@ class Pages(http.server.BaseHTTPRequestHandler):
         except ConnectionError:
             pass
 
+    def download_headers(self, filename, size):
+        self.send_response(200)
+        self.send_header("Content-Type", "application/octet-stream")
+        self.send_header("Content-Disposition", f'attachment; filename="{filename}"')
+        self.send_header("Content-Length", str(size))
+        self.end_headers()
+
     def do_GET(self):
+        if self.path == SLOW_DOWNLOAD:
+            self.download_headers("neeko-slow.bin", SLOW_SIZE)
+            for _ in range(30):
+                self.wfile.write(b"x" * (SLOW_SIZE // 30))
+                self.wfile.flush()
+                time.sleep(0.1)
+            return
+        if self.path == BROKEN_DOWNLOAD:
+            self.download_headers("neeko-broken.bin", SLOW_SIZE)
+            self.wfile.write(b"x" * 1000)
+            self.wfile.flush()
+            time.sleep(0.3)
+            # Reset the connection rather than close it, so it can't look
+            # like the end of the file.
+            self.connection.setsockopt(
+                socket.SOL_SOCKET, socket.SO_LINGER, struct.pack("ii", 1, 0)
+            )
+            self.connection.close()
+            return
         if self.path == DOWNLOAD:
             body = b"A test download from tools/test_api.py\n"
             self.send_response(200)
@@ -205,6 +236,7 @@ def main():
     try:
         with open(os.path.join(ROOT, "tools/test_api.js")) as f:
             script = f.read().replace("__BASE__", base)
+            script = script.replace("__SLOW_SIZE__", str(SLOW_SIZE))
         with LeaveNoTrace(app):
             prefs = {"neeko.ui.path": "TEST_UI", **FIREFOX_PREFS}
             results = run_in(binary, prefs, script)

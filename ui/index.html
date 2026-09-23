@@ -5,9 +5,9 @@
   marked data-neeko-content, matching its position, size and corner rounding.
   On macOS the window buttons appear wherever data-neeko-window-buttons is.
 
-  This is the demo UI: a tab list, an address bar and a bar for permission
-  prompts, built only on the Neeko API (the global `neeko` object, see
-  docs/api.md). It's plain on purpose, just enough to show every API feature
+  This is the demo UI: a tab list, an address bar, a bar for permission
+  prompts and a downloads list, built only on the Neeko API (the global
+  `neeko` object, see docs/api.md). It's plain on purpose, just enough to show every API feature
   working. Replace it with your own.
 -->
 <html>
@@ -25,6 +25,10 @@
     <aside>
       <button id="new-tab" title="New tab (Cmd+T)">+ New tab</button>
       <ol id="tabs"></ol>
+      <section id="downloads" hidden>
+        <h2>Downloads</h2>
+        <ol></ol>
+      </section>
     </aside>
     <header>
       <button id="back" title="Back (Cmd+[)" disabled>&larr;</button>

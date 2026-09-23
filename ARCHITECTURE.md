@@ -76,6 +76,8 @@ official startup hooks (`Neeko.manifest`):
   Firefox's prompt closed meanwhile.
 - **`NeekoAPI.sys.mjs`** is Firefox's side of the API, one per UI page. It
   answers calls and turns Firefox's tab and navigation signals into events.
+- **`NeekoDownloads.sys.mjs`** follows the window's downloads for the API,
+  once the UI asks about them.
 - **`neeko-api.js`** is the UI's side: the `neeko` object.
 - **`NeekoPrivacy.sys.mjs`** and the pref files (`firefox-neeko.js`,
   `firefox-neeko-privacy.js`) set Neeko's defaults, privacy first.
@@ -132,13 +134,18 @@ its title, the user presses Cmd+W. `NeekoAPI` hears Firefox's own signals
 and sends events, but only the ones the UI listens for.
 
 **The UI doesn't handle something.** Neeko's rule is that listening means
-"my UI handles this". If nobody listens for the `addressbar` event, Cmd+L
-shows Firefox's own address bar instead; if nobody listens for
-permission prompts, Firefox's own prompt asks; and if nobody lays out page
-fullscreen, the page fills the window over the UI. Every future feature with a
-Firefox fallback (context menus, downloads) works the same way. Until then,
-Firefox's own versions of those already work, with their panels hanging
-from the top of the page.
+"my UI handles this", and nobody listening means Firefox's own version:
+
+- No `addressbar` listener: Cmd+L shows Firefox's own address bar.
+- No `prompts` `open` listener: Firefox's own prompt asks for permissions.
+- No `fullscreen` `page` listener: a fullscreen page fills the window over
+  the UI.
+- No `downloads` `start` listener: Firefox's downloads panel opens when a
+  download starts.
+
+Every future feature with a Firefox fallback (context menus, find in page)
+works the same way. Until then, Firefox's own versions of those already
+work, with their panels hanging from the top of the page.
 
 ## Decisions, and why
 

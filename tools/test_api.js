@@ -5,6 +5,7 @@
 
 const BASE = "__BASE__";
 const HOST = BASE.replace("http://", "");
+const SLOW_SIZE = Number("__SLOW_SIZE__");
 
 let results = [];
 let check = (ok, what) => results.push(`${ok ? "ok  " : "FAIL"} ${what}`);
@@ -470,6 +471,84 @@ check(
 await neeko.tabs.close(leftTab.id);
 await waitFor(() => promptClosed(left?.id), "closing its tab closes the prompt");
 stopPromptClose();
+
+// Downloads. A UI that listens for "start" shows downloads itself, and
+// Firefox's downloads panel doesn't open for them.
+let downloadEvents = [];
+for (let type of ["start", "update", "remove"]) {
+  neeko.downloads.on(type, data => downloadEvents.push({ type, ...data }));
+}
+let started = name =>
+  downloadEvents.find(e => e.type == "start" && e.download.filename == name)
+    ?.download;
+let latest = id => downloadEvents.findLast(e => e.download?.id == id)?.download;
+check(
+  (await neeko.downloads.list()).some(
+    d => d.filename == "neeko-test.txt" && d.state == "done"
+  ),
+  "list() has the earlier download, done"
+);
+let downloadTab = await neeko.tabs.open(`${BASE}/one`);
+await neeko.nav.go(`${BASE}/download-slow`);
+let slow = await waitFor(() => started("neeko-slow.bin"), "the UI hears a download start");
+check(
+  slow?.url == `${BASE}/download-slow` && slow.path.endsWith("/downloads/neeko-slow.bin"),
+  `with where it's from and where it goes (${slow?.path})`
+);
+await waitFor(
+  () => latest(slow?.id)?.state == "downloading" && latest(slow.id).received > 0,
+  "progress updates"
+);
+check(latest(slow?.id)?.total == SLOW_SIZE, `and its size (${latest(slow?.id)?.total})`);
+check(downloadsPanel()?.state != "open", "Firefox's downloads panel stays closed");
+await neeko.downloads.cancel(slow?.id);
+await waitFor(() => latest(slow?.id)?.state == "canceled", "cancel() stops it");
+await neeko.downloads.retry(slow?.id);
+await waitFor(
+  () => latest(slow?.id)?.state == "done" && latest(slow.id).received == SLOW_SIZE,
+  "retry() starts it again, to the end"
+);
+
+// Opening and showing files, without really launching anything.
+let { DownloadIntegration } = ChromeUtils.importESModule(
+  "resource://gre/modules/DownloadIntegration.sys.mjs"
+);
+let { launchFile, showContainingDirectory } = DownloadIntegration;
+let launched = [];
+let revealed = [];
+DownloadIntegration.launchFile = file => launched.push(file.path);
+DownloadIntegration.showContainingDirectory = async path => revealed.push(path);
+try {
+  await neeko.downloads.open(slow?.id);
+  await waitFor(
+    () => launched[0]?.endsWith("/neeko-slow.bin"),
+    "open() opens the file"
+  );
+  await neeko.downloads.show(slow?.id);
+  check(revealed[0]?.endsWith("/neeko-slow.bin"), "show() shows it in Finder");
+} finally {
+  Object.assign(DownloadIntegration, { launchFile, showContainingDirectory });
+}
+
+await neeko.nav.go(`${BASE}/download-broken`);
+let broken = await waitFor(() => started("neeko-broken.bin"), "a download that breaks off");
+await waitFor(
+  () => latest(broken?.id)?.state == "failed" && latest(broken.id).error == "network",
+  "is reported failed, because of the network"
+);
+await rejects(neeko.downloads.open(broken?.id), /hasn't finished/, "open() of a failed download");
+await rejects(neeko.downloads.cancel(999999), /No download/, "cancel() of an unknown download");
+await rejects(neeko.downloads.show("1"), /download id/, "show() with a string");
+await neeko.downloads.remove(broken?.id);
+await waitFor(
+  () => downloadEvents.some(e => e.type == "remove" && e.id == broken?.id),
+  "remove() takes it off the list"
+);
+check(
+  !(await neeko.downloads.list()).some(d => d.id == broken?.id),
+  "and list() no longer has it"
+);
+await neeko.tabs.close(downloadTab.id);
 
 // Neeko sends only the events the UI listens for.
 let heardSelect = 0;
