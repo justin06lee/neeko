@@ -121,6 +121,9 @@ even where its UI has no controls yet.
   page, just inside its corners: on the left for the address bar's prompts,
   on the right for the toolbar buttons' notices, and they follow the page
   if your UI moves it.
+- **Downloads.** When a download starts, Firefox's downloads panel opens at
+  the top right of the web page, with its progress. Cmd+Shift+Y shows every
+  download, in Firefox's Library window.
 - **Fullscreen.** When a web page goes fullscreen (a video's fullscreen
   button, say), it fills the screen over your UI, and goes back into your
   content slot when it exits. Your UI stays loaded and its scripts keep

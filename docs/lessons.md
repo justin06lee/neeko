@@ -178,6 +178,16 @@ Add to it whenever something costs you time.
     panels follow it when the UI moves the page.
   - A panel lines up on the right if its hidden anchor is after the address
     bar in `#nav-bar` (a toolbar button), otherwise on the left.
+  - The downloads panel never even opens: `DownloadsButton.getAnchor()`
+    returns null when the button's toolbar is hidden
+    (`downloads/content/indicator.js`). `NeekoPanels` wraps it to return
+    the page's anchor. `DownloadsButton` is a lazy global
+    (`XPCOMUtils.defineLazyScriptGetter`), so Neeko hooks the getter rather
+    than creating the object early.
+  - After a download has opened the panel, Firefox only animates the
+    toolbar button for later ones while another is running
+    (`DownloadsCommon.sys.mjs`, `_notifyDownloadEvent`), which a hidden
+    button doesn't show.
   - After Firefox updates, check `#notification-popup` is still
     `PopupNotifications`' panel (`browser.js`); `tools/test_api.js` checks
     a real location prompt.
@@ -241,6 +251,11 @@ Add to it whenever something costs you time.
   (2026-09-23, right after a long release build) failed two address bar
   focus checks that way. `tools/test_api.js` now waits for its window to be
   active before any check.
+- **Marionette's recommended prefs stop the downloads panel opening by
+  itself** (`browser.download.alwaysOpenPanel` false,
+  `browser.download.panel.shown` true). They're only applied where the
+  profile has no value of its own, so the API test puts Firefox's defaults
+  back in `user.js`.
 - **Marionette:** launch with `-marionette -remote-allow-system-access` and use
   `tools/marionette.py` to run JavaScript in the browser window or synthesize
   clicks.

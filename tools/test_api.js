@@ -295,6 +295,27 @@ check(
   `the menu button's notices hang from the top right (${where(notice)})`
 );
 AppMenuNotifications.removeNotification("addon-installed");
+
+// A download opens Firefox's downloads panel, on the right like the others.
+let downloadsPanel = () => document.getElementById("downloadsPanel");
+await neeko.nav.go(`${BASE}/download`);
+await waitFor(
+  () => downloadsPanel()?.state == "open",
+  "the downloads panel to open when a download starts"
+);
+check(
+  hangsFrom(downloadsPanel(), "right"),
+  `it hangs from the page's top right (${where(downloadsPanel())})`
+);
+let downloads = await Downloads.getList(Downloads.ALL);
+await waitFor(
+  async () =>
+    (await downloads.getAll()).some(
+      d => d.succeeded && d.target.path.endsWith("neeko-test.txt")
+    ),
+  "the download to finish"
+);
+DownloadsPanel.hidePanel();
 await neeko.tabs.close(promptTab.id);
 
 // Neeko sends only the events the UI listens for.

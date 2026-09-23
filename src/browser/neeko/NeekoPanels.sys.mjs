@@ -3,11 +3,12 @@
  *
  * Firefox hangs its panels from icons in its toolbars: permission prompts
  * (camera, microphone, location, notifications), password saving and add-on
- * installs from the address bar, notices like "add-on added" from the menu
- * button. Neeko hides those toolbars, so Firefox would open these panels in
- * the window's top-left corner. Instead they hang from the top edge of the
- * web page: the address bar's panels at its left end and the toolbar
- * buttons' at its right end, as in Firefox.
+ * installs from the address bar, the downloads panel from its button,
+ * notices like "add-on added" from the menu button. Neeko hides those
+ * toolbars, so Firefox would open these panels in the window's top-left
+ * corner, or (the downloads panel) not at all. Instead they hang from the top
+ * edge of the web page: the address bar's panels at its left end and the
+ * toolbar buttons' at its right end, as in Firefox.
  *
  * This is the fallback for UIs that don't show these things themselves.
  */
@@ -60,6 +61,62 @@ function onPopupShowing(doc, event) {
   }
 }
 
+/**
+ * Calls back with one of the browser window's globals once Firefox creates
+ * it, without creating it any earlier. Many are lazy: a getter that runs the
+ * object's script on first use, and the script's assignment replaces the
+ * getter with the object (XPCOMUtils.defineLazyScriptGetter).
+ */
+function whenCreated(win, name, callback) {
+  let lazy = Object.getOwnPropertyDescriptor(win, name);
+  if (!lazy?.get) {
+    if (lazy?.value) {
+      callback(lazy.value);
+    }
+    return;
+  }
+  let done = false;
+  let created = value => {
+    if (value && !done) {
+      done = true;
+      callback(value);
+    }
+  };
+  Object.defineProperty(win, name, {
+    configurable: true,
+    enumerable: lazy.enumerable,
+    get() {
+      let value = lazy.get.call(win);
+      created(value);
+      return value;
+    },
+    set(value) {
+      Object.defineProperty(win, name, {
+        configurable: true,
+        enumerable: true,
+        writable: true,
+        value,
+      });
+      created(value);
+    },
+  });
+}
+
+/**
+ * The downloads panel doesn't even open while its toolbar button is hidden:
+ * DownloadsButton.getAnchor() finds nowhere to put it. Given the page's
+ * anchor instead, it opens when a download starts, lined up on the right as
+ * under its button.
+ */
+function anchorDownloadsPanel(win) {
+  whenCreated(win, "DownloadsButton", button => {
+    let getAnchor = button.getAnchor;
+    button.getAnchor = function () {
+      return getAnchor.call(this) ?? win.document.getElementById(ANCHOR_ID);
+    };
+  });
+}
+
 export const NeekoPanels = {
   /**
    * Called by NeekoWindow for each browser window that shows a custom UI.
@@ -75,5 +132,6 @@ export const NeekoPanels = {
     doc.addEventListener("popupshowing", event => onPopupShowing(doc, event), {
       capture: true,
     });
+    anchorDownloadsPanel(win);
   },
 };
