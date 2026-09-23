@@ -44,7 +44,7 @@ import threading
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from builds import ROOT, dev_app, program  # noqa: E402
+from builds import ROOT, LeaveNoTrace, dev_app, program  # noqa: E402
 from marionette import Marionette  # noqa: E402
 
 MITMPROXY = "mitmproxy==12.2.3"
@@ -269,7 +269,9 @@ def main():
     )
     args = parser.parse_args()
 
-    app = program(os.path.abspath(args.app) if args.app else dev_app())
+    bundle = os.path.abspath(args.app) if args.app else dev_app()
+    tidy = LeaveNoTrace(bundle)
+    app = program(bundle)
     app_dir = os.path.dirname(app)
     # Packaged apps don't ship NSS's certutil; the dev build's is the same
     # version.
@@ -366,6 +368,7 @@ def main():
             browser.kill()
         if proxy.poll() is None:
             proxy.terminate()
+        tidy.__exit__()
 
     # What was contacted, by phase.
     events = []

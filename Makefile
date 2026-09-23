@@ -12,11 +12,18 @@ SURFER := bun run --silent surfer
 ENGINE := engine
 MACH := cd $(ENGINE) && ./mach
 
-# Parallel jobs for full builds: one per 2 GB of memory, at most one per
-# core. mach's default (one per core) made an 8 GB machine swap for hours.
-RELEASE_JOBS := $(shell mem=$$(( $$(sysctl -n hw.memsize 2>/dev/null || echo 17179869184) / 2147483648 )); \
-	cpu=$$(sysctl -n hw.ncpu 2>/dev/null || echo 8); \
-	jobs=$$(( mem < cpu ? mem : cpu )); echo $$(( jobs > 0 ? jobs : 1 )))
+# Full builds on smaller machines (docs/lessons.md):
+# - Parallel jobs: one per 2 GB of memory, at most one per core. mach's
+#   default (one per core) made an 8 GB machine swap for hours.
+# - Rust LTO: Firefox optimizes all its Rust code together in one step that
+#   needs about 10 GB. Below 16 GB it's skipped (RUST_LTO=0): the browser is
+#   the same, its Rust code a little bigger and slower. RUST_LTO=1 forces it.
+MEM_GB := $(shell echo $$(( $$(sysctl -n hw.memsize 2>/dev/null || echo 17179869184) / 1073741824 )))
+RELEASE_JOBS := $(shell cpu=$$(sysctl -n hw.ncpu 2>/dev/null || echo 8); \
+	jobs=$$(( $(MEM_GB) / 2 < cpu ? $(MEM_GB) / 2 : cpu )); echo $$(( jobs > 0 ? jobs : 1 )))
+RUST_LTO ?= $(shell test $(MEM_GB) -ge 16 && echo 1 || echo 0)
+# cargo_rustc_flags is where Firefox's config/makefiles/rust.mk adds -Clto.
+NO_RUST_LTO := MAKEFLAGS=" -- cargo_rustc_flags="
 
 .PHONY: all build run release update stop deps config firefox import configure
 
@@ -40,7 +47,8 @@ run:
 # dist/ folder as <Name>.app and <name>-<version>.dmg. Its build files live in
 # engine/obj-release, apart from the dev build's.
 release: configure
-	cd $(ENGINE) && NEEKO_FULL_BUILD=1 ./mach build -j$(RELEASE_JOBS)
+	@test "$(RUST_LTO)" = 1 || echo "neeko: $(MEM_GB) GB of memory, so skipping Rust LTO (RUST_LTO=1 forces it)."
+	cd $(ENGINE) && $(if $(filter 0,$(RUST_LTO)),$(NO_RUST_LTO)) NEEKO_FULL_BUILD=1 ./mach build -j$(RELEASE_JOBS)
 	cd $(ENGINE) && NEEKO_FULL_BUILD=1 ./mach package
 	bun tools/app.ts dist $(APP)
 
