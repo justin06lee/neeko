@@ -8,6 +8,8 @@
  * 3. Keeps the web page area on top of the UI, exactly over the element the
  *    UI marks with the `data-neeko-content` attribute.
  * 4. Gives the UI page the Neeko API, as its global `neeko` object.
+ * 5. Sends Cmd+L to the UI's address bar, or shows Firefox's own address bar
+ *    if the UI doesn't have one.
  *
  * With no custom UI configured, it does nothing and Firefox looks as usual.
  */
@@ -20,9 +22,14 @@ const UI_URL = `${UI_ORIGIN}content/index.html`;
 const UI_FRAME_ID = "neeko-ui";
 const SLOT_SELECTOR = "[data-neeko-content]";
 const API_CLIENT_URL = "chrome://neeko/content/neeko-api.js";
+// Set on the window's root while Firefox's own address bar is showing.
+const ADDRESS_BAR_FALLBACK = "neeko-firefox-address-bar";
 
 // Keeps chrome://neeko-ui/ registered for the whole session.
 let uiRegistration = null;
+
+// The NeekoAPI of each window's current UI page.
+const apis = new WeakMap();
 
 /**
  * Serves the UI folder at chrome://neeko-ui/content/. Browser windows only
@@ -117,7 +124,12 @@ function connectAPI(win, uiWin) {
     "unload",
     () => {
       unloaded = true;
-      api?.destroy();
+      if (api) {
+        api.destroy();
+        if (apis.get(win) == api) {
+          apis.delete(win);
+        }
+      }
       port1.close();
     },
     { once: true }
@@ -131,6 +143,7 @@ function connectAPI(win, uiWin) {
       return;
     }
     api = new NeekoAPI(win, message => port1.postMessage(message));
+    apis.set(win, api);
     port1.onmessage = event => api.receive(event.data);
   };
   if (win.gBrowser) {
@@ -143,6 +156,57 @@ function connectAPI(win, uiWin) {
       }
     });
   }
+}
+
+/**
+ * Cmd+L (and File > Open Location) asks for the address bar. A UI that
+ * listens for the "addressbar" event gets it instead of Firefox. Otherwise
+ * Firefox's own address bar appears, so every UI can still go places.
+ */
+function handleOpenLocation(win) {
+  let command = win.document.getElementById("Browser:OpenLocation");
+  command?.addEventListener("command", event => {
+    if (apis.get(win)?.requestAddressBar()) {
+      // Firefox's own handler listens further up; it never hears this one.
+      event.stopPropagation();
+      return;
+    }
+    showFirefoxAddressBar(win);
+  });
+}
+
+/**
+ * The fallback for UIs without an address bar: shows Firefox's navigation
+ * toolbar across the top of the window (neeko.css) until it loses focus.
+ * Firefox's own Cmd+L handling runs right after and focuses it.
+ */
+function showFirefoxAddressBar(win) {
+  let root = win.document.documentElement;
+  if (root.hasAttribute(ADDRESS_BAR_FALLBACK)) {
+    return;
+  }
+  root.setAttribute(ADDRESS_BAR_FALLBACK, "");
+  let { gURLBar, gBrowser } = win;
+  let input = gURLBar.inputField;
+  let hide = () => {
+    root.removeAttribute(ADDRESS_BAR_FALLBACK);
+    input.removeEventListener("blur", hide);
+    input.removeEventListener("keydown", onKeyDown);
+  };
+  // Escape puts focus back on the page, which hides the bar.
+  let onKeyDown = event => {
+    if (event.key == "Escape" && !gURLBar.view.isOpen) {
+      gBrowser.selectedBrowser.focus();
+    }
+  };
+  input.addEventListener("blur", hide);
+  input.addEventListener("keydown", onKeyDown);
+  // If Firefox didn't manage to focus it, don't leave it showing.
+  win.setTimeout(() => {
+    if (!gURLBar.focused) {
+      hide();
+    }
+  });
 }
 
 /**
@@ -257,5 +321,7 @@ export const NeekoWindow = {
     frame.id = UI_FRAME_ID;
     frame.setAttribute("src", UI_URL);
     doc.body.prepend(frame);
+
+    handleOpenLocation(win);
   },
 };

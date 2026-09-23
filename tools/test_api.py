@@ -3,9 +3,10 @@
     make build
     python3 tools/test_api.py
 
-Launches the dev build with a fresh profile, the UI from ui/ and Marionette,
-serves a few test pages from localhost, runs tools/test_api.js in the browser
-window, and quits. Needs no internet. Exits non-zero if any check fails.
+Launches the dev build with a fresh profile, Marionette and a bare test UI
+(no scripts, so only the checks themselves use the API), serves a few test
+pages from localhost, runs tools/test_api.js in the browser window, and
+quits. Needs no internet. Exits non-zero if any check fails.
 """
 
 import glob
@@ -23,6 +24,13 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from marionette import Marionette  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+# A UI with nothing but a content slot.
+TEST_UI = (
+    "<!doctype html><html><body style='margin: 0'>"
+    "<main data-neeko-content style='position: fixed; inset: 0'></main>"
+    "</body></html>"
+)
 
 PAGES = {
     "/one": "<title>Page one</title>",
@@ -75,8 +83,12 @@ def main():
 
     port = free_port()
     profile = tempfile.mkdtemp(prefix="neeko-api-test-")
+    ui = os.path.join(profile, "test-ui")
+    os.mkdir(ui)
+    with open(os.path.join(ui, "index.html"), "w") as f:
+        f.write(TEST_UI)
     with open(os.path.join(profile, "user.js"), "w") as f:
-        f.write(f'user_pref("neeko.ui.path", "{ROOT}/ui");\n')
+        f.write(f'user_pref("neeko.ui.path", "{ui}");\n')
         f.write(f'user_pref("marionette.port", {port});\n')
 
     browser = subprocess.Popen(
