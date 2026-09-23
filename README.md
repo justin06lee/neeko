@@ -172,13 +172,23 @@ neeko/
 │       ├── neeko/            Window hook, API, hide styles, prefs, privacy defaults
 │       ├── moz-build.patch   Adds neeko/ to the build
 │       └── installer/        Adds Neeko's prefs to packaged builds
-├── docs/         API reference, build plan, using Neeko in a browser, privacy
+├── docs/         API reference, using Neeko in a browser, privacy research,
+│                 lessons learned, history
 ├── tools/        The app step (app.ts), the starter (new-browser.ts), tests
 ├── assets/       README artwork
 ├── Makefile
 ├── engine/       Firefox source, downloaded by Surfer (not committed)
 └── dist/         Release packages from make release (not committed)
 ```
+
+## More
+
+- [ARCHITECTURE.md](ARCHITECTURE.md): how the layers connect, and why.
+- [ROADMAP.md](ROADMAP.md): the API features coming next, in order.
+- [PRIVACY.md](PRIVACY.md): every connection a browser built on Neeko makes,
+  in plain language.
+- [CLAUDE.md](CLAUDE.md): the rules for working on Neeko.
+- [docs/lessons.md](docs/lessons.md): Firefox and tooling traps.
 
 ## License
 
