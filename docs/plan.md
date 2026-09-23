@@ -58,6 +58,13 @@ source of truth.
   - A missing tab id means the selected tab (except `select`). `nav.go` and
     `tabs.open` take address-bar text and fix it up like Firefox's own
     address bar (`openTrustedLinkIn` with `allowThirdPartyFixup`).
+- **Listening means "the UI handles it"; nobody listening means fallback.**
+  The UI reports its first and last listener per event (`events.listen`),
+  Neeko only sends listened events, and Firefox's own UI steps in for
+  features nobody listens to. First use: `nav.on("addressbar")` gets Cmd+L
+  and new New-Tab-page tabs; with no listener, Cmd+L shows Firefox's
+  navigation toolbar until it loses focus. Future fallbacks (permission
+  prompts, context menus) should follow the same rule.
 - **Surfer stays as the build tool.** Neeko's own code must never depend on
   Surfer; only the build plumbing does.
 - **Performance matters** ("a bajillion tabs"):
@@ -89,10 +96,11 @@ source of truth.
    current URL/title, loading state). Nothing more. **Done: `docs/api.md`,
    checked by `tools/test_api.py`.**
 5. Build a minimal demo UI using only the API: a tab list and an address bar.
-   Ugly is fine. It just proves the bridge works. **Next.**
+   Ugly is fine. It just proves the bridge works. **Done: `ui/`, named "the
+   demo UI" in the component library.**
 6. Propose how a separate browser project (mine) should use Neeko, e.g.
    template repo, layered patches, or something else, keeping in mind that
-   Neeko and my browser must both be easy to update.
+   Neeko and my browser must both be easy to update. **Next.**
 7. Create these files:
    - CLAUDE.md: rules for all future work (below).
    - ARCHITECTURE.md: how the layers connect, in plain language.
@@ -187,10 +195,6 @@ source of truth.
   prebuilt runtime.
 - **Branding:** currently Firefox's unofficial "Nightly" branding. Browsers
   built on Neeko set their own; Neeko just needs to make that easy.
-- **Cmd+L has no fallback.** Firefox's address bar is hidden, so Cmd+L does
-  nothing unless the UI has its own address bar, and the UI can't hear Cmd+L
-  yet. Recommended: an event the UI can listen for, with Firefox's own
-  address bar shown as the fallback when no UI listens.
 
 ## Lessons learned
 
@@ -260,17 +264,31 @@ source of truth.
 - **Events caused by a call arrive before its reply**, because they share one
   ordered port. Events from anything else (links, shortcuts) arrive a moment
   after the fact, so tests must wait for them.
-- **Focus goes nowhere after a new tab opens.** Firefox tries to focus its
-  hidden address bar. The UI has to focus its own.
+- **Firefox's wish to focus its address bar is readable.** New tabs opened
+  on the New Tab page get `gURLBar.getBrowserState(browser).urlbarFocused`
+  set at `addTab`, and Firefox focuses the address bar when they're
+  selected. Neeko turns that into the `addressbar` event at `TabSelect`.
+- **Cmd+L is a command event** on `#Browser:OpenLocation`, handled by a
+  listener on its parent `#mainCommandSet`. A listener on the command itself
+  runs first and can `stopPropagation()`. Keys reach it even when focus is
+  in the page or the UI frame.
 - **Firefox's keyboard shortcuts keep working** (Cmd+T, Cmd+W, Ctrl+Tab,
-  Cmd+[, Cmd+], Cmd+R), except Cmd+L, which also logs a harmless
+  Cmd+[, Cmd+], Cmd+R). Before the Cmd+L fallback, Cmd+L logged a harmless
   `getBoxQuads` error from the hidden address bar measuring itself.
 
 ### Testing and debugging tools
 
 - **API test:** `python3 tools/test_api.py` (after `make build`) launches the
-  dev build with a fresh profile and a free Marionette port, serves test
-  pages from localhost, and runs `tools/test_api.js` in the browser window.
+  dev build with a fresh profile, a free Marionette port and a bare UI of
+  its own, serves test pages from localhost, and runs `tools/test_api.js` in
+  the browser window.
+- **Driving the UI like a user needs care with Marionette.** Starting a
+  Marionette session, and its own pointer and key actions, move focus into
+  the web page. For UI tests, use one session, click with
+  `window.synthesizeMouseEvent`, and type with `nsITextInputProcessor`
+  (`beginInputTransactionForTests(window)`, then `keydown`/`keyup`), which
+  goes to whatever really has focus. Hover-only controls need a `mousemove`
+  first.
 
 - **Marionette:** launch with `-marionette -remote-allow-system-access` and use
   `tools/marionette.py` to run JavaScript in the browser window or synthesize

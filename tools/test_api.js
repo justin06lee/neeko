@@ -177,6 +177,48 @@ try {
   check(e instanceof frame.contentWindow.TypeError, "on() with an unknown event throws");
 }
 
+// The address bar. Listening takes effect once Neeko has read the message,
+// which any later reply confirms.
+let openLocation = () =>
+  document.getElementById("Browser:OpenLocation").doCommand();
+let fallbackShowing = () =>
+  document.documentElement.hasAttribute("neeko-firefox-address-bar");
+
+openLocation();
+check(
+  fallbackShowing() && gURLBar.focused,
+  "Cmd+L with no listener shows Firefox's address bar"
+);
+gBrowser.selectedBrowser.focus();
+check(!fallbackShowing(), "it hides again when it loses focus");
+
+let asked = 0;
+let stopAsking = neeko.nav.on("addressbar", () => asked++);
+await neeko.tabs.current();
+openLocation();
+await waitFor(() => asked == 1, "Cmd+L reaches a UI that listens");
+check(!fallbackShowing() && !gURLBar.focused, "Firefox's address bar stays hidden");
+
+let blank = await neeko.tabs.open();
+await waitFor(() => asked == 2, "a new tab on the New Tab page asks too");
+await neeko.tabs.close(blank.id);
+
+stopAsking();
+await neeko.tabs.current();
+openLocation();
+check(fallbackShowing(), "after the UI stops listening, the fallback is back");
+gBrowser.selectedBrowser.focus();
+
+// Neeko sends only the events the UI listens for.
+let heardSelect = 0;
+let stopSelect = neeko.tabs.on("select", () => heardSelect++);
+let other = await neeko.tabs.open(`${BASE}/one`);
+check(heardSelect == 1, "a listened event arrives");
+stopSelect();
+await neeko.tabs.select(first.id);
+check(heardSelect == 1, "an event nobody listens for doesn't");
+await neeko.tabs.close(other.id);
+
 // Reloading the UI gives it a fresh neeko with the same tab ids, and the old
 // one stops hearing events.
 let before = events.length;

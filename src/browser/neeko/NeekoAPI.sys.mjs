@@ -11,6 +11,11 @@
  *   UI to Neeko:   { id, method: "tabs.open", params: [...] }
  *   Neeko to UI:   { id, result }  or  { id, error: { message } }
  *   Neeko to UI:   { event: "tabs.update", data }
+ *
+ * The UI tells Neeko which events it listens for ("events.listen"), and
+ * only those are sent. Listening is also how a UI says it handles something
+ * itself: for events with a fallback, nobody listening means Firefox's own
+ * UI steps in.
  */
 
 // Tab ids are small numbers, unique for the whole session, so they stay the
@@ -48,6 +53,16 @@ function describeTab(tab) {
   };
 }
 
+// Every event the UI can listen for.
+const EVENTS = [
+  "tabs.open",
+  "tabs.close",
+  "tabs.select",
+  "tabs.move",
+  "tabs.update",
+  "nav.addressbar",
+];
+
 // Fields whose changes arrive as "update" events. Selection has its own
 // "select" event instead.
 const UPDATE_FIELDS = ["url", "title", "loading", "canGoBack", "canGoForward"];
@@ -81,6 +96,21 @@ function addressInput(input) {
  * UI's call.
  */
 const METHODS = {
+  /**
+   * Starts or stops sending an event. neeko-api.js calls this when the UI
+   * adds its first listener for an event or removes its last one.
+   */
+  "events.listen"(event, listening) {
+    if (!EVENTS.includes(event) || typeof listening != "boolean") {
+      throw new TypeError("Expected an event name and true or false.");
+    }
+    if (listening) {
+      this.listening.add(event);
+    } else {
+      this.listening.delete(event);
+    }
+  },
+
   "tabs.list"() {
     return this.gBrowser.tabs
       .filter(tab => !tab.closing)
@@ -153,6 +183,8 @@ const METHODS = {
 export class NeekoAPI {
   /** What each tab looked like when the UI last heard about it. */
   #lastSent = new WeakMap();
+  /** The events the UI listens for. */
+  listening = new Set();
   #send;
   #destroyed = false;
 
@@ -208,9 +240,23 @@ export class NeekoAPI {
   }
 
   #emit(event, data) {
-    if (!this.#destroyed) {
+    if (!this.#destroyed && this.listening.has(event)) {
       this.#send({ event, data });
     }
+  }
+
+  /**
+   * Tells the UI that the user wants the address bar, if the UI has one.
+   *
+   * @returns {boolean} false if the UI doesn't listen for that, so Firefox's
+   *   own address bar should appear instead.
+   */
+  requestAddressBar() {
+    if (!this.listening.has("nav.addressbar")) {
+      return false;
+    }
+    this.#emit("nav.addressbar", {});
+    return true;
   }
 
   /**
@@ -267,6 +313,11 @@ export class NeekoAPI {
           id: tabId(tab),
           previousId: previous ? tabId(previous) : null,
         });
+        // Firefox marks new tabs on the New Tab page to get its address bar
+        // focused once they're selected.
+        if (this.win.gURLBar?.getBrowserState(tab.linkedBrowser).urlbarFocused) {
+          this.requestAddressBar();
+        }
         break;
       }
       case "TabMove":

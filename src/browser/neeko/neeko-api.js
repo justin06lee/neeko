@@ -47,6 +47,12 @@ port => {
     });
   }
 
+  // Tells Neeko to start or stop sending an event. Neeko only sends events
+  // the UI listens for, and treats listening as "the UI handles this".
+  function listen(event, listening) {
+    call("events.listen", event, listening).catch(reportError);
+  }
+
   /**
    * Makes the `on` function for one part of the API. Returns a function that
    * removes the listener again.
@@ -63,11 +69,20 @@ port => {
         throw new TypeError("The listener must be a function.");
       }
       let key = `${namespace}.${type}`;
-      if (!listeners.has(key)) {
-        listeners.set(key, new Set());
+      let set = listeners.get(key);
+      if (!set) {
+        set = new Set();
+        listeners.set(key, set);
       }
-      listeners.get(key).add(listener);
-      return () => listeners.get(key).delete(listener);
+      if (!set.size) {
+        listen(key, true);
+      }
+      set.add(listener);
+      return () => {
+        if (set.delete(listener) && !set.size) {
+          listen(key, false);
+        }
+      };
     };
   }
 
@@ -85,6 +100,7 @@ port => {
       back: tabId => call("nav.back", tabId),
       forward: tabId => call("nav.forward", tabId),
       reload: tabId => call("nav.reload", tabId),
+      on: events("nav", ["addressbar"]),
     }),
   });
 

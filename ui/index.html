@@ -5,8 +5,9 @@
   marked data-neeko-content, matching its position, size and corner rounding.
   On macOS the window buttons appear wherever data-neeko-window-buttons is.
 
-  This is a placeholder for setup step 3. The buttons move the website around
-  to show it following the UI. Step 5 replaces it with the demo UI.
+  This is the demo UI: a tab list and an address bar, built only on the Neeko
+  API (the global `neeko` object, see docs/api.md). It's plain on purpose,
+  just enough to show every API feature working. Replace it with your own.
 -->
 <html>
   <head>
@@ -16,15 +17,25 @@
       content="script-src chrome:; object-src 'none'"
     />
     <link rel="stylesheet" href="style.css" />
-    <script src="app.js" defer></script>
+    <script type="module" src="app.js"></script>
   </head>
-  <body data-layout="full">
+  <body>
     <div data-neeko-window-buttons></div>
-    <nav>
-      <button data-layout="left">Left</button>
-      <button data-layout="full">Full</button>
-      <button data-layout="right">Right</button>
-    </nav>
+    <aside>
+      <button id="new-tab" title="New tab (Cmd+T)">+ New tab</button>
+      <ol id="tabs"></ol>
+    </aside>
+    <header>
+      <button id="back" title="Back (Cmd+[)" disabled>&larr;</button>
+      <button id="forward" title="Forward (Cmd+])" disabled>&rarr;</button>
+      <button id="reload" title="Reload (Cmd+R)">&#x21bb;</button>
+      <input
+        id="address"
+        placeholder="Search or enter address"
+        spellcheck="false"
+        autocomplete="off"
+      />
+    </header>
     <main data-neeko-content></main>
   </body>
 </html>

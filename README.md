@@ -21,9 +21,9 @@ default, so a browser built on Neeko is always complete.
 
 Early foundation work, on Firefox 156.0.1. Neeko hides Firefox's interface,
 loads a custom UI from `ui/` with the web page placed wherever that UI says,
-and gives the UI a first small JavaScript API for tabs and navigation. For now
-`ui/` holds a placeholder that only moves the page around; a demo UI built on
-the API comes next.
+and gives the UI a first small JavaScript API for tabs and navigation. `ui/`
+holds a deliberately plain demo UI built only on that API: a tab list, back,
+forward and reload, and an address bar.
 
 ## Requirements
 
@@ -62,7 +62,7 @@ Changes to `ui/` only need a relaunch, not a rebuild.
   put an element with `data-neeko-window-buttons`.
 - Your scripts get a global `neeko` object, the Neeko API: list, open, close
   and switch tabs, navigate, and hear about every change. It's documented in
-  [docs/api.md](docs/api.md).
+  [docs/api.md](docs/api.md), and `ui/app.js` shows all of it in use.
 - Scripts must be separate files (the page's security policy blocks inline
   scripts). They load from `chrome://neeko-ui/content/`, which maps to `ui/`.
 - If there's no UI configured, Neeko stays out of the way and Firefox looks as
@@ -105,7 +105,7 @@ is still Firefox's unofficial "Nightly" branding for now.
 neeko/
 ├── surfer.json   Firefox version pin and app name
 ├── configs/      Build settings Surfer merges into engine/mozconfig
-├── ui/           The custom UI (yours to replace)
+├── ui/           The demo UI (yours to replace)
 ├── src/          Neeko's own files, layered onto engine/ by Surfer
 │   └── browser/
 │       ├── neeko/            Window hook, API, hide styles, default prefs

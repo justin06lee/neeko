@@ -36,3 +36,20 @@
   height: 0;
   overflow: clip;
 }
+
+/* The fallback for UIs without an address bar: Cmd+L shows Firefox's own
+   navigation toolbar across the top of the window, over the UI and the page,
+   until it loses focus (NeekoWindow sets the attribute). */
+:root[neeko][neeko-firefox-address-bar] #navigator-toolbox {
+  display: flex !important;
+  flex-direction: column;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 3;
+}
+
+:root[neeko][neeko-firefox-address-bar] #navigator-toolbox > :not(#nav-bar) {
+  display: none !important;
+}

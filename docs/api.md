@@ -5,7 +5,8 @@ before your first script runs, in your UI page (`ui/index.html`) and nowhere
 else. Web pages never get it.
 
 This first version covers tabs and navigation, nothing more. Features get
-added one at a time as browsers built on Neeko need them.
+added one at a time as browsers built on Neeko need them. The demo UI in
+`ui/` uses every one of them.
 
 ```js
 let tabs = await neeko.tabs.list();
@@ -31,6 +32,9 @@ await neeko.nav.back();
 - **Events and replies arrive in order.** Events caused by a call arrive
   before its reply. So the usual pattern is safe: subscribe to events, call
   `list()` once, then apply events as they come.
+- **Listening means "my UI handles this".** Neeko only sends the events your
+  UI listens for. Where a feature has a fallback, Firefox's own version
+  steps in only while nobody listens (see [Fallbacks](#fallbacks)).
 
 ## Tabs
 
@@ -78,26 +82,39 @@ would wake them.
 
 Each method acts on the tab you name, or on the selected tab if you don't.
 
+### Methods
+
 | Method | What it does |
 | --- | --- |
 | `neeko.nav.go(input, tabId?)` | Loads what a user typed into an address bar. Firefox turns it into a URL the way its own address bar would: `example.com` becomes `https://example.com/` (or `http://` where needed), and anything that isn't a web address becomes a search with the default search engine. |
 | `neeko.nav.back(tabId?)` | Goes back, if the tab can. |
 | `neeko.nav.forward(tabId?)` | Goes forward, if the tab can. |
 | `neeko.nav.reload(tabId?)` | Reloads the page. |
+| `neeko.nav.on(event, listener)` | Listens for an event, as `tabs.on` does. |
 
 The current URL, title and loading state are fields of each tab: read them
 from `tabs.current()` and follow them with `update` events.
 
-Neeko doesn't move keyboard focus into your UI. After opening a tab, focus
-your own address bar if you want the user to type straight away.
+### Events
+
+| Event | Data | When |
+| --- | --- | --- |
+| `addressbar` | `{}` | The user wants the address bar: they pressed Cmd+L or chose File > Open Location, or a new tab opened on the New Tab page. Focus yours. |
+
+Neeko never moves keyboard focus into your UI by itself; this event is your
+cue.
 
 ## Fallbacks
 
-Firefox keeps running underneath your UI, so tabs and navigation keep
-working even where your UI has no controls for them. Firefox's keyboard
-shortcuts work as usual: Cmd+T, Cmd+W, Ctrl+Tab, Cmd+[ and Cmd+], Cmd+R. The
-one exception so far is Cmd+L (focus the address bar), which does nothing
-when your UI has no address bar.
+Firefox keeps running underneath your UI, so a browser built on Neeko works
+even where its UI has no controls yet.
+
+- **Keyboard shortcuts** work as usual: Cmd+T, Cmd+W, Ctrl+Tab, Cmd+[ and
+  Cmd+], Cmd+R.
+- **The address bar.** If your UI doesn't listen for `addressbar`, Cmd+L
+  shows Firefox's own navigation toolbar across the top of the window. It
+  goes away again when it loses focus: after Enter, Escape, or a click
+  elsewhere.
 
 ## Security
 
@@ -121,7 +138,10 @@ Every call is a message. `neeko.tabs.open("example.com")` sends
 and Firefox answers with `{ id: 12, result: { ...the tab } }` or
 `{ id: 12, error: { message } }`. Events are messages too:
 `{ event: "tabs.update", data: { tab, changed } }`. Only plain data crosses,
-never live Firefox objects.
+never live Firefox objects. When your UI adds its first listener for an
+event, or removes its last, `neeko` sends
+`{ method: "events.listen", params: ["tabs.update", true] }` (or `false`),
+which is how Neeko knows what to send and when to fall back.
 
 Right now your UI runs inside Firefox's own window process ("Become" mode),
 and the messages travel over a `MessageChannel`. Messages mean a sandboxed
@@ -135,7 +155,7 @@ The pieces:
 - `src/browser/neeko/NeekoAPI.sys.mjs` is Firefox's side. It carries out the
   calls and watches the tabs for events.
 - `src/browser/neeko/NeekoWindow.sys.mjs` connects the two when your UI
-  loads.
+  loads, and handles Cmd+L and its fallback.
 
 ## Testing
 
@@ -144,7 +164,9 @@ make build
 python3 tools/test_api.py
 ```
 
-This launches the dev build with a fresh profile, serves a few test pages
-from localhost (no internet needed), and drives every method and event
-through `neeko`, including checks that web pages can't see it and that
-sleeping tabs stay asleep.
+This launches the dev build with a fresh profile and a bare test UI of its
+own (so it doesn't depend on what's in `ui/`), serves a few test pages from
+localhost (no internet needed), and drives every method and event through
+`neeko`. That includes checks that web pages can't see it, that sleeping tabs
+stay asleep, and that the address bar fallback appears only when nobody
+listens.
