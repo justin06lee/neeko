@@ -221,6 +221,29 @@ Add to it whenever something costs you time.
   `canGoBack` is false when every earlier page is untouched (a tab opened on
   one page, then sent to another by `nav.go()`). Neeko reports Firefox's
   answer. An entry's `hasUserInteraction` is writable from chrome code.
+- **Permission prompts all pass through `PopupNotifications.show()`**
+  (`browser/modules/PermissionUI.sys.mjs`), with a message, a main action,
+  secondary actions and options. `NeekoPanels` wraps `show` on the window's
+  `PopupNotifications`, a lazy global made on first use.
+  - `options.dismissed` doesn't keep Firefox's panel closed: permission
+    prompts are `persistent`, which shows them anyway. `options.neverShow`
+    does. Clearing it and calling `anchorVisibilityChange()` (public) makes
+    Firefox show them again, which is how prompts go back to Firefox when
+    the UI stops listening.
+  - Answering is what Firefox's button handler does: call the action's
+    `callback({ checkboxChecked, source })`, then `notification.remove()`.
+    Firefox's checks happen in its button handler, not the callback, so
+    Neeko repeats them: the window must be active, and actions without
+    `disableSecurityDelay` (only Block has it) wait
+    `security.notification_enable_delay` after the prompt appears.
+  - Prompts shown `dismissed` from the start are Firefox's "post-prompts",
+    requests it already turned down (a site asking for notifications
+    without a click) that only get an icon. Neeko doesn't hand those over.
+  - Camera, microphone and screen sharing (`WebRTCParent.sys.mjs`) read the
+    chosen device from menus inside Firefox's panel, so they can't be
+    answered without it.
+  - `displayURI` is false for some prompts (location); the site is then only
+    `options.name`, the `<>` in the message.
 - **Events caused by a call arrive before its reply**, because they share one
   ordered port. Events from anything else (links, shortcuts) arrive a moment
   after the fact, so tests must wait for them.
@@ -260,11 +283,17 @@ Add to it whenever something costs you time.
   nobody interacted with (see the Neeko API section), and Page one usually,
   but not always, ended up marked as used by something outside the test. The
   test now marks it itself; 8 runs in 8 passed under the same load.
-- **Marionette's recommended prefs stop the downloads panel opening by
-  itself** (`browser.download.alwaysOpenPanel` false,
-  `browser.download.panel.shown` true). They're only applied where the
-  profile has no value of its own, so the API test puts Firefox's defaults
-  back in `user.js`.
+- **Marionette's recommended prefs change what's under test.** They stop
+  the downloads panel opening by itself (`browser.download.alwaysOpenPanel`
+  false, `browser.download.panel.shown` true) and turn off the delay before
+  a prompt's buttons work (`security.notification_enable_delay` 0). They're
+  only applied where the profile has no value of its own, so the API test
+  puts Firefox's defaults back in `user.js` (`FIREFOX_PREFS`).
+- **Synthesized clicks aren't user activation.** A page that asks for
+  notifications on a `window.synthesizeMouseEvent` click gets Firefox's
+  "asked without a click" treatment (a dismissed post-prompt).
+  `dom.webnotifications.requireuserinteraction` false lifts that for
+  testing.
 - **Marionette:** launch with `-marionette -remote-allow-system-access` and use
   `tools/marionette.py` to run JavaScript in the browser window or synthesize
   clicks.

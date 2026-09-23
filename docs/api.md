@@ -4,7 +4,7 @@ Your UI talks to Firefox through one global object, `neeko`. It's there
 before your first script runs, in your UI page (`ui/index.html`) and nowhere
 else. Web pages never get it.
 
-This first version covers tabs and navigation, nothing more. Features get
+So far it covers tabs, navigation and permission prompts. Features get
 added one at a time as browsers built on Neeko need them. The demo UI in
 `ui/` uses every one of them.
 
@@ -108,6 +108,73 @@ from `tabs.current()` and follow them with `update` events.
 Neeko never moves keyboard focus into your UI by itself; this event is your
 cue.
 
+## Permission prompts
+
+When a site asks for a permission (your location, say), your UI can ask the
+user itself. Listen for `open`, and Firefox's own prompt stays closed.
+
+```js
+neeko.prompts.on("open", ({ prompt }) => show(prompt));
+neeko.prompts.on("close", ({ id }) => hide(id));
+// The user clicks the prompt's second button, "Block":
+await neeko.prompts.answer(prompt.id, 1, { remember: true });
+```
+
+A prompt looks like this:
+
+```js
+{
+  id: 4,
+  tabId: 2,                     // the tab whose page asks
+  kind: "location",
+  origin: "maps.example.com",   // who asks, as Firefox shows it
+  message: "Allow maps.example.com to access your location?",
+  hint: "",                     // extra text some prompts have
+  learnMoreURL: "https://www.mozilla.org/en-US/firefox/geolocation/",  // or null
+  actions: [{ label: "Allow" }, { label: "Block" }],
+  remember: { label: "Remember this decision", checked: false },       // or null
+}
+```
+
+The kinds are `location`, `notifications`, `persistent-storage`,
+`storage-access` (a site embedded in another asking for its cookies), `vr`,
+`midi`, `local-network` and `localhost` (a site asking to reach devices on
+your network, or your own computer). The labels and message are Firefox's
+own, in the user's language. The first action is the main one, which
+Firefox's prompt highlights.
+
+Prompts can come from any tab, including ones in the background: show
+them when their tab is selected, or mark the tab. A prompt waits until it's
+answered, or until Firefox closes it because its page went away.
+
+### Methods
+
+| Method | What it does |
+| --- | --- |
+| `neeko.prompts.list()` | The prompts waiting in this window, in every tab, oldest first. |
+| `neeko.prompts.answer(promptId, action, options?)` | Answers a prompt as a click on one of Firefox's buttons would. `action` is an index into its `actions`. Pass `{ remember: true }` to check its remember box, if it has one. |
+| `neeko.prompts.on(event, listener)` | Listens for an event, as `tabs.on` does. |
+
+**Wait before allowing.** Like Firefox's own buttons, actions that grant
+something only work once the prompt has been up for half a second (the
+`security.notification_enable_delay` pref), counted again whenever its tab
+is selected or the window is brought forward, and only while the window is
+active. Earlier answers are refused with an error that says how long to
+wait. It stops a page from making a prompt appear just as the user clicks
+where "Allow" will be. Show your buttons disabled for that long. Blocking
+works right away.
+
+### Events
+
+| Event | Data | When |
+| --- | --- | --- |
+| `open` | `{ prompt }` | A site asks for a permission. Listening for this is how your UI says it shows prompts itself. |
+| `close` | `{ id }` | A prompt is gone: answered, or its page closed or went elsewhere. |
+
+Camera, microphone and screen sharing prompts stay Firefox's (the user picks
+a device in them), and so do password saving and add-on installs. They
+appear hanging from the top of the page (see [Fallbacks](#fallbacks)).
+
 ## Fallbacks
 
 Firefox keeps running underneath your UI, so a browser built on Neeko works
@@ -119,12 +186,14 @@ even where its UI has no controls yet.
   shows Firefox's own navigation toolbar across the top of the window. It
   goes away again when it loses focus: after Enter, Escape, or a click
   elsewhere.
-- **Permission prompts and other Firefox panels.** Camera, microphone and
-  location prompts, password saving, add-on installs and notices like
-  "add-on added" are Firefox's own. They hang from the top edge of the web
-  page, just inside its corners: on the left for the address bar's prompts,
-  on the right for the toolbar buttons' notices, and they follow the page
-  if your UI moves it.
+- **Permission prompts and other Firefox panels.** If your UI doesn't
+  listen for `prompts` `open`, permission prompts are Firefox's own, and
+  so are, always, camera and microphone prompts, password saving, add-on
+  installs and notices like "add-on added". They hang from the top edge of
+  the web page, just inside its corners: on the left for the address bar's
+  prompts, on the right for the toolbar buttons' notices, and they follow
+  the page if your UI moves it. If your UI stops listening while prompts are
+  waiting, Firefox's prompt shows them.
 - **Downloads.** When a download starts, Firefox's downloads panel opens at
   the top right of the web page, with its progress. Cmd+Shift+Y shows every
   download, in Firefox's Library window.

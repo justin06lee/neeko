@@ -102,6 +102,12 @@ port => {
       reload: tabId => call("nav.reload", tabId),
       on: events("nav", ["addressbar"]),
     }),
+    prompts: Object.freeze({
+      list: () => call("prompts.list"),
+      answer: (promptId, action, options) =>
+        call("prompts.answer", promptId, action, options),
+      on: events("prompts", ["open", "close"]),
+    }),
   });
 
   Object.defineProperty(window, "neeko", { value: neeko, enumerable: true });

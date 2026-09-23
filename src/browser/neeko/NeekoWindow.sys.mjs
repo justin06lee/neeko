@@ -359,6 +359,6 @@ export const NeekoWindow = {
     doc.body.prepend(frame);
 
     handleOpenLocation(win);
-    NeekoPanels.init(win);
+    NeekoPanels.init(win, () => apis.get(win));
   },
 };

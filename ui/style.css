@@ -12,7 +12,7 @@ body {
 body {
   display: grid;
   grid-template-columns: 230px 1fr;
-  grid-template-rows: 48px 1fr;
+  grid-template-rows: 48px auto 1fr;
   background: #16161a;
   color: #ddd;
   font: 13px system-ui, sans-serif;
@@ -50,7 +50,7 @@ button:disabled {
 }
 
 aside {
-  grid-row: 1 / 3;
+  grid-row: 1 / 4;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -93,6 +93,12 @@ aside {
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
+}
+
+/* A tab whose page is waiting for a permission answer. */
+#tabs li.asking .title::after {
+  content: "  \25B2";
+  color: #f0b44c;
 }
 
 #tabs li.loading .title::before {
@@ -144,6 +150,68 @@ header {
 #address:focus {
   outline: 2px solid #4a7dff;
   outline-offset: -1px;
+}
+
+/* A permission prompt for the selected tab: a site asking for the
+   location, say. */
+#prompt {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0 12px 8px 0;
+  padding: 10px 12px;
+  background: #22222a;
+  border: 1px solid #3a3a44;
+  border-radius: 10px;
+}
+
+#prompt[hidden] {
+  display: none;
+}
+
+#prompt .text {
+  flex: 1;
+}
+
+#prompt p {
+  margin: 0;
+}
+
+#prompt .message {
+  color: #fff;
+}
+
+#prompt .hint {
+  color: #999;
+  margin-top: 2px;
+}
+
+#prompt .hint:empty {
+  display: none;
+}
+
+#prompt .learn-more {
+  border: none;
+  background: none;
+  color: #8ab4ff;
+  padding: 3px 4px;
+}
+
+#prompt .learn-more[hidden] {
+  display: none;
+}
+
+#prompt .actions {
+  display: flex;
+  /* The first action is the main one, so it goes last, on the right. */
+  flex-direction: row-reverse;
+  gap: 6px;
+}
+
+#prompt .actions button:first-child {
+  background: #3a63d8;
+  border-color: #4a73e8;
+  color: #fff;
 }
 
 /* Where the website shows. */
