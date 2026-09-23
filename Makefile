@@ -12,6 +12,12 @@ SURFER := bun run --silent surfer
 ENGINE := engine
 MACH := cd $(ENGINE) && ./mach
 
+# Parallel jobs for full builds: one per 2 GB of memory, at most one per
+# core. mach's default (one per core) made an 8 GB machine swap for hours.
+RELEASE_JOBS := $(shell mem=$$(( $$(sysctl -n hw.memsize 2>/dev/null || echo 17179869184) / 2147483648 )); \
+	cpu=$$(sysctl -n hw.ncpu 2>/dev/null || echo 8); \
+	jobs=$$(( mem < cpu ? mem : cpu )); echo $$(( jobs > 0 ? jobs : 1 )))
+
 .PHONY: all build run release update stop deps config firefox import configure
 
 all: build run
@@ -34,7 +40,7 @@ run:
 # dist/ folder as <Name>.app and <name>-<version>.dmg. Its build files live in
 # engine/obj-release, apart from the dev build's.
 release: configure
-	cd $(ENGINE) && NEEKO_FULL_BUILD=1 ./mach build
+	cd $(ENGINE) && NEEKO_FULL_BUILD=1 ./mach build -j$(RELEASE_JOBS)
 	cd $(ENGINE) && NEEKO_FULL_BUILD=1 ./mach package
 	bun tools/app.ts dist $(APP)
 
