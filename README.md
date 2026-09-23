@@ -104,7 +104,8 @@ neeko/
 │   └── browser/
 │       ├── neeko/            Window hook, hide styles, default prefs
 │       └── moz-build.patch   The one line that adds neeko/ to the build
-├── docs/         Research notes (so far: what Firefox connects to)
+├── docs/         The build plan (plan.md) and privacy research
+├── tools/        Dev helpers (marionette.py drives a running build for tests)
 ├── assets/       README artwork
 ├── Makefile
 └── engine/       Firefox source, downloaded by Surfer (not committed)

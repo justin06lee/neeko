@@ -2,7 +2,8 @@
 
 This is step 1 of the privacy-by-default work: a list of everything stock
 Firefox 156.0.1 contacts on its own, before any Neeko changes. Nothing here has
-been changed yet. Step 2 sorts these into kill / keep / later.
+been changed yet. Step 2 sorts these into kill / keep / later:
+[`decisions.md`](decisions.md).
 
 It is built from three sources that agree with each other:
 
