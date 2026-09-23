@@ -161,13 +161,17 @@ Add to it whenever something costs you time.
   gets the remote page.
 - **Measured with 300 tabs:** same memory and tab-switch time as stock Firefox,
   and faster to open tabs.
-- **What happens today to Firefox UI that anchors on hidden toolbars**
+- **What happens to Firefox UI that anchors on hidden toolbars**
   (checked 2026-09-23): permission prompts still open, but pinned to the
   window's top-left corner because their anchor icon is hidden. Downloads
   finish silently: the downloads panel anchors on the hidden toolbar button
-  and never opens. Web page fullscreen (a video's fullscreen button) makes
-  the window fullscreen, but the page stays in the UI's content slot, with
-  the UI around it. All three are on the roadmap.
+  and never opens. Both are on the roadmap.
+- **Web page fullscreen** sets `inDOMFullscreen` on the window's root and
+  makes the window fullscreen, but Firefox's own layout is what makes the
+  page fill it. Neeko's page area keeps the inline position and size
+  `NeekoWindow` gives it, so it stayed in the UI's slot with the UI around
+  it. `neeko.css` overrides both with `!important` while the attribute is
+  there.
 
 ## Neeko API
 

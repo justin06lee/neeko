@@ -37,6 +37,21 @@
   overflow: clip;
 }
 
+/* Web page fullscreen (a video's fullscreen button, say): the page fills the
+   window over the UI, which isn't drawn meanwhile. Firefox sets the attribute
+   until the page exits fullscreen. !important beats the inline position and
+   size NeekoWindow gives the page area. */
+:root[neeko][inDOMFullscreen] #tabbrowser-tabbox {
+  inset: 0 !important;
+  width: auto !important;
+  height: auto !important;
+  border-radius: 0 !important;
+}
+
+:root[neeko][inDOMFullscreen] #neeko-ui {
+  visibility: hidden;
+}
+
 /* The fallback for UIs without an address bar: Cmd+L shows Firefox's own
    navigation toolbar across the top of the window, over the UI and the page,
    until it loses focus (NeekoWindow sets the attribute). */

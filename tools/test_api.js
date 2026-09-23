@@ -225,6 +225,37 @@ openLocation();
 check(fallbackShowing(), "after the UI stops listening, the fallback is back");
 gBrowser.selectedBrowser.focus();
 
+// Web page fullscreen: the page fills the window over the UI, then goes back
+// into the UI's content slot.
+let tabbox = document.getElementById("tabbrowser-tabbox");
+let rectOf = element => {
+  let { left, top, right, bottom } = element.getBoundingClientRect();
+  return [left, top, right, bottom].map(Math.round);
+};
+let slotRect = () =>
+  rectOf(frame.contentDocument.querySelector("[data-neeko-content]"));
+let pageTab = await neeko.tabs.open(`${BASE}/fullscreen`);
+await waitFor(
+  () => document.documentElement.hasAttribute("inDOMFullscreen"),
+  "a page to go fullscreen"
+);
+await waitFor(
+  () => `${rectOf(tabbox)}` == `0,0,${innerWidth},${innerHeight}`,
+  "the page to fill the window"
+);
+check(getComputedStyle(frame).visibility == "hidden", "the UI isn't drawn meanwhile");
+document.exitFullscreen();
+await waitFor(
+  () => !document.documentElement.hasAttribute("inDOMFullscreen") && !fullScreen,
+  "fullscreen to end"
+);
+await waitFor(
+  () => `${rectOf(tabbox)}` == `${slotRect()}` && !`${slotRect()}`.startsWith("0,0"),
+  "the page to go back into the UI's slot"
+);
+check(getComputedStyle(frame).visibility == "visible", "the UI is drawn again");
+await neeko.tabs.close(pageTab.id);
+
 // Neeko sends only the events the UI listens for.
 let heardSelect = 0;
 let stopSelect = neeko.tabs.on("select", () => heardSelect++);

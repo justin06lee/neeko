@@ -25,9 +25,9 @@ get added as it needs them.
    pinned to the window's top-left corner, because the icon it anchors to is
    hidden.
 2. [ ] **Fullscreen.** Web page fullscreen (videos) and window fullscreen:
-   the UI hears about it and can get out of the way; by default the page
-   fills the screen. Today: the window goes fullscreen, but the page stays
-   in the UI's content slot with the UI drawn around it.
+   the UI hears about it and can get out of the way, or animate. Fallback
+   (done): the page fills the screen over the UI, which isn't drawn until
+   the page exits fullscreen.
 3. [ ] **Downloads.** List, progress, open, show in Finder, cancel, and a
    "download started" event. Fallback: Firefox's downloads panel. Today:
    files download silently; the panel anchors on a hidden button and never

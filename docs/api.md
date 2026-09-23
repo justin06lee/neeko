@@ -115,6 +115,10 @@ even where its UI has no controls yet.
   shows Firefox's own navigation toolbar across the top of the window. It
   goes away again when it loses focus: after Enter, Escape, or a click
   elsewhere.
+- **Fullscreen.** When a web page goes fullscreen (a video's fullscreen
+  button, say), it fills the screen over your UI, and goes back into your
+  content slot when it exits. Your UI stays loaded and its scripts keep
+  running, but it isn't drawn meanwhile.
 
 ## Security
 
