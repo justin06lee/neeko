@@ -215,6 +215,13 @@ Add to it whenever something costs you time.
   (`beginInputTransactionForTests(window)`, then `keydown`/`keyup`), which
   goes to whatever really has focus. Hover-only controls need a `mousemove`
   first.
+- **Much of Firefox only works in the active window.** Keyboard focus,
+  permission prompts, the downloads panel opening by itself, and web page
+  fullscreen (refused otherwise). Under heavy load macOS can take seconds to
+  bring a freshly launched app to the front; the one flaky API test run
+  (2026-09-23, right after a long release build) failed two address bar
+  focus checks that way. `tools/test_api.js` now waits for its window to be
+  active before any check.
 - **Marionette:** launch with `-marionette -remote-allow-system-access` and use
   `tools/marionette.py` to run JavaScript in the browser window or synthesize
   clicks.

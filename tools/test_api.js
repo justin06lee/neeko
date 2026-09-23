@@ -39,6 +39,12 @@ if (!neeko) {
 }
 await waitFor(() => window.gBrowserInit?.delayedStartupFinished, "startup");
 
+// Focus, prompts, the downloads panel and fullscreen all need this window to
+// be the active one. Under heavy load, macOS can take a while to bring a newly
+// launched app to the front.
+window.focus();
+await waitFor(() => Services.focus.activeWindow == window, "the window to be active", 30000);
+
 check(Object.isFrozen(neeko) && Object.isFrozen(neeko.tabs), "neeko is frozen");
 
 // The UI folder in neeko.ui.path (here the test UI) wins over the UI the build
