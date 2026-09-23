@@ -108,7 +108,11 @@ source of truth.
    demo UI" in the component library.**
 6. Propose how a separate browser project (mine) should use Neeko, e.g.
    template repo, layered patches, or something else, keeping in mind that
-   Neeko and my browser must both be easy to update. **Next.**
+   Neeko and my browser must both be easy to update. **Proposed:
+   `docs/using-neeko.md` recommends Neeko as a pinned git submodule inside
+   the browser's repo, plus release builds that compile the launcher with
+   the browser's own name. Being implemented next, unless the user picks
+   another option.**
 7. Create these files:
    - CLAUDE.md: rules for all future work (below).
    - ARCHITECTURE.md: how the layers connect, in plain language.
@@ -186,6 +190,8 @@ source of truth.
 >      telemetry/tracking endpoints from the KILL list
 >
 >    Also check about:telemetry and about:glean show nothing uploaded.
+>
+>    **Done: `tools/test_privacy.py` (see `docs/privacy/implementation.md`).**
 > 5. DOCUMENT:
 >    - PRIVACY.md: every connection the browser makes and why, in plain
 >      language, suitable for showing to users.
@@ -336,6 +342,21 @@ source of truth.
 - **The privacy inventory's baseline capture** used a tiny logging proxy
   (not committed), and so did the step 3 check. The privacy test in step 4
   should use mitmproxy, as the task says.
+- **The privacy test** (`tools/test_privacy.py`) runs mitmproxy through
+  `uvx` (pinned version, nothing installed), trusts its fresh certificate in
+  a brand-new profile with the build's own `certutil`, and watches `lsof`
+  for connections that skip the proxy. With telemetry upload switched back
+  on, some upload went out directly, not through the proxy, so that check
+  matters.
+- **Quitting normally needs Marionette on macOS.** Firefox doesn't handle
+  SIGTERM there, and killing it skips shutdown, when shutdown pings would
+  go. The privacy test enables Marionette only to quit and to read
+  about:telemetry/about:glean, with `remote.prefs.recommended=false`.
+  Chrome-context commands also need `-remote-allow-system-access`.
+- **about:glean fills in its upload status late,** and its placeholder says
+  "enabled". Wait for its `uploadEnabled: true|false` line before reading
+  the status. Its "disabled, but we're lying to the SDK" message means
+  upload is actually on.
 - **Never run the privacy test through Marionette** (or set
   `remote.prefs.recommended=false`). Marionette applies its own "recommended
   prefs", which turn off telemetry, captive portal checks and more, hiding
