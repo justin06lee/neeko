@@ -19,14 +19,18 @@ get added as it needs them.
   fullscreen fills the screen; permission prompts and other panels hang
   from the top of the page; the downloads panel opens when a download
   starts.
+- [x] **Permission prompts**: location, notifications, storage, VR, MIDI,
+  local network: the UI gets the request and answers it, with Firefox's
+  delay against clickjacking. Fallback: Firefox's own prompt.
 
 ## API features, in order
 
-1. [ ] **Permission prompts and other doorhangers.** Camera, microphone,
-   location, notifications, pop-ups, password saving, add-on installs: the
-   UI gets the request and answers it. Fallback (done): Firefox's own
-   prompt, hanging from the top edge of the page, near where the address
-   bar's icons would be.
+1. [ ] **Camera, microphone, passwords and add-on installs.** Permission
+   prompts are done (below); these doorhangers stay Firefox's for now,
+   hanging from the top of the page. Camera and microphone prompts let the
+   user pick a device inside Firefox's panel (`WebRTCParent.sys.mjs` reads
+   the choice from it), so the API would need device lists; password saving
+   and add-on installs show forms and permission lists.
 2. [ ] **Fullscreen.** Web page fullscreen (videos) and window fullscreen:
    the UI hears about it and can get out of the way, or animate. Fallback
    (done): the page fills the screen over the UI, which isn't drawn until

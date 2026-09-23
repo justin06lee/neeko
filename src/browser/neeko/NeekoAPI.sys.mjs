@@ -18,6 +18,8 @@
  * UI steps in.
  */
 
+import { NeekoPanels } from "moz-src:///browser/neeko/NeekoPanels.sys.mjs";
+
 // Tab ids are small numbers, unique for the whole session, so they stay the
 // same when the UI reloads.
 let nextTabId = 1;
@@ -61,6 +63,8 @@ const EVENTS = [
   "tabs.move",
   "tabs.update",
   "nav.addressbar",
+  "prompts.open",
+  "prompts.close",
 ];
 
 // Fields whose changes arrive as "update" events. Selection has its own
@@ -104,10 +108,16 @@ const METHODS = {
     if (!EVENTS.includes(event) || typeof listening != "boolean") {
       throw new TypeError("Expected an event name and true or false.");
     }
+    if (listening == this.listening.has(event)) {
+      return;
+    }
     if (listening) {
       this.listening.add(event);
     } else {
       this.listening.delete(event);
+    }
+    if (event == "prompts.open") {
+      NeekoPanels.setUIShowsPrompts(this.win, listening);
     }
   },
 
@@ -178,6 +188,27 @@ const METHODS = {
   "nav.reload"(id) {
     this.gBrowser.reloadTab(this.findTab(id));
   },
+
+  /**
+   * The permission prompts waiting for an answer in this window, in every
+   * tab, oldest first.
+   */
+  "prompts.list"() {
+    return NeekoPanels.prompts(this.win).map(prompt =>
+      this.describePrompt(prompt)
+    );
+  },
+
+  /**
+   * Answers a permission prompt with one of its actions (an index into its
+   * actions), optionally checking its "remember" checkbox.
+   */
+  "prompts.answer"(id, action, options = {}) {
+    if (!Number.isInteger(id) || !Number.isInteger(action)) {
+      throw new TypeError("Expected a prompt id and an action index.");
+    }
+    NeekoPanels.answerPrompt(this.win, id, action, !!options?.remember);
+  },
 };
 
 export class NeekoAPI {
@@ -208,6 +239,10 @@ export class NeekoAPI {
       return;
     }
     this.#destroyed = true;
+    // Firefox's own panel shows the prompts again.
+    if (this.listening.has("prompts.open")) {
+      NeekoPanels.setUIShowsPrompts(this.win, false);
+    }
     for (let type of TAB_EVENTS) {
       this.gBrowser.tabContainer.removeEventListener(type, this);
     }
@@ -257,6 +292,28 @@ export class NeekoAPI {
     }
     this.#emit("nav.addressbar", {});
     return true;
+  }
+
+  /**
+   * Tells the UI about a new permission prompt (NeekoPanels).
+   */
+  promptOpened(prompt) {
+    this.#emit("prompts.open", { prompt: this.describePrompt(prompt) });
+  }
+
+  /**
+   * Tells the UI a permission prompt is gone (NeekoPanels).
+   */
+  promptClosed(id) {
+    this.#emit("prompts.close", { id });
+  }
+
+  /**
+   * NeekoPanels' description of a prompt, with the tab it's for.
+   */
+  describePrompt({ browser, ...prompt }) {
+    let tab = this.gBrowser.getTabForBrowser(browser);
+    return { ...prompt, tabId: tab ? tabId(tab) : null };
   }
 
   /**

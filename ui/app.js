@@ -1,11 +1,12 @@
-// The demo UI: a tab list and an address bar, built only on the Neeko API
-// (the global `neeko` object, see docs/api.md).
+// The demo UI: a tab list, an address bar and a bar for permission prompts,
+// built only on the Neeko API (the global `neeko` object, see docs/api.md).
 
 const tabList = document.getElementById("tabs");
 const address = document.getElementById("address");
 const back = document.getElementById("back");
 const forward = document.getElementById("forward");
 const reload = document.getElementById("reload");
+const promptBar = document.getElementById("prompt");
 
 // The latest description of every tab, and its list item, by tab id.
 const tabs = new Map();
@@ -14,6 +15,12 @@ let currentId = null;
 // True while the user is typing in the address bar, so updates don't
 // overwrite it.
 let editing = false;
+// Permission prompts waiting for an answer, by id, in every tab.
+const prompts = new Map();
+// How long a prompt's buttons wait before they work, like Firefox's: a page
+// can't make a prompt appear just as someone clicks where "Allow" will be.
+// (Neeko refuses earlier answers anyway.)
+const PROMPT_DELAY = 500;
 
 // Pages that show as an empty address bar, as in Firefox.
 const BLANK_PAGES = [
@@ -48,6 +55,10 @@ function updateTab(tab) {
   item.querySelector(".title").textContent = tab.title || tab.url;
   item.title = tab.url;
   item.classList.toggle("loading", tab.loading);
+  item.classList.toggle(
+    "asking",
+    [...prompts.values()].some(prompt => prompt.tabId == tab.id)
+  );
   if (tab.id == currentId) {
     showToolbar();
   }
@@ -75,6 +86,9 @@ function selectTab(id) {
   items.get(id)?.scrollIntoView({ block: "nearest" });
   editing = false;
   showToolbar();
+  // Neeko restarts a prompt's delay when its tab is selected again.
+  delete promptBar.dataset.id;
+  showPrompt();
 }
 
 // Back, forward, reload and the address bar follow the selected tab.
@@ -88,6 +102,55 @@ function showToolbar() {
   reload.classList.toggle("loading", tab.loading);
   if (!editing) {
     address.value = BLANK_PAGES.includes(tab.url) ? "" : tab.url;
+  }
+}
+
+// The selected tab's oldest waiting prompt, above its page.
+function showPrompt() {
+  let prompt = [...prompts.values()].find(p => p.tabId == currentId);
+  promptBar.hidden = !prompt;
+  if (!prompt || promptBar.dataset.id == prompt.id) {
+    return;
+  }
+  promptBar.dataset.id = prompt.id;
+  promptBar.querySelector(".message").textContent = prompt.message;
+  promptBar.querySelector(".hint").textContent = prompt.hint;
+  promptBar.querySelector(".learn-more").hidden = !prompt.learnMoreURL;
+  let remember = promptBar.querySelector(".remember");
+  remember.hidden = !prompt.remember;
+  remember.querySelector("input").checked = !!prompt.remember?.checked;
+  remember.querySelector("span").textContent = prompt.remember?.label ?? "";
+  let buttons = prompt.actions.map((action, index) => {
+    let button = document.createElement("button");
+    button.textContent = action.label;
+    button.disabled = true;
+    button.addEventListener("click", () => {
+      let checked = remember.querySelector("input").checked;
+      neeko.prompts
+        .answer(prompt.id, index, { remember: checked })
+        .catch(reportError);
+    });
+    return button;
+  });
+  promptBar.querySelector(".actions").replaceChildren(...buttons);
+  setTimeout(() => buttons.forEach(b => (b.disabled = false)), PROMPT_DELAY);
+}
+
+promptBar.querySelector(".learn-more").addEventListener("click", () => {
+  let prompt = prompts.get(Number(promptBar.dataset.id));
+  if (prompt?.learnMoreURL) {
+    neeko.tabs.open(prompt.learnMoreURL);
+  }
+});
+
+function promptsChanged(tabId) {
+  let tab = tabs.get(tabId);
+  if (tab) {
+    updateTab(tab);
+  }
+  if (tabId == currentId) {
+    delete promptBar.dataset.id;
+    showPrompt();
   }
 }
 
@@ -106,6 +169,18 @@ neeko.tabs.on("update", ({ tab }) => items.has(tab.id) && updateTab(tab));
 // Cmd+L, or a new tab on the New Tab page. Listening for this also tells
 // Neeko not to show Firefox's own address bar.
 neeko.nav.on("addressbar", focusAddressBar);
+// Listening for prompts also tells Neeko not to show Firefox's own.
+neeko.prompts.on("open", ({ prompt }) => {
+  prompts.set(prompt.id, prompt);
+  promptsChanged(prompt.tabId);
+});
+neeko.prompts.on("close", ({ id }) => {
+  let prompt = prompts.get(id);
+  prompts.delete(id);
+  if (prompt) {
+    promptsChanged(prompt.tabId);
+  }
+});
 
 tabList.addEventListener("click", event => {
   let item = event.target.closest("li");
@@ -155,8 +230,11 @@ address.addEventListener("blur", () => {
   }
 });
 
-// The listeners above are in place, so from here on the events keep this
-// list up to date.
+// The listeners above are in place, so from here on the events keep these
+// lists up to date.
+for (let prompt of await neeko.prompts.list()) {
+  prompts.set(prompt.id, prompt);
+}
 let list = await neeko.tabs.list();
 tabList.replaceChildren();
 items.clear();

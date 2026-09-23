@@ -5,9 +5,10 @@
   marked data-neeko-content, matching its position, size and corner rounding.
   On macOS the window buttons appear wherever data-neeko-window-buttons is.
 
-  This is the demo UI: a tab list and an address bar, built only on the Neeko
-  API (the global `neeko` object, see docs/api.md). It's plain on purpose,
-  just enough to show every API feature working. Replace it with your own.
+  This is the demo UI: a tab list, an address bar and a bar for permission
+  prompts, built only on the Neeko API (the global `neeko` object, see
+  docs/api.md). It's plain on purpose, just enough to show every API feature
+  working. Replace it with your own.
 -->
 <html>
   <head>
@@ -36,6 +37,17 @@
         autocomplete="off"
       />
     </header>
+    <!-- The web page is drawn over its slot, so nothing can overlap it: the
+         prompt bar sits above the page and pushes it down. -->
+    <section id="prompt" hidden>
+      <div class="text">
+        <p class="message"></p>
+        <p class="hint"></p>
+      </div>
+      <button class="learn-more">Learn more</button>
+      <label class="remember"><input type="checkbox" /> <span></span></label>
+      <div class="actions"></div>
+    </section>
     <main data-neeko-content></main>
   </body>
 </html>

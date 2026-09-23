@@ -324,6 +324,102 @@ await waitFor(
 DownloadsPanel.hidePanel();
 await neeko.tabs.close(promptTab.id);
 
+// Permission prompts. A UI that listens for "open" shows them itself, and
+// Firefox's own panel stays closed.
+let prompts = [];
+let stopPromptOpen = neeko.prompts.on("open", ({ prompt }) =>
+  prompts.push({ type: "open", prompt })
+);
+let stopPromptClose = neeko.prompts.on("close", ({ id }) =>
+  prompts.push({ type: "close", id })
+);
+let promptFor = tab => prompts.find(e => e.type == "open" && e.prompt.tabId == tab.id);
+let promptClosed = id => prompts.some(e => e.type == "close" && e.id == id);
+let titleOf = async tab => (await neeko.tabs.list()).find(t => t.id == tab.id)?.title;
+await neeko.tabs.current();
+
+let askTab = await neeko.tabs.open(`${BASE}/geo`);
+let request = (await waitFor(() => promptFor(askTab), "a location prompt reaches the UI"))
+  ?.prompt;
+check(
+  request?.kind == "location" && request.origin == HOST && request.message.includes(HOST),
+  `it says who asks for what (${request?.kind}: ${request?.message})`
+);
+check(
+  request?.actions.length == 2 && request.remember?.label && !request.remember.checked,
+  `with actions and a remember checkbox (${JSON.stringify(request?.actions)})`
+);
+await new Promise(r => setTimeout(r, 300));
+check(PopupNotifications.panel.state == "closed", "Firefox's own prompt stays closed");
+check(
+  (await neeko.prompts.list()).some(p => p.id == request?.id),
+  "list() has the waiting prompt"
+);
+await rejects(
+  neeko.prompts.answer(request?.id, 0),
+  /Too soon/,
+  "allowing right away is refused, against clickjacking"
+);
+await rejects(neeko.prompts.answer(request?.id, 5), /no action/, "answer() with no such action");
+await rejects(neeko.prompts.answer(999999, 1), /No prompt/, "answer() of an unknown prompt");
+// Block needs no delay.
+await neeko.prompts.answer(request?.id, 1);
+await waitFor(() => promptClosed(request?.id), "answering closes the prompt");
+await waitFor(async () => (await titleOf(askTab)) == "error 1", "the page hears it's blocked");
+await neeko.tabs.close(askTab.id);
+
+let allowTab = await neeko.tabs.open(`${BASE}/geo`);
+let allowed = (await waitFor(() => promptFor(allowTab), "a second prompt"))?.prompt;
+await new Promise(r => setTimeout(r, 600));
+await neeko.prompts.answer(allowed?.id, 0, { remember: true });
+await waitFor(() => promptClosed(allowed?.id), "Allow closes it too");
+let site = Services.scriptSecurityManager.createContentPrincipalFromOrigin(BASE);
+check(
+  Services.perms.testExactPermissionFromPrincipal(site, "geo") ==
+    Services.perms.ALLOW_ACTION,
+  "Allow with remember saves the permission"
+);
+await waitFor(
+  async () => !["geo", "error 1"].includes(await titleOf(allowTab)),
+  "the page is allowed"
+);
+Services.perms.removeFromPrincipal(site, "geo");
+await neeko.tabs.close(allowTab.id);
+
+// Prompts the API doesn't cover stay Firefox's.
+let heardBefore = prompts.length;
+let unknown = PopupNotifications.show(
+  gBrowser.selectedBrowser,
+  "neeko-test",
+  "Not a permission prompt",
+  null,
+  { label: "OK", accessKey: "O", callback() {} },
+  []
+);
+await waitFor(
+  () => PopupNotifications.panel.state == "open",
+  "other prompts still open Firefox's panel"
+);
+check(prompts.length == heardBefore, "and don't reach the UI");
+unknown.remove();
+
+// When the UI stops listening, Firefox's panel shows what's still waiting.
+let leftTab = await neeko.tabs.open(`${BASE}/geo`);
+let left = (await waitFor(() => promptFor(leftTab), "a third prompt"))?.prompt;
+stopPromptOpen();
+await neeko.tabs.current();
+await waitFor(
+  () => PopupNotifications.panel.state == "open",
+  "Firefox shows a waiting prompt once the UI stops listening"
+);
+check(
+  hangsFrom(PopupNotifications.panel, "left"),
+  `where its fallback prompts go (${where(PopupNotifications.panel)})`
+);
+await neeko.tabs.close(leftTab.id);
+await waitFor(() => promptClosed(left?.id), "closing its tab closes the prompt");
+stopPromptClose();
+
 // Neeko sends only the events the UI listens for.
 let heardSelect = 0;
 let stopSelect = neeko.tabs.on("select", () => heardSelect++);

@@ -42,9 +42,12 @@ PAGES = {
     # Titles itself with what a web page can see of the Neeko API.
     "/probe": "<title>probe</title><script>document.title = "
     "[typeof neeko, typeof parent.neeko, typeof top.neeko].join()</script>",
-    # Asks for the location, which opens Firefox's permission prompt.
+    # Asks for the location, which opens a permission prompt, and titles
+    # itself with the outcome: "error 1" means the permission was refused.
     "/geo": "<title>geo</title><script>"
-    "navigator.geolocation.getCurrentPosition(() => {}, () => {})</script>",
+    "navigator.geolocation.getCurrentPosition("
+    "() => document.title = 'allowed', e => document.title = 'error ' + e.code)"
+    "</script>",
     # Goes fullscreen as soon as it loads (the test allows it without a click).
     "/fullscreen": "<title>fullscreen</title><script>"
     "onload = () => document.documentElement.requestFullscreen()</script>",
@@ -120,11 +123,13 @@ return [
 """
 
 
-# For the fallback checks. User prefs win over Marionette's "recommended
-# prefs", which stop the downloads panel from opening by itself.
-FALLBACK_PREFS = {
+# Firefox's defaults, back. User prefs win over Marionette's "recommended
+# prefs", which stop the downloads panel from opening by itself and turn off
+# the delay before a prompt's buttons work.
+FIREFOX_PREFS = {
     "browser.download.alwaysOpenPanel": True,
     "browser.download.panel.shown": False,
+    "security.notification_enable_delay": 500,
     # Let the test page go fullscreen without a click, and without the fade.
     "full-screen-api.allow-trusted-requests-only": False,
     "full-screen-api.transition-duration.enter": "0 0",
@@ -195,7 +200,7 @@ def main():
         with open(os.path.join(ROOT, "tools/test_api.js")) as f:
             script = f.read().replace("__BASE__", base)
         with LeaveNoTrace(app):
-            prefs = {"neeko.ui.path": "TEST_UI", **FALLBACK_PREFS}
+            prefs = {"neeko.ui.path": "TEST_UI", **FIREFOX_PREFS}
             results = run_in(binary, prefs, script)
             results += run_in(binary, {}, BUNDLED_CHECK, timeout=30000)
     finally:
