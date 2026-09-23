@@ -198,7 +198,7 @@ for (let [path, contents] of Object.entries(files)) {
 cpSync(join(folder, "neeko/ui"), join(folder, "ui"), { recursive: true });
 
 git(["add", "-A"], folder);
-let pinned = git(["describe", "--tags", "--always"], join(folder, "neeko"));
+let pinned = git(["describe", "--tags", "--match", "v*", "--always"], join(folder, "neeko"));
 git(["commit", "--quiet", "-m", `chore: start ${name} on Neeko ${pinned}`], folder);
 
 console.log(`Created ${name} in ${folder}, with Neeko ${pinned} from ${neeko}.
