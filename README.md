@@ -19,10 +19,11 @@ default, so a browser built on Neeko is always complete.
 
 ## Status
 
-Early foundation work, on Firefox 156.0.1. Neeko hides Firefox's interface and
-loads a custom UI from `ui/`, with the web page placed wherever that UI says.
-The JavaScript API (tabs, navigation) comes next; for now `ui/` holds a
-placeholder that only moves the page around.
+Early foundation work, on Firefox 156.0.1. Neeko hides Firefox's interface,
+loads a custom UI from `ui/` with the web page placed wherever that UI says,
+and gives the UI a first small JavaScript API for tabs and navigation. For now
+`ui/` holds a placeholder that only moves the page around; a demo UI built on
+the API comes next.
 
 ## Requirements
 
@@ -59,6 +60,9 @@ Changes to `ui/` only need a relaunch, not a rebuild.
   animates.
 - On macOS, the window's close, minimize and zoom buttons appear wherever you
   put an element with `data-neeko-window-buttons`.
+- Your scripts get a global `neeko` object, the Neeko API: list, open, close
+  and switch tabs, navigate, and hear about every change. It's documented in
+  [docs/api.md](docs/api.md).
 - Scripts must be separate files (the page's security policy blocks inline
   scripts). They load from `chrome://neeko-ui/content/`, which maps to `ui/`.
 - If there's no UI configured, Neeko stays out of the way and Firefox looks as
@@ -79,13 +83,15 @@ everything from source instead.
 Neeko uses **hide and plug**. Firefox keeps running exactly as it is, logic
 and all, so tabs, extensions, session restore and prompts all keep working.
 Neeko hooks into Firefox's official per-window startup hook, before the
-window is first drawn, and does three things:
+window is first drawn, and does four things:
 
 1. It hides Firefox's toolbars and sidebar. The elements are never laid out or
    painted, which in a 300-tab test made opening tabs faster than stock
    Firefox, with no measurable difference in memory or tab switching.
 2. It mounts your UI in a frame filling the window.
 3. It places Firefox's real page area over your content slot.
+4. It gives your UI the `neeko` API. Every call is a message to Firefox, so
+   UIs will later be able to run sandboxed without changing their code.
 
 The only change to a Firefox file is one line (plus a comment) that adds Neeko's folder
 to the build (`src/browser/moz-build.patch`).
@@ -102,10 +108,10 @@ neeko/
 ├── ui/           The custom UI (yours to replace)
 ├── src/          Neeko's own files, layered onto engine/ by Surfer
 │   └── browser/
-│       ├── neeko/            Window hook, hide styles, default prefs
+│       ├── neeko/            Window hook, API, hide styles, default prefs
 │       └── moz-build.patch   The one line that adds neeko/ to the build
-├── docs/         The build plan (plan.md) and privacy research
-├── tools/        Dev helpers (marionette.py drives a running build for tests)
+├── docs/         The API reference (api.md), build plan (plan.md), privacy research
+├── tools/        Dev helpers: test_api.py checks the API, marionette.py drives a build
 ├── assets/       README artwork
 ├── Makefile
 └── engine/       Firefox source, downloaded by Surfer (not committed)

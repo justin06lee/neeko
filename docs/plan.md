@@ -45,6 +45,19 @@ source of truth.
   - Trick (later): a sandboxed UI page that can only use the API.
   - Design the API as messages from day one, so Trick can drop in without
     changing any API calls.
+- **The API is messages of plain data** (setup step 4, `docs/api.md`).
+  - The UI sees a global `neeko` object (`neeko-api.js`), installed into the
+    UI page only, before its scripts. Firefox's side is `NeekoAPI.sys.mjs`,
+    one instance per UI page.
+  - Calls are `{ id, method, params }`, replies `{ id, result | error }`,
+    events `{ event, data }`. Become mode carries them over a
+    `MessageChannel`; Trick will only swap the channel.
+  - Tabs are snapshots `{ id, url, title, loading, canGoBack, canGoForward,
+    selected }` with session-unique numeric ids. Events: `open`, `close`,
+    `select`, `move`, `update` (with the list of changed fields).
+  - A missing tab id means the selected tab (except `select`). `nav.go` and
+    `tabs.open` take address-bar text and fix it up like Firefox's own
+    address bar (`openTrustedLinkIn` with `allowThirdPartyFixup`).
 - **Surfer stays as the build tool.** Neeko's own code must never depend on
   Surfer; only the build plumbing does.
 - **Performance matters** ("a bajillion tabs"):
@@ -73,9 +86,10 @@ source of truth.
    result yet.**
 4. Create the first tiny version of the Neeko API: tabs (list, open, close,
    select, change events) and navigation (go to URL, back, forward, reload,
-   current URL/title, loading state). Nothing more. **Next.**
+   current URL/title, loading state). Nothing more. **Done: `docs/api.md`,
+   checked by `tools/test_api.py`.**
 5. Build a minimal demo UI using only the API: a tab list and an address bar.
-   Ugly is fine. It just proves the bridge works.
+   Ugly is fine. It just proves the bridge works. **Next.**
 6. Propose how a separate browser project (mine) should use Neeko, e.g.
    template repo, layered patches, or something else, keeping in mind that
    Neeko and my browser must both be easy to update.
@@ -173,6 +187,10 @@ source of truth.
   prebuilt runtime.
 - **Branding:** currently Firefox's unofficial "Nightly" branding. Browsers
   built on Neeko set their own; Neeko just needs to make that easy.
+- **Cmd+L has no fallback.** Firefox's address bar is hidden, so Cmd+L does
+  nothing unless the UI has its own address bar, and the UI can't hear Cmd+L
+  yet. Recommended: an event the UI can listen for, with Firefox's own
+  address bar shown as the fallback when no UI listens.
 
 ## Lessons learned
 
@@ -222,7 +240,37 @@ source of truth.
 - **Measured with 300 tabs:** same memory and tab-switch time as stock Firefox,
   and faster to open tabs.
 
+### Neeko API
+
+- **`loadSubScript` returns the script's value only when asked.** Use
+  `loadSubScriptWithOptions(url, { target, wantReturnValue: true })`.
+  `neeko-api.js` evaluates to its install function, so it adds nothing else
+  to the UI page's globals.
+- **`gBrowser` appears at the browser window's `DOMContentLoaded`**
+  (`Tabbrowser.create`). The UI page has always started after that (checked
+  at startup and for new windows), but `connectAPI` still handles it
+  starting first: the UI's calls wait in the unstarted `MessagePort`.
+- **Sleeping tabs wake on most browser properties.** On a lazy tab (no
+  `tab.linkedPanel`), reading `canGoBack` or `canGoForward` inserts the
+  browser and loads the page. `currentURI` and `contentTitle` are safe.
+- **Where the tab signals come from:** `TabAttrModified` with `label` or
+  `busy` for title and loading; a tabs progress listener's
+  `onLocationChange` for URL and back/forward; `TabBrowserInserted` and
+  `TabBrowserDiscarded` for tabs waking and sleeping.
+- **Events caused by a call arrive before its reply**, because they share one
+  ordered port. Events from anything else (links, shortcuts) arrive a moment
+  after the fact, so tests must wait for them.
+- **Focus goes nowhere after a new tab opens.** Firefox tries to focus its
+  hidden address bar. The UI has to focus its own.
+- **Firefox's keyboard shortcuts keep working** (Cmd+T, Cmd+W, Ctrl+Tab,
+  Cmd+[, Cmd+], Cmd+R), except Cmd+L, which also logs a harmless
+  `getBoxQuads` error from the hidden address bar measuring itself.
+
 ### Testing and debugging tools
+
+- **API test:** `python3 tools/test_api.py` (after `make build`) launches the
+  dev build with a fresh profile and a free Marionette port, serves test
+  pages from localhost, and runs `tools/test_api.js` in the browser window.
 
 - **Marionette:** launch with `-marionette -remote-allow-system-access` and use
   `tools/marionette.py` to run JavaScript in the browser window or synthesize
