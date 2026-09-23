@@ -88,8 +88,48 @@ next to the stock captures.
 
 This was a 3-minute check by hand through the same small logging proxy as the
 inventory. Things on daily timers, such as add-on update checks (kept), don't
-show up that soon. The automated privacy test (step 4) idles longer, uses
-mitmproxy, and checks about:telemetry too.
+show up that soon.
+
+## The privacy test (step 4)
+
+`python3 tools/test_privacy.py` (after `make build`) checks all of this
+automatically, and should be run after every Firefox update:
+
+1. A brand-new profile sends everything through mitmproxy, which sees full
+   URLs (the profile trusts the proxy's one-off certificate).
+2. First launch with the demo UI, idle for 4 minutes, then a normal quit
+   (shutdown pings would go then).
+3. Second launch, on three ordinary websites for a minute.
+4. With the proxy gone, a last launch reads about:telemetry and about:glean.
+
+It fails if any request reaches an endpoint Neeko turns off, if anything but
+the kept security traffic appears while idle (that's how new Firefox
+services get caught), if any browser process connects without going through
+the proxy, or if upload isn't disabled or pings are waiting to be sent. It
+also lists the Remote Settings collections that synced.
+
+**Result on 2026-09-23, Firefox 156.0.1: passed.** While idle, only the
+three Remote Settings hosts. While browsing, only the websites. Nothing
+skipped the proxy. Both pages say upload is disabled, and no pings are
+waiting.
+
+**The test catches leaks.** Run with the captive portal check and telemetry
+upload switched back on
+(`--pref network.captive-portal-service.enabled=true --pref
+datareporting.healthreport.uploadEnabled=true`), it failed on:
+- `firefox-portal-detection.com` and `incoming.telemetry.mozilla.org`;
+- a telemetry connection that bypassed the proxy completely;
+- about:telemetry saying upload is enabled;
+- 7 Glean pings waiting to be sent.
+
+**Remote Settings collections seen in a short run:**
+- Security: `tracking-protection-lists`, `hijack-blocklists`.
+- Other data: `fxmonitor-breaches`, `moz-essential-domain-fallbacks`,
+  `ms-action-allowlists`, `url-parser-default-unknown-schemes-interventions`.
+- New Tab wallpaper images: `newtab-wallpapers-v2`.
+
+The non-security ones are what the Remote Settings filtering decision (below)
+is about.
 
 ## Not done yet
 

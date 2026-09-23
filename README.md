@@ -29,6 +29,7 @@ forward and reload, and an address bar.
 
 - macOS on Apple Silicon (Linux and Windows builds are untested so far)
 - Xcode, [bun](https://bun.sh), and GNU tar (`brew install gnu-tar`)
+- [uv](https://docs.astral.sh/uv/), only for the privacy test
 - About 10 GB of free disk for the Firefox source and build
 
 ## Usage
@@ -67,6 +68,20 @@ Changes to `ui/` only need a relaunch, not a rebuild.
   scripts). They load from `chrome://neeko-ui/content/`, which maps to `ui/`.
 - If there's no UI configured, Neeko stays out of the way and Firefox looks as
   usual. Pop-up windows, such as sign-in pop-ups, keep Firefox's minimal UI.
+
+## Testing
+
+After `make build`:
+
+```sh
+python3 tools/test_api.py       # every API call and event, about a minute
+python3 tools/test_privacy.py   # every connection a fresh profile makes, about 6 minutes
+```
+
+The privacy test runs the browser through mitmproxy (fetched by `uvx`, so
+[uv](https://docs.astral.sh/uv/) is the only extra requirement) and fails if
+anything reaches an endpoint Neeko turns off. Run it after every Firefox
+update.
 
 ## How it works
 
@@ -119,8 +134,8 @@ neeko/
 │   └── browser/
 │       ├── neeko/            Window hook, API, hide styles, prefs, privacy defaults
 │       └── moz-build.patch   The one line that adds neeko/ to the build
-├── docs/         The API reference (api.md), build plan (plan.md), privacy research
-├── tools/        Dev helpers: test_api.py checks the API, marionette.py drives a build
+├── docs/         API reference, build plan, using Neeko in a browser, privacy
+├── tools/        Tests (test_api.py, test_privacy.py) and marionette.py
 ├── assets/       README artwork
 ├── Makefile
 └── engine/       Firefox source, downloaded by Surfer (not committed)
