@@ -1,0 +1,9 @@
+/* Helper styles Neeko adds to every custom UI page, as a user-agent sheet so
+   the UI's own CSS can override anything here (position, margins, ...). */
+
+/* The macOS window buttons (close, minimize, zoom) appear wherever the UI
+   places an element with this attribute. */
+[data-neeko-window-buttons] {
+  appearance: auto;
+  -moz-default-appearance: -moz-window-button-box;
+}

@@ -1,0 +1,30 @@
+<!doctype html>
+<!--
+  Your browser's UI. Neeko loads this page in place of Firefox's interface.
+  Put the website wherever you like: Neeko keeps it on top of the element
+  marked data-neeko-content, matching its position, size and corner rounding.
+  On macOS the window buttons appear wherever data-neeko-window-buttons is.
+
+  This is a placeholder for setup step 3. The buttons move the website around
+  to show it following the UI. Step 5 replaces it with the demo UI.
+-->
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="script-src chrome:; object-src 'none'"
+    />
+    <link rel="stylesheet" href="style.css" />
+    <script src="app.js" defer></script>
+  </head>
+  <body data-layout="full">
+    <div data-neeko-window-buttons></div>
+    <nav>
+      <button data-layout="left">Left</button>
+      <button data-layout="full">Full</button>
+      <button data-layout="right">Right</button>
+    </nav>
+    <main data-neeko-content></main>
+  </body>
+</html>

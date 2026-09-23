@@ -1,0 +1,206 @@
+/**
+ * Neeko's hook into every Firefox browser window. It runs before the window's
+ * first layout, so Firefox's own UI never flashes on screen:
+ *
+ * 1. Hides Firefox's UI with neeko.css. Firefox's logic keeps running.
+ * 2. Mounts the custom UI (index.html from the folder in the `neeko.ui.path`
+ *    pref) in a frame that fills the window.
+ * 3. Keeps the web page area on top of the UI, exactly over the element the
+ *    UI marks with the `data-neeko-content` attribute.
+ *
+ * With no custom UI configured, it does nothing and Firefox looks as usual.
+ */
+
+const HTML_NS = "http://www.w3.org/1999/xhtml";
+const UI_ORIGIN = "chrome://neeko-ui/";
+const UI_URL = `${UI_ORIGIN}content/index.html`;
+const UI_FRAME_ID = "neeko-ui";
+const SLOT_SELECTOR = "[data-neeko-content]";
+
+// Keeps chrome://neeko-ui/ registered for the whole session.
+let uiRegistration = null;
+
+/**
+ * Serves the UI folder at chrome://neeko-ui/content/. Browser windows only
+ * allow frames from chrome: URLs, so this is how the UI gets its privileges.
+ * Also starts watching for UI documents (see onDocumentCreated).
+ *
+ * @returns {boolean} false if there is no usable UI folder.
+ */
+function registerUIFolder() {
+  if (uiRegistration) {
+    return true;
+  }
+  let path = Services.prefs.getStringPref("neeko.ui.path", "");
+  if (!path) {
+    return false;
+  }
+  let dir = Cc["@mozilla.org/file/local;1"].createInstance(Ci.nsIFile);
+  try {
+    dir.initWithPath(path);
+  } catch (e) {
+    console.error(`Neeko: neeko.ui.path "${path}" is not a valid path.`, e);
+    return false;
+  }
+  let index = dir.clone();
+  index.append("index.html");
+  if (!index.exists()) {
+    console.error(`Neeko: no index.html in ${path}. Showing Firefox's UI.`);
+    return false;
+  }
+  let aomStartup = Cc["@mozilla.org/addons/addon-manager-startup;1"].getService(
+    Ci.amIAddonManagerStartup
+  );
+  let manifestURI = Services.io.newURI(
+    "manifest.json",
+    null,
+    Services.io.newFileURI(dir)
+  );
+  uiRegistration = aomStartup.registerChrome(manifestURI, [
+    ["content", "neeko-ui", "./"],
+  ]);
+  Services.obs.addObserver(onDocumentCreated, "document-element-inserted");
+  return true;
+}
+
+/**
+ * Runs as soon as any document gets its root element, before its scripts or
+ * first paint. For UI documents (every load, including reloads) it adds
+ * Neeko's UI helper styles and starts tracking the content slot once the
+ * page is parsed. The frame's own "load" event never reaches the browser
+ * window for chrome frames, which is why this hooks the document instead.
+ */
+function onDocumentCreated(doc) {
+  if (!doc.URL?.startsWith(UI_ORIGIN)) {
+    return;
+  }
+  let uiWin = doc.defaultView;
+  let frame = uiWin?.frameElement;
+  if (frame?.id != UI_FRAME_ID) {
+    return;
+  }
+  uiWin.windowUtils.loadSheetUsingURIString(
+    "chrome://neeko/content/neeko-ui.css",
+    uiWin.windowUtils.AGENT_SHEET
+  );
+  doc.addEventListener(
+    "DOMContentLoaded",
+    () => trackContentSlot(frame.ownerDocument.defaultView, frame),
+    { once: true }
+  );
+}
+
+/**
+ * Keeps the page area (#tabbrowser-tabbox) over the UI's content slot. The UI
+ * can move, resize, round or animate the slot and the page follows. Updates
+ * are batched to at most one per frame.
+ */
+function trackContentSlot(win, frame) {
+  let uiWin = frame.contentWindow;
+  let uiDoc = frame.contentDocument;
+  let tabbox = win.document.getElementById("tabbrowser-tabbox");
+  let slot = null;
+  let resizeObserver = new uiWin.ResizeObserver(schedule);
+  let pending = false;
+  let animating = 0;
+
+  function place() {
+    let current = uiDoc.querySelector(SLOT_SELECTOR);
+    if (current != slot) {
+      if (slot) {
+        resizeObserver.unobserve(slot);
+      }
+      slot = current;
+      if (slot) {
+        resizeObserver.observe(slot);
+      }
+    }
+    let style = tabbox.style;
+    if (!slot) {
+      style.width = style.height = "0";
+      return;
+    }
+    let slotRect = slot.getBoundingClientRect();
+    let frameRect = frame.getBoundingClientRect();
+    style.left = `${frameRect.left + slotRect.left}px`;
+    style.top = `${frameRect.top + slotRect.top}px`;
+    style.width = `${slotRect.width}px`;
+    style.height = `${slotRect.height}px`;
+    style.borderRadius = uiWin.getComputedStyle(slot).borderRadius;
+  }
+
+  function schedule() {
+    if (pending) {
+      return;
+    }
+    pending = true;
+    uiWin.requestAnimationFrame(() => {
+      pending = false;
+      place();
+      // Positions can change every frame during a CSS transition or
+      // animation without any other signal, so follow along until it ends.
+      if (animating > 0) {
+        schedule();
+      }
+    });
+  }
+
+  resizeObserver.observe(uiDoc.documentElement);
+  new uiWin.MutationObserver(schedule).observe(uiDoc, {
+    subtree: true,
+    childList: true,
+    attributes: true,
+  });
+  // Stylesheets and images can still move things after parsing.
+  uiWin.addEventListener("load", schedule);
+  uiWin.addEventListener("resize", schedule);
+  uiDoc.addEventListener("scroll", schedule, { capture: true });
+  for (let type of ["transitionrun", "animationstart"]) {
+    uiDoc.addEventListener(type, () => {
+      animating++;
+      schedule();
+    });
+  }
+  for (let type of [
+    "transitionend",
+    "transitioncancel",
+    "animationend",
+    "animationcancel",
+  ]) {
+    uiDoc.addEventListener(type, () => {
+      animating = Math.max(0, animating - 1);
+      schedule();
+    });
+  }
+  place();
+}
+
+export const NeekoWindow = {
+  /**
+   * Called by Firefox for each browser window, before its first layout.
+   *
+   * @param {Window} win
+   */
+  init(win) {
+    // Popup windows (sign-in popups and the like) keep Firefox's minimal UI,
+    // including its read-only address bar.
+    if (!win.toolbar.visible) {
+      return;
+    }
+    if (!registerUIFolder()) {
+      return;
+    }
+
+    let doc = win.document;
+    doc.documentElement.setAttribute("neeko", "");
+    win.windowUtils.loadSheetUsingURIString(
+      "chrome://neeko/content/neeko.css",
+      win.windowUtils.AUTHOR_SHEET
+    );
+
+    let frame = doc.createElementNS(HTML_NS, "iframe");
+    frame.id = UI_FRAME_ID;
+    frame.setAttribute("src", UI_URL);
+    doc.body.prepend(frame);
+  },
+};

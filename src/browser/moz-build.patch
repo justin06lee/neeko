@@ -1,0 +1,14 @@
+diff --git a/browser/moz.build b/browser/moz.build
+index 5a03cfc6d3f8fe3a677d4d9e9894e69a98d0c01f..e824efad1e2fd018eb89179e89a55d66f8c87339 100644
+--- a/browser/moz.build
++++ b/browser/moz.build
+@@ -27,6 +27,9 @@ DIRS += [
+     "app",
+ ]
+ 
++# Neeko: hides Firefox's UI and mounts a custom one (src/browser/neeko).
++DIRS += ["neeko"]
++
+ if CONFIG["MAKENSISU"]:
+     DIRS += ["installer/windows"]
+ 

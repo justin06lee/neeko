@@ -12,16 +12,9 @@ all: build run
 build: import
 	$(SURFER) build
 
-# Mozilla's prebuilt binaries look for helper apps named "Firefox GPU Helper"
-# and "Firefox Media Plugin Helper", but our build names them after its own
-# brand. These prefs make Firefox use plugin-container for those processes
-# instead. (They move into Neeko's own default prefs once Neeko has a prefs
-# file; this is the same `mach run` that `surfer run` wraps.)
-RUN_PREFS := --setpref layers.gpu-process-executable.enabled=false \
-             --setpref media.plugin_helper_process.enabled=false
-
+# Same `mach run` that `surfer run` wraps, pointed at the custom UI in ui/.
 run:
-	cd $(ENGINE) && ./mach run $(RUN_PREFS)
+	cd $(ENGINE) && ./mach run --setpref neeko.ui.path=$(CURDIR)/ui
 
 # Quit a running dev build, rebuild, and relaunch it.
 update: stop build run

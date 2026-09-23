@@ -1,0 +1,66 @@
+:root {
+  color-scheme: dark;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+}
+
+body {
+  background: #16161a;
+  color: #ddd;
+  font: 13px system-ui, sans-serif;
+  /* Drag the window by any bare background. */
+  -moz-window-dragging: drag;
+}
+
+[data-neeko-window-buttons] {
+  position: fixed;
+  top: 13px;
+  left: 14px;
+}
+
+nav {
+  position: fixed;
+  top: 9px;
+  right: 14px;
+  display: flex;
+  gap: 6px;
+}
+
+button {
+  -moz-window-dragging: no-drag;
+  background: #26262c;
+  color: inherit;
+  border: 1px solid #34343c;
+  border-radius: 6px;
+  padding: 3px 10px;
+  font: inherit;
+}
+
+button:hover {
+  background: #303038;
+}
+
+/* Where the website shows. Leaves room at the top for the window buttons. */
+main {
+  position: fixed;
+  top: 40px;
+  bottom: 14px;
+  left: 14px;
+  right: 14px;
+  border-radius: 12px;
+  transition:
+    left 300ms ease,
+    right 300ms ease;
+}
+
+body[data-layout="left"] main {
+  right: 42%;
+}
+
+body[data-layout="right"] main {
+  left: 42%;
+}
