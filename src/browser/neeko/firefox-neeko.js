@@ -7,8 +7,10 @@
 // read after Firefox's own firefox.js (Neeko's values win) and before
 // firefox-branding.js (a browser built on Neeko can override them there).
 
-// Folder holding the custom UI (its index.html). Empty means there is no
-// custom UI, so Firefox's own UI stays visible. `make run` points this at ui/.
+// Folder holding the custom UI (its index.html). `make run` points this at
+// the app's ui/ folder, so UI changes only need a relaunch. Empty means the UI
+// the build bundled inside the app (packaged browsers), or Firefox's own UI if
+// the app has none.
 pref("neeko.ui.path", "");
 
 // Artifact builds use Mozilla's prebuilt core, which looks for helper apps

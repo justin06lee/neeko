@@ -41,6 +41,16 @@ await waitFor(() => window.gBrowserInit?.delayedStartupFinished, "startup");
 
 check(Object.isFrozen(neeko) && Object.isFrozen(neeko.tabs), "neeko is frozen");
 
+// The UI folder in neeko.ui.path (here the test UI) wins over the UI the build
+// bundles inside the app.
+let served = Cc["@mozilla.org/chrome/chrome-registry;1"]
+  .getService(Ci.nsIChromeRegistry)
+  .convertChromeURL(Services.io.newURI("chrome://neeko-ui/content/index.html")).spec;
+check(
+  served.startsWith("file:") && served.includes("/test-ui/"),
+  `neeko.ui.path wins over the bundled UI (${served})`
+);
+
 // Everything the API tells the UI, as it arrives.
 let events = [];
 for (let type of ["open", "close", "select", "move", "update"]) {

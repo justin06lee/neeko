@@ -2,7 +2,7 @@
 
 Start the browser with Marionette and chrome access, for example:
 
-    engine/obj-*/dist/Nightly.app/Contents/MacOS/firefox -no-remote \
+    engine/obj-*/dist/Neeko.app/Contents/MacOS/firefox -no-remote \
         -marionette -remote-allow-system-access -profile /tmp/neeko-profile
 
 Then, from another terminal:

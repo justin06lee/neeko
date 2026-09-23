@@ -24,9 +24,9 @@ source of truth.
   Neeko.
 - **Developer experience: "clone it and we have APIs."** Keep the
   developer-owned area separate from Neeko's internals, so pulling Neeko
-  updates never conflicts. That area is `ui/`, their name and logo, and later a
-  backend folder. A prebuilt, Electron-style runtime is an open alternative,
-  to decide in setup step 6.
+  updates never conflicts. That area is the app folder (`browser.json`,
+  `ui/`, `branding/`, and later a backend folder), in the browser's own repo
+  with Neeko as a pinned submodule (setup step 6, `docs/using-neeko.md`).
 - **Hide and plug (option A), with no patch system.**
   - Firefox's logic keeps running; its UI is hidden.
   - Neeko plugs in through Firefox's official per-window startup hooks.
@@ -111,8 +111,9 @@ source of truth.
    Neeko and my browser must both be easy to update. **Proposed:
    `docs/using-neeko.md` recommends Neeko as a pinned git submodule inside
    the browser's repo, plus release builds that compile the launcher with
-   the browser's own name. Being implemented next, unless the user picks
-   another option.**
+   the browser's own name.** **Implemented:** builds take an app folder
+   (`tools/app.ts`), `make release` does full builds and packages,
+   `tools/new-browser.ts` starts a browser repo.
 7. Create these files:
    - CLAUDE.md: rules for all future work (below).
    - ARCHITECTURE.md: how the layers connect, in plain language.
@@ -207,13 +208,9 @@ source of truth.
 
 - **License for Neeko's own code.** `package.json` and `surfer.json` say
   MPL-2.0 as a placeholder; not confirmed.
-- **How browsers get Neeko** (setup step 6): clone-and-build template, or a
-  prebuilt runtime.
-- **Branding:** currently Firefox's unofficial "Nightly" branding. Browsers
-  built on Neeko set their own; Neeko just needs to make that easy.
-- **Shipping needs its own launcher and packaging** (setup step 6). The
-  prebuilt launcher calls itself Firefox and uses Firefox's profile folder,
-  and `mach package` would leave out Neeko's pref files (see Lessons).
+- **Branding:** Neeko's demo app uses a placeholder icon made from the
+  README banner's fox mask, and the name "Neeko". Browsers built on Neeko set
+  their own in `browser.json` and `branding/`.
 
 ## Lessons learned
 

@@ -2,15 +2,19 @@
 
     make build
     python3 tools/test_api.py
+    python3 tools/test_api.py --app dist/Neeko.app    # a packaged release
 
 Launches the dev build with a fresh profile, Marionette and a bare test UI
 (no scripts, so only the checks themselves use the API), serves a few test
 pages from localhost, runs tools/test_api.js in the browser window, and
-quits. Needs no internet. Exits non-zero if any check fails.
+quits. Then launches it once more without a UI folder, to check the UI the
+build bundles inside the app loads and gets the API. Needs no internet.
+Exits non-zero if any check fails.
 """
 
-import glob
+import argparse
 import http.server
+import json
 import os
 import shutil
 import socket
@@ -21,9 +25,8 @@ import threading
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from builds import ROOT, dev_app, program  # noqa: E402
 from marionette import Marionette  # noqa: E402
-
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # A UI with nothing but a content slot.
 TEST_UI = (
@@ -70,42 +73,55 @@ def connect(port, browser, timeout=60):
             time.sleep(0.5)
 
 
-def main():
-    binaries = glob.glob(
-        os.path.join(ROOT, "engine/obj-*/dist/*.app/Contents/MacOS/firefox")
+# With no neeko.ui.path, the UI bundled inside the app loads, with the API.
+BUNDLED_CHECK = """
+let frame = null;
+for (let i = 0; i < 200 && !frame?.contentWindow?.neeko; i++) {
+  await new Promise(r => setTimeout(r, 50));
+  frame = document.getElementById("neeko-ui");
+}
+let served = Cc["@mozilla.org/chrome/chrome-registry;1"]
+  .getService(Ci.nsIChromeRegistry)
+  .convertChromeURL(Services.io.newURI("chrome://neeko-ui/content/index.html")).spec;
+let ok = test => (test ? "ok  " : "FAIL");
+return [
+  `${ok(frame?.contentWindow?.neeko)} without neeko.ui.path, the bundled UI loads with the API`,
+  `${ok(served.includes("/chrome/browser/content/neeko-ui/"))} it comes from inside the app (${served})`,
+];
+"""
+
+
+def launch(binary, profile, prefs):
+    with open(os.path.join(profile, "user.js"), "w") as f:
+        for name, value in prefs.items():
+            f.write(f"user_pref({json.dumps(name)}, {json.dumps(value)});\n")
+    return subprocess.Popen(
+        [binary, "-no-remote", "-marionette", "-remote-allow-system-access",
+         "-profile", profile],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
     )
-    if not binaries:
-        sys.exit("No dev build found. Run `make build` first.")
 
-    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Pages)
-    threading.Thread(target=server.serve_forever, daemon=True).start()
-    base = f"http://127.0.0.1:{server.server_port}"
 
+def run_in(binary, prefs, script, timeout=120000):
+    """Launches with a fresh profile, runs a script in the browser window,
+    quits, and returns the script's lines of results."""
     port = free_port()
     profile = tempfile.mkdtemp(prefix="neeko-api-test-")
     ui = os.path.join(profile, "test-ui")
     os.mkdir(ui)
     with open(os.path.join(ui, "index.html"), "w") as f:
         f.write(TEST_UI)
-    with open(os.path.join(profile, "user.js"), "w") as f:
-        f.write(f'user_pref("neeko.ui.path", "{ui}");\n')
-        f.write(f'user_pref("marionette.port", {port});\n')
-
-    browser = subprocess.Popen(
-        [binaries[0], "-no-remote", "-marionette", "-remote-allow-system-access",
-         "-profile", profile],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
+    prefs = {"marionette.port": port, **prefs}
+    if prefs.get("neeko.ui.path") == "TEST_UI":
+        prefs["neeko.ui.path"] = ui
+    browser = launch(binary, profile, prefs)
     try:
         m = connect(port, browser)
-        m.send("WebDriver:SetTimeouts", {"script": 120000})
-        with open(os.path.join(ROOT, "tools/test_api.js")) as f:
-            script = f.read().replace("__BASE__", base)
+        m.send("WebDriver:SetTimeouts", {"script": timeout})
         results = m.run(script)
         if isinstance(results, str):  # the script itself threw
             results = [f"FAIL {results}"]
-        print("\n".join(results))
         try:
             m.send("Marionette:Quit", {"flags": ["eForceQuit"]})
         except (OSError, RuntimeError):
@@ -114,8 +130,27 @@ def main():
     finally:
         if browser.poll() is None:
             browser.kill()
-        server.shutdown()
         shutil.rmtree(profile, ignore_errors=True)
+    return results
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    parser.add_argument("--app", help="a .app to test (default: the dev build)")
+    args = parser.parse_args()
+    binary = program(os.path.abspath(args.app) if args.app else dev_app())
+
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Pages)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    base = f"http://127.0.0.1:{server.server_port}"
+    try:
+        with open(os.path.join(ROOT, "tools/test_api.js")) as f:
+            script = f.read().replace("__BASE__", base)
+        results = run_in(binary, {"neeko.ui.path": "TEST_UI"}, script)
+        results += run_in(binary, {}, BUNDLED_CHECK, timeout=30000)
+    finally:
+        server.shutdown()
+    print("\n".join(results))
 
     failed = [r for r in results if not r.startswith("ok")]
     print(f"\n{len(results) - len(failed)} passed, {len(failed)} failed")

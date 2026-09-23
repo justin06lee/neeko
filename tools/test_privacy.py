@@ -1,16 +1,18 @@
-"""The privacy test: proves the dev build contacts no telemetry or tracking
+"""The privacy test: proves a build contacts no telemetry or tracking
 endpoint, from its very first launch.
 
     make build
     python3 tools/test_privacy.py                    # about 6 minutes
     python3 tools/test_privacy.py --idle 60 --browse 20
     python3 tools/test_privacy.py --pref network.captive-portal-service.enabled=true
+    python3 tools/test_privacy.py --app dist/Neeko.app   # a packaged release
 
 1. Starts mitmproxy (through uvx, nothing to install) with a fresh
    certificate, and trusts it in a brand-new profile, so every request's
    full URL is visible.
-2. First launch: the dev build with the demo UI, left idle, then quit
-   normally (quitting is when shutdown pings would go out).
+2. First launch: the dev build (or --app) with the UI its build bundled,
+   left idle, then quit normally (quitting is when shutdown pings would go
+   out).
 3. Second launch: the same profile opens a few ordinary websites.
 4. With the proxy gone, a last launch checks that about:telemetry and
    about:glean say upload is disabled, and that no ping is waiting to be
@@ -42,9 +44,9 @@ import threading
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from builds import ROOT, dev_app, program  # noqa: E402
 from marionette import Marionette  # noqa: E402
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MITMPROXY = "mitmproxy==12.2.3"
 
 # Endpoints Neeko turns off, by host (or host and path), with their rows in
@@ -260,17 +262,20 @@ def main():
     parser.add_argument("--idle", type=int, default=240, help="seconds idle on first launch")
     parser.add_argument("--browse", type=int, default=60, help="seconds on the websites")
     parser.add_argument("--keep", action="store_true", help="keep the temp folder")
+    parser.add_argument("--app", help="a .app to test (default: the dev build)")
     parser.add_argument(
         "--pref", action="append", default=[], metavar="NAME=VALUE",
         help="set a pref for the whole run, e.g. to check the test catches a leak",
     )
     args = parser.parse_args()
 
-    apps = glob.glob(os.path.join(ROOT, "engine/obj-*/dist/*.app"))
-    if not apps:
-        sys.exit("No dev build found. Run `make build` first.")
-    app_dir = os.path.join(apps[0], "Contents/MacOS")
-    app = os.path.join(app_dir, "firefox")
+    app = program(os.path.abspath(args.app) if args.app else dev_app())
+    app_dir = os.path.dirname(app)
+    # Packaged apps don't ship NSS's certutil; the dev build's is the same
+    # version.
+    certutil = os.path.join(app_dir, "certutil")
+    if not os.path.exists(certutil):
+        certutil = os.path.join(os.path.dirname(program(dev_app())), "certutil")
 
     work = tempfile.mkdtemp(prefix="neeko-privacy-test-")
     profile = os.path.join(work, "profile")
@@ -300,7 +305,6 @@ def main():
         # A brand-new profile that trusts the proxy's certificate and sends
         # everything through the proxy. Nothing else is set: the test is of
         # Neeko's defaults.
-        certutil = os.path.join(app_dir, "certutil")
         subprocess.run([certutil, "-N", "-d", f"sql:{profile}", "--empty-password"], check=True)
         subprocess.run([certutil, "-A", "-n", "neeko privacy test", "-t", "C,,",
                         "-i", ca, "-d", f"sql:{profile}"], check=True)
@@ -314,7 +318,6 @@ def main():
                 ("network.proxy.share_proxy_settings", True),
                 ("network.proxy.no_proxies_on", ""),
                 ("network.proxy.failover_direct", False),
-                ("neeko.ui.path", os.path.join(ROOT, "ui")),
                 ("marionette.port", marionette_port),
                 ("remote.prefs.recommended", False),
                 *[(p.split("=", 1)[0], json.loads(p.split("=", 1)[1])) for p in args.pref],

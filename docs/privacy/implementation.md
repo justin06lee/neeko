@@ -27,8 +27,9 @@ alphabetical order, and the last one read wins. Named
 `firefox-neeko-privacy.js`, Neeko's file is read after Firefox's own
 `firefox.js` (29 of these prefs are set there the other way, and Neeko's
 values win) and before `firefox-branding.js`, where a browser built on Neeko
-sets its own values. With a name like `neeko-privacy.js` those 29 prefs would
-have silently lost.
+sets its own values (the build appends the browser's `branding/prefs.js`
+there). With a name like `neeko-privacy.js` those 29 prefs would have
+silently lost.
 
 ## Enterprise policies (`policies.json`): not used
 
@@ -97,8 +98,10 @@ automatically, and should be run after every Firefox update:
 
 1. A brand-new profile sends everything through mitmproxy, which sees full
    URLs (the profile trusts the proxy's one-off certificate).
-2. First launch with the demo UI, idle for 4 minutes, then a normal quit
-   (shutdown pings would go then).
+2. First launch with the UI the build bundled (the demo UI in Neeko's own
+   repo, the browser's UI in a browser's), idle for 4 minutes, then a
+   normal quit (shutdown pings would go then). `--app` tests a packaged
+   release instead of the dev build.
 3. Second launch, on three ordinary websites for a minute.
 4. With the proxy gone, a last launch reads about:telemetry and about:glean.
 
@@ -148,6 +151,9 @@ is about.
   or a browser built on Neeko sets `browser.search.region`.
 - **The crash handler still writes crash dumps locally** (nothing is sent).
   Turning it off completely takes an environment variable at launch.
-- **Shipping.** `mach package` would leave out Neeko's pref files, and
-  Mozilla's prebuilt launcher still calls itself Firefox. Both belong to
-  setup step 6 (how browsers get Neeko).
+- **Shipping** (solved in setup step 6, [`../using-neeko.md`](../using-neeko.md)):
+  packaged builds now include Neeko's pref files (a three-line patch to
+  Firefox's package list), and release builds compile their own launcher,
+  so they carry the browser's name and profile folder instead of Firefox's
+  and have telemetry upload compiled out. `tools/test_release.py` checks
+  both, and the privacy test runs against a release with `--app`.
