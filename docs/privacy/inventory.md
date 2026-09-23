@@ -51,15 +51,20 @@ upload.
   Firefox.** Telemetry and Glean uploads are switched on inside that prebuilt
   code. The only off switch left is the pref
   `datareporting.healthreport.uploadEnabled`, which defaults to on.
-- **The telemetry lines in `configs/common/mozconfig` do nothing.**
+- **The telemetry lines in `configs/common/mozconfig` did nothing.**
   `mk_add_options MOZ_TELEMETRY_REPORTING=` sets a make variable, not a build
   option. Surfer's `MOZ_APPUPDATE_HOST` export is also dead: nothing reads it,
-  so updates still point at `aus5.mozilla.org`.
+  so updates still point at `aus5.mozilla.org`. (Replaced in privacy step 3.)
+- **The locally generated `application.ini` isn't read at all.** Found in
+  privacy step 3: Mozilla's prebuilt launcher uses app data compiled into
+  itself (`browser/app/nsBrowserApp.cpp`), with Firefox's name, crash
+  reporter setting and update URL. Build flags only help by removing the
+  locally built code and programs.
 - **Some switches can't be flipped from mozconfig.** `MOZ_NORMANDY` and
   `MOZ_SERVICES_HEALTHREPORT` are forced on in `browser/moz.configure`, so
   prefs have to handle those.
 - **App updates have no pref.** Only an enterprise policy (`DisableAppUpdate`)
-  or removing the URL from the generated `application.ini` stops them.
+  or building without the updater (`--disable-updater`) stops them.
 - **The crash reporter sends a crash ping before its window even appears.** It
   only honors the upload pref when it's set as a user value in the profile, not
   as a default.
@@ -86,7 +91,7 @@ upload.
 | 1 | Telemetry (legacy) | Usage and performance measurements, device and settings details, a per-profile ID | `incoming.telemetry.mozilla.org` | Tracking | `datareporting.healthreport.uploadEnabled`, `toolkit.telemetry.*`; build gate compiled on in the artifact core | yes |
 | 2 | Glean (newer telemetry) | Same kinds of data through the newer system, including New Tab and usage pings | `incoming.telemetry.mozilla.org` (hardcoded) and an HTTP relay | Tracking | `datareporting.healthreport.uploadEnabled`, `datareporting.usage.uploadEnabled` | yes |
 | 3 | Shutdown ping sender | A telemetry ping sent by a helper program after the browser quits | `incoming.telemetry.mozilla.org` | Tracking | `toolkit.telemetry.shutdownPingSender.enabled` | |
-| 4 | Crash ping | Crash details, sent automatically before any dialog | `incoming.telemetry.mozilla.org` | Tracking | user value of `datareporting.healthreport.uploadEnabled`, or crash reporter off (`--disable-crashreporter`, inferred from source; to confirm in the privacy test) | |
+| 4 | Crash ping | Crash details, sent automatically before any dialog | `incoming.telemetry.mozilla.org` | Tracking | user value of `datareporting.healthreport.uploadEnabled`, or crash reporter off (`--disable-crashreporter`) | |
 | 5 | Crash reports | Crash dump, optionally the open page's URL; you're asked first | `crash-reports.mozilla.com` | Feature (diagnostics) | `--disable-crashreporter`, `browser.crashReports.*`, `browser.tabs.crashReporting.*` | |
 | 6 | Studies and experiments (Normandy, Nimbus) | Downloads experiments that change the browser remotely; enrollment is reported via telemetry | `normandy.cdn.mozilla.net`, `classify-client.services.mozilla.com`, Remote Settings | Tracking | `app.normandy.enabled`, `app.shield.optoutstudies.enabled`, `nimbus.rollouts.enabled`; Firefox Labs keeps Nimbus alive | yes |
 | 7 | Private aggregate measurements (DAP) | Encrypted aggregate counts | `dap-09-3.api.divviup.org`, `dap.services.mozilla.com` | Tracking | only when an experiment enables it, plus the upload pref | |

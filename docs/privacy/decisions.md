@@ -1,7 +1,7 @@
 # Privacy decisions
 
-**Status: proposed, waiting for approval.** Nothing here is implemented yet.
-Numbers refer to rows in [`inventory.md`](inventory.md).
+**Status: approved on 2026-09-23, as proposed.** Numbers refer to rows in
+[`inventory.md`](inventory.md).
 
 These are the defaults every browser built on Neeko inherits from first launch.
 A browser built on Neeko can later switch individual features back on for its
@@ -74,16 +74,8 @@ Not tracking and not security, but each one sends something somewhere.
 | 18 | Geolocation for websites | **Keep** | Only happens when you allow a site, through macOS location services. |
 | — | Remote debugging (not a connection) | **Off in shipped builds, on in dev builds** | Dev builds need it for Firefox's Browser Toolbox. |
 
-## How it will be implemented (privacy step 3)
+## How it's implemented (privacy step 3)
 
-- **A dedicated Neeko privacy prefs file** with a comment on every pref. This
-  covers most items. Every pref name gets verified against the Firefox source
-  again at implementation time.
-- **Build config:** the crash reporter and updater get switched off, and the two
-  dead telemetry lines in `configs/common/mozconfig` get replaced. Whether
-  `--disable-updater` works with artifact builds still needs verifying.
-- **Enterprise policies (`policies.json`):** step 3 explains whether they're
-  worth it, and their downsides, such as the "managed by your organization"
-  message.
-- **The privacy test (step 4)** proves it: a fresh profile behind a proxy,
-  failing on any KILL endpoint.
+See [`implementation.md`](implementation.md): a prefs file with a comment on
+every pref, two build flags, one small Neeko module for codec plugins, and no
+enterprise policies (it explains why).

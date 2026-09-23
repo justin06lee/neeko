@@ -1,5 +1,13 @@
 # Firefox 156.0.1: network endpoints contacted by default (inventory from source)
 
+> **Correction (privacy step 3).** This file assumes the locally generated
+> `application.ini` controls the crash reporter and the update URL. It
+> doesn't: Mozilla's prebuilt launcher uses app data compiled into itself
+> (`browser/app/nsBrowserApp.cpp:248-252`), so the local file is never read.
+> Wherever a row below says something is "local" because of
+> `application.ini`, it isn't. See
+> [`firefox-156-privacy-prefs.md`](firefox-156-privacy-prefs.md), section 2.
+
 Source: `engine/` at `d9b85be608 "Firefox 156.0.1"`. All paths are relative to
 `/Volumes/T7/Stockpile/Workspace/github.com/justin06lee/neeko/engine`. Every pref,
 host and flag below was found with `git grep` at the file:line given. "Local objdir"

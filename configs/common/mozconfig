@@ -6,8 +6,9 @@
 ac_add_options --enable-application=browser
 
 # The program stays "firefox" because artifact builds download Mozilla's
-# prebuilt binaries, which carry that name. The name people see, and the
-# profile folder, come from the app basename below.
+# prebuilt binaries, which carry that name. The prebuilt launcher also has
+# Firefox's app name compiled in, which decides the profile folder, so these
+# only name the locally built parts (see docs/plan.md).
 ac_add_options --with-app-name=${binName}
 ac_add_options --with-app-basename=${name}
 ac_add_options --with-distribution-id=${appId}
@@ -28,6 +29,14 @@ fi
 # Let mach download any toolchains it needs.
 ac_add_options --enable-bootstrap
 
-# No telemetry uploads.
-mk_add_options MOZ_TELEMETRY_REPORTING=
-mk_add_options MOZ_DATA_REPORTING=
+# Privacy (docs/privacy/decisions.md). Artifact builds use Mozilla's prebuilt
+# core, which has telemetry compiled in, so Neeko's prefs switch telemetry off
+# (src/browser/neeko/firefox-neeko-privacy.js). These flags remove the
+# frontend code and programs that would contact Mozilla anyway.
+# No app updates from Mozilla: no update checks to aus5.mozilla.org.
+ac_add_options --disable-updater
+# No crash reporter: no crash reports or crash pings to Mozilla.
+ac_add_options --disable-crashreporter
+# Keep Firefox's telemetry build flag off even if MOZILLA_OFFICIAL is ever
+# set. (It's already off in local builds and can't change the prebuilt core.)
+ac_add_options MOZ_TELEMETRY_REPORTING=

@@ -1,0 +1,15 @@
+time	kind	target
+00:58:05	CONNECT	firefox.settings.services.mozilla.com:443
+00:58:05	CONNECT	firefox-settings-attachments.cdn.mozilla.net:443
+00:58:06	CONNECT	en.wikipedia.org:443
+00:58:06	CONNECT	example.com:443
+00:58:06	CONNECT	content-signature-2.cdn.mozilla.net:443
+00:58:06	CONNECT	thumb.wikimedia.org:443
+00:58:06	CONNECT	upload.wikimedia.org:443
+00:58:06	CONNECT	upload.wikimedia.org:443
+00:58:06	CONNECT	upload.wikimedia.org:443
+00:58:07	CONNECT	auth.wikimedia.org:443
+00:58:07	CONNECT	firefox-settings-attachments.cdn.mozilla.net:443
+00:58:07	CONNECT	firefox-settings-attachments.cdn.mozilla.net:443
+00:58:07	CONNECT	firefox-settings-attachments.cdn.mozilla.net:443
+00:58:07	CONNECT	firefox-settings-attachments.cdn.mozilla.net:443
