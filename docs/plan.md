@@ -73,6 +73,14 @@ source of truth.
   - Put tab sleeping in the API.
   - Add a performance test with a budget (roadmap).
 - **Privacy by default** is a hard requirement (see the privacy track).
+  Implemented in privacy step 3 (`docs/privacy/implementation.md`):
+  - Neeko's pref files are named `firefox-neeko*.js`. Firefox reads default
+    pref files in reverse alphabetical order and the last one wins, so
+    these beat Firefox's `firefox.js` but lose to `firefox-branding.js`,
+    where a browser built on Neeko can override them.
+  - Defaults, never locks, and no `policies.json`: no "managed by your
+    organization" notice, and browsers built on Neeko stay free to change
+    anything.
 
 ## Setup track (the user's original steps, verbatim)
 
@@ -161,13 +169,15 @@ source of truth.
 >    - LATER: things that will point to my own servers once I distribute (e.g.
 >      app updates)
 >
->    **Proposed in `docs/privacy/decisions.md`; waiting for the user's
->    approval.**
+>    **Done: `docs/privacy/decisions.md`, approved as proposed on
+>    2026-09-23.**
 > 3. IMPLEMENT: Apply the approved decisions using build flags in mozconfig
 >    and a dedicated Neeko privacy prefs file. Organize it with a comment on
 >    every pref explaining what it does. Explain whether enterprise policies
 >    (policies.json) are worth using and their downsides (e.g. "managed by
 >    your organization" message).
+>
+>    **Done: `docs/privacy/implementation.md`.**
 > 4. VERIFY: Create an automated privacy test that:
 >    - launches the browser with a FRESH profile (first launch matters)
 >    - routes all traffic through a local proxy (e.g. mitmproxy)
@@ -195,6 +205,9 @@ source of truth.
   prebuilt runtime.
 - **Branding:** currently Firefox's unofficial "Nightly" branding. Browsers
   built on Neeko set their own; Neeko just needs to make that easy.
+- **Shipping needs its own launcher and packaging** (setup step 6). The
+  prebuilt launcher calls itself Firefox and uses Firefox's profile folder,
+  and `mach package` would leave out Neeko's pref files (see Lessons).
 
 ## Lessons learned
 
@@ -205,13 +218,33 @@ source of truth.
   - `StaticPrefList.yaml` edits do nothing; override prefs in pref files.
   - The binary must stay named `firefox`.
   - Mozilla's core expects Firefox-named GPU and media helper apps.
-    `neeko-prefs.js` works around that.
+    `firefox-neeko.js` works around that.
+- **The prebuilt launcher ignores the local `application.ini`.** It uses app
+  data compiled into itself (`browser/app/nsBrowserApp.cpp`): vendor
+  Mozilla, name Firefox, crash reporter on, Mozilla's update URL. So:
+  - `Services.appinfo.name` is "Firefox", and the default profile folder is
+    `~/Library/Application Support/Firefox/Profiles`, the user's real
+    Firefox profiles. Always launch dev builds with their own profile
+    (`make`, the test tools); shipped browsers need their own launcher
+    (setup step 6).
+  - Build flags only help by removing locally built code and programs:
+    `--disable-updater` and `--disable-crashreporter` work that way.
+  - Startup logs two harmless errors: the prebuilt core still lists
+    `UpdateServiceStub.sys.mjs` and `CrashService.sys.mjs`, which those
+    flags removed.
+  - Dev bundles still contain Mozilla's `crashreporter.app` (artifact
+    builds copy it). `mach run` disables it with `MOZ_CRASHREPORTER_DISABLE`,
+    but direct launches don't.
+- **`mach package` drops Neeko's pref files.**
+  `browser/installer/package-manifest.in` lists default pref files by name.
+  Shipping needs a small patch there or another packaging route (setup
+  step 6).
 - **The revision to download** is read from `engine/sourcestamp.txt`
   (`configs/common/mozconfig`).
-- **Two mozconfig lines do nothing.** The `mk_add_options
-  MOZ_TELEMETRY_REPORTING=` / `MOZ_DATA_REPORTING=` lines are make variables,
-  not build options, and Surfer's `MOZ_APPUPDATE_HOST` export is ignored.
-  Privacy step 3 fixes this.
+- **`mk_add_options` only sets make variables.** The old
+  `MOZ_TELEMETRY_REPORTING=` / `MOZ_DATA_REPORTING=` lines did nothing, and
+  Surfer's `MOZ_APPUPDATE_HOST` export is ignored. Privacy step 3 replaced
+  them with real `ac_add_options` flags.
 
 ### Surfer quirks
 
@@ -301,5 +334,11 @@ source of truth.
 - **The user has another Firefox build project (`toji`) on this machine.**
   Only ever kill processes under `/neeko/engine/obj-…` (as `make stop` does).
 - **The privacy inventory's baseline capture** used a tiny logging proxy
-  (not committed). The privacy test in step 4 should use mitmproxy, as the
-  task says.
+  (not committed), and so did the step 3 check. The privacy test in step 4
+  should use mitmproxy, as the task says.
+- **Never run the privacy test through Marionette** (or set
+  `remote.prefs.recommended=false`). Marionette applies its own "recommended
+  prefs", which turn off telemetry, captive portal checks and more, hiding
+  exactly the defaults under test. Reading default values with
+  `Services.prefs.getDefaultBranch("")` is fine, since those prefs are user
+  values.

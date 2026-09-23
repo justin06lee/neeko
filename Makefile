@@ -13,8 +13,13 @@ build: import
 	$(SURFER) build
 
 # Same `mach run` that `surfer run` wraps, pointed at the custom UI in ui/.
+# Dev launches also allow Firefox's Browser Toolbox, which Neeko's privacy
+# defaults turn off for shipped browsers.
 run:
-	cd $(ENGINE) && ./mach run --setpref neeko.ui.path=$(CURDIR)/ui
+	cd $(ENGINE) && ./mach run --setpref neeko.ui.path=$(CURDIR)/ui \
+		--setpref devtools.chrome.enabled=true \
+		--setpref devtools.debugger.remote-enabled=true \
+		--setpref devtools.debugger.prompt-connection=false
 
 # Quit a running dev build, rebuild, and relaunch it.
 update: stop build run

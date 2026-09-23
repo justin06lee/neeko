@@ -97,9 +97,18 @@ The only change to a Firefox file is one line (plus a comment) that adds Neeko's
 to the build (`src/browser/moz-build.patch`).
 
 Because of artifact builds, the program inside the app bundle keeps the name
-`firefox`. The profile folder is named "Neeko", so dev builds never touch a
-regular Firefox profile. The visible name and icon come from branding, which
-is still Firefox's unofficial "Nightly" branding for now.
+`firefox`, and Mozilla's prebuilt launcher still reports itself as Firefox.
+That means a dev build started on its own would use your regular Firefox
+profile folder, so always start it with `make` (or the test tools), which
+give it a separate profile. Shipped browsers need their own launcher; that's
+part of deciding how browsers get Neeko. The visible name and icon come from
+branding, which is still Firefox's unofficial "Nightly" branding for now.
+
+Privacy is on by default: nothing is sent to Mozilla for telemetry, studies,
+ads or crash reports, from the first launch, in every browser built on Neeko.
+`src/browser/neeko/firefox-neeko-privacy.js` holds those defaults, and
+[docs/privacy/](docs/privacy/implementation.md) explains every connection
+that's left and why.
 
 ```
 neeko/
@@ -108,7 +117,7 @@ neeko/
 ├── ui/           The demo UI (yours to replace)
 ├── src/          Neeko's own files, layered onto engine/ by Surfer
 │   └── browser/
-│       ├── neeko/            Window hook, API, hide styles, default prefs
+│       ├── neeko/            Window hook, API, hide styles, prefs, privacy defaults
 │       └── moz-build.patch   The one line that adds neeko/ to the build
 ├── docs/         The API reference (api.md), build plan (plan.md), privacy research
 ├── tools/        Dev helpers: test_api.py checks the API, marionette.py drives a build

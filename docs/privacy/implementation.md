@@ -1,0 +1,113 @@
+# How Neeko's privacy defaults are implemented
+
+Privacy step 3. It carries out every approved decision in
+[`decisions.md`](decisions.md), so every browser built on Neeko is private
+from its first launch without any setup. The research behind it, with the
+Firefox source location of every pref and flag, is in
+[`research/firefox-156-privacy-prefs.md`](research/firefox-156-privacy-prefs.md).
+
+## Where it lives
+
+All of it is in Neeko's own layers. No Firefox file changed.
+
+| Piece | What it does |
+| --- | --- |
+| `src/browser/neeko/firefox-neeko-privacy.js` | 58 default prefs, a comment on each, grouped by the decisions (KILL, KEEP/REPLACE, LATER, leaks a little). This does most of the work. |
+| `configs/common/mozconfig` | `--disable-updater` (no update checks to Mozilla) and `--disable-crashreporter` (no crash reports or crash pings). |
+| `src/browser/neeko/NeekoPrivacy.sys.mjs` | Keeps codec and DRM plugin updates off until DRM is actually turned on. That's the one decision prefs alone can't express. |
+| `Makefile` (`make run`) | Dev launches turn remote debugging back on, for Firefox's Browser Toolbox. Shipped builds keep it off. |
+
+**Defaults, not locks.** A browser built on Neeko can switch any of these
+back on in its own branding prefs, and a user can change them in Settings or
+about:config. That's the "only as an explicit choice" rule from the
+decisions.
+
+**The file name matters.** Firefox reads its default pref files in reverse
+alphabetical order, and the last one read wins. Named
+`firefox-neeko-privacy.js`, Neeko's file is read after Firefox's own
+`firefox.js` (29 of these prefs are set there the other way, and Neeko's
+values win) and before `firefox-branding.js`, where a browser built on Neeko
+sets its own values. With a name like `neeko-privacy.js` those 29 prefs would
+have silently lost.
+
+## Enterprise policies (`policies.json`): not used
+
+Firefox can also be configured with an enterprise policy file, the way
+companies manage their employees' browsers. Policies are stronger than prefs:
+they lock settings so nobody can change them. Neeko doesn't use them, because
+here they'd cost more than they give.
+
+**What they would add.** With the updater built out, the only thing a policy
+could do that Neeko's prefs can't is turn off Firefox Labs (opt-in
+experimental features in Settings). Everything else a policy does comes down
+to setting the same prefs Neeko already sets.
+
+**What they cost.** As soon as any policy is active:
+
+- Settings shows **"Your browser is being managed by your organization"** at
+  the top, and about:policies and about:support list the policies.
+- Every Google search URL changes to say the browser is enterprise-managed
+  (`channel=entpr`).
+- Whatever a policy turns off can never be turned back on, not by the user
+  and not by a browser built on Neeko, short of replacing Neeko's policy
+  file. That breaks "a browser built on Neeko can change anything".
+- The operating system's own policy settings (macOS managed preferences, a
+  system-wide Firefox policy file on Linux) can replace Neeko's.
+- `DisableTelemetry` would also block about:telemetry, which the privacy test
+  wants to check.
+
+**When to revisit:** if the privacy test (step 4) has to show no experiment
+traffic at all. The minimal file would only turn off Firefox Labs.
+
+## What's still sent on first launch, and why
+
+A brand-new profile, left idle for 3 minutes behind a logging proxy, before
+and after this step:
+
+| | Stock Firefox 156 | With Neeko's defaults |
+| --- | --- | --- |
+| Hosts contacted | 24 | 3 |
+| Telemetry upload | at 16 seconds | none |
+| Everything else | region lookup, Wi-Fi portal checks, New Tab ads and stories, push, DNS to Cloudflare, the privacy-notice page, update checks, studies, codec downloads, add-on metadata | none |
+
+The three hosts left are all Remote Settings, which the decisions keep for
+security, contacted in the first two seconds:
+
+| Host | What it is |
+| --- | --- |
+| `firefox.settings.services.mozilla.com` | Asks which lists changed. Certificate revocation (CRLite, OneCRL), the add-on blocklist and tracking-protection lists arrive this way. |
+| `firefox-settings-attachments.cdn.mozilla.net` | Downloads the list files. |
+| `content-signature-2.cdn.mozilla.net` | Fetches the certificate that proves the lists really come from Mozilla. |
+
+Visiting Wikipedia and example.com on a fresh profile added only those sites
+(and Wikipedia's own image and login hosts). Raw logs:
+[`research/capture-after-step3-first-launch-idle.tsv`](research/capture-after-step3-first-launch-idle.tsv)
+and
+[`research/capture-after-step3-browsing.tsv`](research/capture-after-step3-browsing.tsv),
+next to the stock captures.
+
+This was a 3-minute check by hand through the same small logging proxy as the
+inventory. Things on daily timers, such as add-on update checks (kept), don't
+show up that soon. The automated privacy test (step 4) idles longer, uses
+mitmproxy, and checks about:telemetry too.
+
+## Not done yet
+
+- **Firefox Labs** stays available. So Firefox still downloads the list of
+  experiments from Remote Settings (the same host that's kept for security
+  lists), but it enrolls in nothing unless the user opts into a Labs feature.
+  Only a policy turns this off (see above).
+- **Remote Settings syncs more than security lists.** It also updates other
+  data collections that ship with Firefox (search, New Tab, translation
+  metadata and similar), all from the same kept host, sending nothing about
+  you. Limiting it to security lists takes a Firefox source patch, like
+  LibreWolf's. Decide later, with the privacy test's list of collections.
+- **Firefox Suggest can come back if a region is set.** Firefox turns Suggest
+  on at runtime in some countries (US, UK, Germany, France, Italy) once it
+  knows the region. Region detection is off, so it stays off, unless a user
+  or a browser built on Neeko sets `browser.search.region`.
+- **The crash handler still writes crash dumps locally** (nothing is sent).
+  Turning it off completely takes an environment variable at launch.
+- **Shipping.** `mach package` would leave out Neeko's pref files, and
+  Mozilla's prebuilt launcher still calls itself Firefox. Both belong to
+  setup step 6 (how browsers get Neeko).
