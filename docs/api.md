@@ -57,6 +57,10 @@ that are asleep (restored from the last session but never opened, or unloaded
 to save memory) report `canGoBack` and `canGoForward` as false; finding out
 would wake them.
 
+`canGoBack` is Firefox's own answer, the same as its Back button: it skips
+pages the user never clicked, typed or scrolled in, so a tab that went from
+one untouched page to another can't go back.
+
 ### Methods
 
 | Method | What it does |
@@ -115,6 +119,19 @@ even where its UI has no controls yet.
   shows Firefox's own navigation toolbar across the top of the window. It
   goes away again when it loses focus: after Enter, Escape, or a click
   elsewhere.
+- **Permission prompts and other Firefox panels.** Camera, microphone and
+  location prompts, password saving, add-on installs and notices like
+  "add-on added" are Firefox's own. They hang from the top edge of the web
+  page, just inside its corners: on the left for the address bar's prompts,
+  on the right for the toolbar buttons' notices, and they follow the page
+  if your UI moves it.
+- **Downloads.** When a download starts, Firefox's downloads panel opens at
+  the top right of the web page, with its progress. Cmd+Shift+Y shows every
+  download, in Firefox's Library window.
+- **Fullscreen.** When a web page goes fullscreen (a video's fullscreen
+  button, say), it fills the screen over your UI, and goes back into your
+  content slot when it exits. Your UI stays loaded and its scripts keep
+  running, but it isn't drawn meanwhile.
 
 ## Security
 

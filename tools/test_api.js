@@ -39,6 +39,12 @@ if (!neeko) {
 }
 await waitFor(() => window.gBrowserInit?.delayedStartupFinished, "startup");
 
+// Focus, prompts, the downloads panel and fullscreen all need this window to
+// be the active one. Under heavy load, macOS can take a while to bring a newly
+// launched app to the front.
+window.focus();
+await waitFor(() => Services.focus.activeWindow == window, "the window to be active", 30000);
+
 check(Object.isFrozen(neeko) && Object.isFrozen(neeko.tabs), "neeko is frozen");
 
 // The UI folder in neeko.ui.path (here the test UI) wins over the UI the build
@@ -95,6 +101,12 @@ check(now.url == `${BASE}/one`, `url (${now.url})`);
 check(!now.canGoBack && !now.canGoForward, "a new tab can't go back or forward");
 
 // Navigating. A bare host:port/path gets fixed up like the address bar would.
+// Back skips pages the user never clicked, typed or scrolled in (Firefox's
+// browser.navigation.requireUserInteraction), so Page one counts as used, as
+// after a click. Without this, whether stray input reached it decided the
+// back() checks.
+let history = gBrowser.selectedBrowser.browsingContext.sessionHistory;
+history.getEntryAtIndex(history.index).hasUserInteraction = true;
 await neeko.nav.go(`${HOST}/two`);
 await waitFor(
   () => updated(tab.id, t => t.url == `${BASE}/two` && t.title == "Page two"),
@@ -218,6 +230,99 @@ await neeko.tabs.current();
 openLocation();
 check(fallbackShowing(), "after the UI stops listening, the fallback is back");
 gBrowser.selectedBrowser.focus();
+
+// Web page fullscreen: the page fills the window over the UI, then goes back
+// into the UI's content slot.
+let tabbox = document.getElementById("tabbrowser-tabbox");
+let rectOf = element => {
+  let { left, top, right, bottom } = element.getBoundingClientRect();
+  return [left, top, right, bottom].map(Math.round);
+};
+let slotRect = () =>
+  rectOf(frame.contentDocument.querySelector("[data-neeko-content]"));
+let pageTab = await neeko.tabs.open(`${BASE}/fullscreen`);
+await waitFor(
+  () => document.documentElement.hasAttribute("inDOMFullscreen"),
+  "a page to go fullscreen"
+);
+await waitFor(
+  () => `${rectOf(tabbox)}` == `0,0,${innerWidth},${innerHeight}`,
+  "the page to fill the window"
+);
+check(getComputedStyle(frame).visibility == "hidden", "the UI isn't drawn meanwhile");
+document.exitFullscreen();
+await waitFor(
+  () => !document.documentElement.hasAttribute("inDOMFullscreen") && !fullScreen,
+  "fullscreen to end"
+);
+await waitFor(
+  () => `${rectOf(tabbox)}` == `${slotRect()}` && !`${slotRect()}`.startsWith("0,0"),
+  "the page to go back into the UI's slot"
+);
+check(getComputedStyle(frame).visibility == "visible", "the UI is drawn again");
+await neeko.tabs.close(pageTab.id);
+
+// Firefox's own panels hang from the top edge of the page, 8px in, since the
+// toolbar icons they'd hang from are hidden: the address bar's panels on the
+// left, the toolbar buttons' on the right.
+let hangsFrom = (panel, side) => {
+  let [left, top, right] = rectOf(panel);
+  let [pageLeft, pageTop, pageRight] = rectOf(tabbox);
+  let inset = side == "left" ? left - pageLeft : pageRight - right;
+  return (
+    panel.anchorNode?.id == "neeko-panel-anchor" &&
+    Math.abs(inset - 8) <= 1 &&
+    Math.abs(top - pageTop - 8) <= 1
+  );
+};
+let where = panel => `at ${rectOf(panel)}, the page at ${rectOf(tabbox)}`;
+
+let promptTab = await neeko.tabs.open(`${BASE}/geo`);
+let prompt = await waitFor(
+  () =>
+    PopupNotifications.panel.state == "open" &&
+    PopupNotifications.getNotification("geolocation"),
+  "the location prompt"
+);
+check(
+  hangsFrom(PopupNotifications.panel, "left"),
+  `it hangs from the page's top left (${where(PopupNotifications.panel)})`
+);
+PopupNotifications.remove(prompt);
+
+let notice = PanelUI.notificationPanel;
+AppMenuNotifications.showNotification("addon-installed", { callback() {} }, null, {
+  name: "Test add-on",
+  customElementOptions: { addonId: "test@neeko" },
+});
+await waitFor(() => notice.state == "open", "an add-on added notice");
+check(
+  hangsFrom(notice, "right"),
+  `the menu button's notices hang from the top right (${where(notice)})`
+);
+AppMenuNotifications.removeNotification("addon-installed");
+
+// A download opens Firefox's downloads panel, on the right like the others.
+let downloadsPanel = () => document.getElementById("downloadsPanel");
+await neeko.nav.go(`${BASE}/download`);
+await waitFor(
+  () => downloadsPanel()?.state == "open",
+  "the downloads panel to open when a download starts"
+);
+check(
+  hangsFrom(downloadsPanel(), "right"),
+  `it hangs from the page's top right (${where(downloadsPanel())})`
+);
+let downloads = await Downloads.getList(Downloads.ALL);
+await waitFor(
+  async () =>
+    (await downloads.getAll()).some(
+      d => d.succeeded && d.target.path.endsWith("neeko-test.txt")
+    ),
+  "the download to finish"
+);
+DownloadsPanel.hidePanel();
+await neeko.tabs.close(promptTab.id);
 
 // Neeko sends only the events the UI listens for.
 let heardSelect = 0;

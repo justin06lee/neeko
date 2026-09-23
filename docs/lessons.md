@@ -161,13 +161,42 @@ Add to it whenever something costs you time.
   gets the remote page.
 - **Measured with 300 tabs:** same memory and tab-switch time as stock Firefox,
   and faster to open tabs.
-- **What happens today to Firefox UI that anchors on hidden toolbars**
-  (checked 2026-09-23): permission prompts still open, but pinned to the
-  window's top-left corner because their anchor icon is hidden. Downloads
-  finish silently: the downloads panel anchors on the hidden toolbar button
-  and never opens. Web page fullscreen (a video's fullscreen button) makes
-  the window fullscreen, but the page stays in the UI's content slot, with
-  the UI around it. All three are on the roadmap.
+- **Firefox's panels hang from toolbar icons, which Neeko hides** (checked
+  2026-09-23):
+  - `PopupNotifications` (permission prompts, password saving, add-on
+    installs) looks for a visible anchor, finds none and opens
+    `#notification-popup` with no anchor: the window's top-left corner.
+  - `ConfirmationHint`, the menu button's notices and the bookmark panel open
+    against their hidden icon. The "add-on added" notice didn't appear at
+    all.
+  - `NeekoPanels` moves them to an anchor along the top of the page:
+    `panel.moveToAnchor()` in a capturing `popupshowing` listener works,
+    because the popup is "showing" and not positioned yet.
+  - The anchor follows the page by CSS anchor positioning (`anchor-name` on
+    `#tabbrowser-tabbox`), which Firefox 156 has on without a pref. The
+    anchored element must come after the page area in the document. Open
+    panels follow it when the UI moves the page.
+  - A panel lines up on the right if its hidden anchor is after the address
+    bar in `#nav-bar` (a toolbar button), otherwise on the left.
+  - The downloads panel never even opens: `DownloadsButton.getAnchor()`
+    returns null when the button's toolbar is hidden
+    (`downloads/content/indicator.js`). `NeekoPanels` wraps it to return
+    the page's anchor. `DownloadsButton` is a lazy global
+    (`XPCOMUtils.defineLazyScriptGetter`), so Neeko hooks the getter rather
+    than creating the object early.
+  - After a download has opened the panel, Firefox only animates the
+    toolbar button for later ones while another is running
+    (`DownloadsCommon.sys.mjs`, `_notifyDownloadEvent`), which a hidden
+    button doesn't show.
+  - After Firefox updates, check `#notification-popup` is still
+    `PopupNotifications`' panel (`browser.js`); `tools/test_api.js` checks
+    a real location prompt.
+- **Web page fullscreen** sets `inDOMFullscreen` on the window's root and
+  makes the window fullscreen, but Firefox's own layout is what makes the
+  page fill it. Neeko's page area keeps the inline position and size
+  `NeekoWindow` gives it, so it stayed in the UI's slot with the UI around
+  it. `neeko.css` overrides both with `!important` while the attribute is
+  there.
 
 ## Neeko API
 
@@ -186,6 +215,12 @@ Add to it whenever something costs you time.
   `busy` for title and loading; a tabs progress listener's
   `onLocationChange` for URL and back/forward; `TabBrowserInserted` and
   `TabBrowserDiscarded` for tabs waking and sleeping.
+- **Back skips pages nobody interacted with.** Firefox's
+  `browser.navigation.requireUserInteraction` (on by default) leaves history
+  entries without a click, key, scroll or tap in the page out of Back, so
+  `canGoBack` is false when every earlier page is untouched (a tab opened on
+  one page, then sent to another by `nav.go()`). Neeko reports Firefox's
+  answer. An entry's `hasUserInteraction` is writable from chrome code.
 - **Events caused by a call arrive before its reply**, because they share one
   ordered port. Events from anything else (links, shortcuts) arrive a moment
   after the fact, so tests must wait for them.
@@ -215,6 +250,21 @@ Add to it whenever something costs you time.
   (`beginInputTransactionForTests(window)`, then `keydown`/`keyup`), which
   goes to whatever really has focus. Hover-only controls need a `mousemove`
   first.
+- **Much of Firefox only works in the active window.** Keyboard focus,
+  permission prompts, the downloads panel opening by itself, and web page
+  fullscreen (refused otherwise). Under heavy load macOS can take seconds to
+  bring a freshly launched app to the front, so `tools/test_api.js` waits
+  for its window to be active before any check.
+- **The flaky `back()` checks** (2026-09-23, under load: about 4 runs in 10
+  with 8 busy CPU threads) weren't Neeko's doing. Firefox's Back skips pages
+  nobody interacted with (see the Neeko API section), and Page one usually,
+  but not always, ended up marked as used by something outside the test. The
+  test now marks it itself; 8 runs in 8 passed under the same load.
+- **Marionette's recommended prefs stop the downloads panel opening by
+  itself** (`browser.download.alwaysOpenPanel` false,
+  `browser.download.panel.shown` true). They're only applied where the
+  profile has no value of its own, so the API test puts Firefox's defaults
+  back in `user.js`.
 - **Marionette:** launch with `-marionette -remote-allow-system-access` and use
   `tools/marionette.py` to run JavaScript in the browser window or synthesize
   clicks.

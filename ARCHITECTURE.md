@@ -65,9 +65,13 @@ official startup hooks (`Neeko.manifest`):
 
 - **`NeekoWindow.sys.mjs`** runs for every browser window, before it's first
   drawn. It hides Firefox's toolbars and sidebar (`neeko.css`), mounts the
-  UI frame, keeps the page area over the UI's content slot, gives the UI
-  page its API, and sends Cmd+L to the UI's address bar (or shows Firefox's
-  own if the UI has none). Pop-up windows keep Firefox's minimal UI.
+  UI frame, keeps the page area over the UI's content slot (or over the
+  whole screen while a page is fullscreen), gives the UI page its API, and
+  sends Cmd+L to the UI's address bar (or shows Firefox's own if the UI has
+  none). Pop-up windows keep Firefox's minimal UI.
+- **`NeekoPanels.sys.mjs`** gives Firefox's own panels (permission prompts,
+  the downloads panel, notices) somewhere to hang from: the top edge of the
+  web page, since the toolbar icons they normally hang from are hidden.
 - **`NeekoAPI.sys.mjs`** is Firefox's side of the API, one per UI page. It
   answers calls and turns Firefox's tab and navigation signals into events.
 - **`neeko-api.js`** is the UI's side: the `neeko` object.
@@ -129,7 +133,8 @@ and sends events, but only the ones the UI listens for.
 "my UI handles this". If nobody listens for the `addressbar` event, Cmd+L
 shows Firefox's own address bar instead. Every future feature with a
 Firefox fallback (permission prompts, context menus, downloads) works the
-same way.
+same way. Until then, Firefox's own versions of those already work, with
+their panels hanging from the top of the page.
 
 ## Decisions, and why
 

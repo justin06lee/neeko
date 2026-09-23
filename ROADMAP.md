@@ -20,18 +20,18 @@ get added as it needs them.
 
 1. [ ] **Permission prompts and other doorhangers.** Camera, microphone,
    location, notifications, pop-ups, password saving, add-on installs: the
-   UI gets the request and answers it. Fallback: Firefox's own prompt,
-   anchored somewhere sensible. Today: Firefox's prompt still opens, but
-   pinned to the window's top-left corner, because the icon it anchors to is
-   hidden.
+   UI gets the request and answers it. Fallback (done): Firefox's own
+   prompt, hanging from the top edge of the page, near where the address
+   bar's icons would be.
 2. [ ] **Fullscreen.** Web page fullscreen (videos) and window fullscreen:
-   the UI hears about it and can get out of the way; by default the page
-   fills the screen. Today: the window goes fullscreen, but the page stays
-   in the UI's content slot with the UI drawn around it.
+   the UI hears about it and can get out of the way, or animate. Fallback
+   (done): the page fills the screen over the UI, which isn't drawn until
+   the page exits fullscreen.
 3. [ ] **Downloads.** List, progress, open, show in Finder, cancel, and a
-   "download started" event. Fallback: Firefox's downloads panel. Today:
-   files download silently; the panel anchors on a hidden button and never
-   shows.
+   "download started" event. Fallback (done): Firefox's downloads panel
+   opens at the page's top right when a download starts. It only opens by
+   itself for the first of several downloads at once; Firefox animates its
+   hidden toolbar button for the rest.
 4. [ ] **Favicons, by reference.** Each tab's icon as a URL the UI can put
    in an `<img>`, never image data copied through the API.
 5. [ ] **Context menus.** The UI can draw its own menu for pages, links,

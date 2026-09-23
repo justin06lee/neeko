@@ -28,11 +28,12 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from builds import ROOT, LeaveNoTrace, dev_app, program  # noqa: E402
 from marionette import Marionette  # noqa: E402
 
-# A UI with nothing but a content slot.
+# A UI with nothing but a content slot, away from the window's corner so the
+# checks can tell the page's corner from the window's.
 TEST_UI = (
     "<!doctype html><html><body style='margin: 0'>"
-    "<main data-neeko-content style='position: fixed; inset: 0'></main>"
-    "</body></html>"
+    "<main data-neeko-content style='position: fixed; inset: 40px 0 0 160px'>"
+    "</main></body></html>"
 )
 
 PAGES = {
@@ -41,11 +42,39 @@ PAGES = {
     # Titles itself with what a web page can see of the Neeko API.
     "/probe": "<title>probe</title><script>document.title = "
     "[typeof neeko, typeof parent.neeko, typeof top.neeko].join()</script>",
+    # Asks for the location, which opens Firefox's permission prompt.
+    "/geo": "<title>geo</title><script>"
+    "navigator.geolocation.getCurrentPosition(() => {}, () => {})</script>",
+    # Goes fullscreen as soon as it loads (the test allows it without a click).
+    "/fullscreen": "<title>fullscreen</title><script>"
+    "onload = () => document.documentElement.requestFullscreen()</script>",
 }
+
+# Served as a file to download.
+DOWNLOAD = "/download"
 
 
 class Pages(http.server.BaseHTTPRequestHandler):
+    def handle(self):
+        # The browser sometimes drops a connection early (a tab closing or
+        # navigating away mid-load), which is fine.
+        try:
+            super().handle()
+        except ConnectionError:
+            pass
+
     def do_GET(self):
+        if self.path == DOWNLOAD:
+            body = b"A test download from tools/test_api.py\n"
+            self.send_response(200)
+            self.send_header("Content-Type", "application/octet-stream")
+            self.send_header(
+                "Content-Disposition", 'attachment; filename="neeko-test.txt"'
+            )
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
         body = PAGES.get(self.path)
         self.send_response(200 if body else 404)
         self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -91,6 +120,18 @@ return [
 """
 
 
+# For the fallback checks. User prefs win over Marionette's "recommended
+# prefs", which stop the downloads panel from opening by itself.
+FALLBACK_PREFS = {
+    "browser.download.alwaysOpenPanel": True,
+    "browser.download.panel.shown": False,
+    # Let the test page go fullscreen without a click, and without the fade.
+    "full-screen-api.allow-trusted-requests-only": False,
+    "full-screen-api.transition-duration.enter": "0 0",
+    "full-screen-api.transition-duration.leave": "0 0",
+}
+
+
 def launch(binary, profile, prefs):
     with open(os.path.join(profile, "user.js"), "w") as f:
         for name, value in prefs.items():
@@ -112,7 +153,13 @@ def run_in(binary, prefs, script, timeout=120000):
     os.mkdir(ui)
     with open(os.path.join(ui, "index.html"), "w") as f:
         f.write(TEST_UI)
-    prefs = {"marionette.port": port, **prefs}
+    prefs = {
+        "marionette.port": port,
+        # Downloads go into the throwaway profile.
+        "browser.download.dir": os.path.join(profile, "downloads"),
+        "browser.download.folderList": 2,
+        **prefs,
+    }
     if prefs.get("neeko.ui.path") == "TEST_UI":
         prefs["neeko.ui.path"] = ui
     browser = launch(binary, profile, prefs)
@@ -148,7 +195,8 @@ def main():
         with open(os.path.join(ROOT, "tools/test_api.js")) as f:
             script = f.read().replace("__BASE__", base)
         with LeaveNoTrace(app):
-            results = run_in(binary, {"neeko.ui.path": "TEST_UI"}, script)
+            prefs = {"neeko.ui.path": "TEST_UI", **FALLBACK_PREFS}
+            results = run_in(binary, prefs, script)
             results += run_in(binary, {}, BUNDLED_CHECK, timeout=30000)
     finally:
         server.shutdown()

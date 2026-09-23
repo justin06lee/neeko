@@ -35,6 +35,35 @@
   width: 0;
   height: 0;
   overflow: clip;
+  anchor-name: --neeko-page;
+}
+
+/* What Firefox's own panels (permission prompts and the like) hang from,
+   since their toolbar icons are hidden (NeekoPanels): an invisible line along
+   the top of the page, 8px inside its corners, wherever the page is. */
+:root[neeko] #neeko-panel-anchor {
+  position: fixed;
+  position-anchor: --neeko-page;
+  top: calc(anchor(top) + 8px);
+  left: calc(anchor(left) + 8px);
+  right: calc(anchor(right) + 8px);
+  height: 0;
+  pointer-events: none;
+}
+
+/* Web page fullscreen (a video's fullscreen button, say): the page fills the
+   window over the UI, which isn't drawn meanwhile. Firefox sets the attribute
+   until the page exits fullscreen. !important beats the inline position and
+   size NeekoWindow gives the page area. */
+:root[neeko][inDOMFullscreen] #tabbrowser-tabbox {
+  inset: 0 !important;
+  width: auto !important;
+  height: auto !important;
+  border-radius: 0 !important;
+}
+
+:root[neeko][inDOMFullscreen] #neeko-ui {
+  visibility: hidden;
 }
 
 /* The fallback for UIs without an address bar: Cmd+L shows Firefox's own
