@@ -1,0 +1,33 @@
+# Build settings shared by every platform. Surfer merges this file with
+# configs/<os>/mozconfig and writes the result to engine/mozconfig.
+# Surfer replaces the name, binName and appId placeholders with values from
+# surfer.json.
+
+ac_add_options --enable-application=browser
+
+# The program stays "firefox" because artifact builds download Mozilla's
+# prebuilt binaries, which carry that name. The name people see, and the
+# profile folder, come from the app basename below.
+ac_add_options --with-app-name=${binName}
+ac_add_options --with-app-basename=${name}
+ac_add_options --with-distribution-id=${appId}
+
+# Artifact build: download Mozilla's prebuilt C++/Rust for this exact release
+# and build only the frontend (JS/HTML/CSS) locally. Minutes, not hours.
+# Set NEEKO_FULL_BUILD=1 to compile everything from source instead.
+if test -z "$NEEKO_FULL_BUILD"; then
+  ac_add_options --enable-artifact-builds
+
+  # engine/ is a Surfer snapshot, not a Mozilla checkout, so the artifact
+  # finder can't discover the revision from history. The release tarball
+  # records it in sourcestamp.txt.
+  NEEKO_ARTIFACT_REVISION=$(sed -n 's|.*/rev/||p' "$topsrcdir/sourcestamp.txt")
+  mk_add_options "export MOZ_ARTIFACT_REVISION=$NEEKO_ARTIFACT_REVISION"
+fi
+
+# Let mach download any toolchains it needs.
+ac_add_options --enable-bootstrap
+
+# No telemetry uploads.
+mk_add_options MOZ_TELEMETRY_REPORTING=
+mk_add_options MOZ_DATA_REPORTING=
