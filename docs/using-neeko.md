@@ -106,8 +106,8 @@ Everything here is optional.
   (`python3 neeko/tools/test_privacy.py`) shows the effect.
 - **Any Firefox branding file**, at the same path as in Firefox's
   `browser/branding/unofficial/` (for example `content/firefox-wordmark.svg`),
-  replaces Firefox's. Files that aren't Firefox branding files are reported
-  and ignored.
+  replaces Firefox's, and wins over anything made from `icon.png`. Files
+  that aren't Firefox branding files are reported and ignored.
 
 ## How the build uses the app folder
 

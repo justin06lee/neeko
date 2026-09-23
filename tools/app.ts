@@ -272,7 +272,7 @@ function copyBrandingFiles(app: App, out: string) {
   }
 }
 
-// Files made from the app's icon, and the macOS tools that make them.
+// Files made from the app's icon.
 const ICON_FILES = [
   "firefox.icns",
   "Assets.car",
@@ -281,13 +281,14 @@ const ICON_FILES = [
   "content/about-logo@2x.png",
   "content/about-logo.svg",
 ];
-const ICON_STAMP = ".neeko-icon";
+// Generated icons, one folder per version of the app's icon, so a rebuild
+// with the same icon doesn't make them again.
+const ICON_CACHE = join(ENGINE, ".neeko-cache/icons");
 
 /**
  * Makes the app icon (macOS app icon, window icons, the logo on Firefox's
  * own pages) from branding/icon.png, a square PNG of at least 1024 pixels.
  * branding/icon.svg, if there, is used where Firefox wants an SVG logo.
- * Skipped when nothing changed, since it takes a few seconds.
  */
 function writeIcons(app: App, out: string) {
   let png = join(app.dir, "branding/icon.png");
@@ -299,20 +300,23 @@ function writeIcons(app: App, out: string) {
     .update(readFileSync(png))
     .update(existsSync(svg) ? readFileSync(svg) : "")
     .digest("hex");
-  let cached = join(BRANDING, ICON_STAMP);
-  if (existsSync(cached) && read(cached) == hash && ICON_FILES.every(f => existsSync(join(BRANDING, f)))) {
-    for (let file of ICON_FILES) {
-      cpSync(join(BRANDING, file), join(out, file));
+  let cache = join(ICON_CACHE, hash);
+  if (!ICON_FILES.every(file => existsSync(join(cache, file)))) {
+    if (process.platform != "darwin") {
+      console.warn("neeko: app icons are only generated on macOS for now; keeping Firefox's.");
+      return;
     }
-    writeFileSync(join(out, ICON_STAMP), hash);
-    return;
+    rmSync(ICON_CACHE, { recursive: true, force: true });
+    makeIcons(png, svg, cache);
   }
-  if (process.platform != "darwin") {
-    console.warn("neeko: app icons are only generated on macOS for now; keeping Firefox's.");
-    return;
+  for (let file of ICON_FILES) {
+    cpSync(join(cache, file), join(out, file));
   }
+}
 
+function makeIcons(png: string, svg: string, out: string) {
   let work = mkdtempSync(join(tmpdir(), "neeko-icon-"));
+  mkdirSync(join(out, "content"), { recursive: true });
   try {
     let resize = (size: number, to: string) =>
       run("sips", ["-z", `${size}`, `${size}`, png, "--out", to]);
@@ -337,13 +341,12 @@ function writeIcons(app: App, out: string) {
     writeFileSync(join(work, "Icon.xcassets/Contents.json"), JSON.stringify({ info }));
     run("iconutil", ["-c", "icns", iconset, "-o", join(out, "firefox.icns")]);
     run("xcrun", [
-      "actool", "--compile", out, "--platform", "macosx",
+      "actool", "--compile", work, "--platform", "macosx",
       "--minimum-deployment-target", "10.15", "--app-icon", "AppIcon",
       "--output-partial-info-plist", join(work, "partial.plist"),
       join(work, "Icon.xcassets"),
     ]);
-    // actool also writes AppIcon.icns next to Assets.car; firefox.icns is it.
-    rmSync(join(out, "AppIcon.icns"), { force: true });
+    cpSync(join(work, "Assets.car"), join(out, "Assets.car"));
 
     for (let size of [16, 22, 24, 32, 48, 64, 128, 256]) {
       resize(size, join(out, `default${size}.png`));
@@ -360,7 +363,9 @@ function writeIcons(app: App, out: string) {
           `<image width="384" height="384" href="data:image/png;base64,${data}"/></svg>\n`
       );
     }
-    writeFileSync(join(out, ICON_STAMP), hash);
+  } catch (e) {
+    rmSync(out, { recursive: true, force: true });
+    throw e;
   } finally {
     rmSync(work, { recursive: true, force: true });
   }
@@ -440,23 +445,21 @@ function writeBranding(app: App) {
     cpSync(BASE_BRANDING, out, { recursive: true });
     writeNames(app, out);
     writePrefs(app, out);
-    copyBrandingFiles(app, out);
     writeIcons(app, out);
+    // After the icons, so a file the app made by hand wins over a generated one.
+    copyBrandingFiles(app, out);
     writeUI(app, out);
     writeBuildSettings(app, out);
     sync(out, BRANDING);
-    // The stamp is a dotfile, which sync() skips.
-    if (existsSync(join(out, ICON_STAMP))) {
-      writeIfChanged(join(BRANDING, ICON_STAMP), read(join(out, ICON_STAMP)));
-    }
   } finally {
     rmSync(out, { recursive: true, force: true });
   }
   // Keep engine/'s own git status clean, as Surfer does for Neeko's files.
   let gitignore = join(ENGINE, ".gitignore");
-  let entry = `browser/branding/${BRAND}/`;
-  if (!read(gitignore).split("\n").includes(entry)) {
-    appendFileSync(gitignore, `\n${entry}\n`);
+  for (let entry of [`browser/branding/${BRAND}/`, ".neeko-cache/"]) {
+    if (!read(gitignore).split("\n").includes(entry)) {
+      appendFileSync(gitignore, `\n${entry}\n`);
+    }
   }
 }
 
