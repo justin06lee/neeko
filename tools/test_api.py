@@ -115,10 +115,16 @@ for (let i = 0; i < 200 && !frame?.contentWindow?.neeko; i++) {
 let served = Cc["@mozilla.org/chrome/chrome-registry;1"]
   .getService(Ci.nsIChromeRegistry)
   .convertChromeURL(Services.io.newURI("chrome://neeko-ui/content/index.html")).spec;
+let slot = frame?.contentDocument?.querySelector("[data-neeko-content]");
+for (let i = 0; i < 100 && !(slot?.getBoundingClientRect().height > 100); i++) {
+  await new Promise(r => setTimeout(r, 50));
+}
+let height = Math.round(slot?.getBoundingClientRect().height ?? 0);
 let ok = test => (test ? "ok  " : "FAIL");
 return [
   `${ok(frame?.contentWindow?.neeko)} without neeko.ui.path, the bundled UI loads with the API`,
   `${ok(served.includes("/chrome/browser/content/neeko-ui/"))} it comes from inside the app (${served})`,
+  `${ok(height > 100)} its content slot has room for the page (${height}px high)`,
 ];
 """
 
