@@ -15,6 +15,10 @@ get added as it needs them.
   events; go, back, forward, reload, URL, title, loading state.
 - [x] **Address bar requests** (v0.1.0): Cmd+L and new New Tab pages ask the
   UI's address bar; Firefox's own address bar is the fallback.
+- [x] **Firefox's own fallbacks under a custom UI** (v0.1.1): web page
+  fullscreen fills the screen; permission prompts and other panels hang
+  from the top of the page; the downloads panel opens when a download
+  starts.
 
 ## API features, in order
 
