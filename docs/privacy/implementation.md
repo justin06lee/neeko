@@ -134,25 +134,36 @@ datareporting.healthreport.uploadEnabled=true`), it failed on:
 The non-security ones are what the Remote Settings filtering decision (below)
 is about.
 
-## Not done yet
+## Loose ends, and what was decided
 
-- **Firefox Labs** stays available. So Firefox still downloads the list of
-  experiments from Remote Settings (the same host that's kept for security
-  lists), but it enrolls in nothing unless the user opts into a Labs feature.
-  Only a policy turns this off (see above).
-- **Remote Settings syncs more than security lists.** It also updates other
-  data collections that ship with Firefox (search, New Tab, translation
-  metadata and similar), all from the same kept host, sending nothing about
-  you. Limiting it to security lists takes a Firefox source patch, like
-  LibreWolf's. Decide later, with the privacy test's list of collections.
-- **Firefox Suggest can come back if a region is set.** Firefox turns Suggest
-  on at runtime in some countries (US, UK, Germany, France, Italy) once it
-  knows the region. Region detection is off, so it stays off, unless a user
-  or a browser built on Neeko sets `browser.search.region`.
-- **The crash handler still writes crash dumps locally** (nothing is sent).
-  Turning it off completely takes an environment variable at launch.
-- **Shipping** (solved in setup step 6, [`../using-neeko.md`](../using-neeko.md)):
-  packaged builds now include Neeko's pref files (a three-line patch to
+- **Firefox Labs: left on, no policy** (decided). Only an enterprise policy
+  turns it off, with the costs above. Nimbus keeps a recipe loader running
+  for it, which checks the kept Remote Settings host every 6 hours (the
+  first check comes 6 hours after first launch, so the privacy test doesn't
+  see it). It enrolls in nothing unless the user opts into a Labs feature
+  in Settings.
+- **Remote Settings syncs more than security lists: left as is**
+  (recommended, waiting for the user's word). The privacy test lists about
+  35 collections: the security ones, plus search engine config, website
+  compatibility fixes, password-form rules, translation and New Tab data
+  and similar. They come from the same kept host, in the same requests as
+  the security lists, and send nothing about you, so filtering them would
+  only save downloads. It would take a patch to Firefox's Remote Settings
+  code, like LibreWolf's.
+- **Firefox Suggest can come back if a region is set: left as is**
+  (recommended, waiting for the user's word). Firefox turns Suggest on at
+  runtime in some countries (US, UK, Germany, France, Italy) once it knows
+  the region, setting its own defaults over Neeko's. Region detection is
+  off, so it stays off unless a user or a browser built on Neeko sets
+  `browser.search.region`, and even then it only shows in Firefox's own
+  fallback address bar, not in a custom UI's. The privacy test fails on
+  Suggest's online endpoint if it ever shows up.
+- **Local crash dumps: solved by release builds.** Dev builds use Mozilla's
+  prebuilt core, whose crash handler can still write crash dumps into the
+  profile (nothing is sent). Release builds (`make release`) compile the
+  crash reporter out.
+- **Shipping: solved in setup step 6** ([`../using-neeko.md`](../using-neeko.md)).
+  Packaged builds include Neeko's pref files (a three-line patch to
   Firefox's package list), and release builds compile their own launcher,
   so they carry the browser's name and profile folder instead of Firefox's
   and have telemetry upload compiled out. `tools/test_release.py` checks

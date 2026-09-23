@@ -1,0 +1,110 @@
+# Roadmap
+
+API features to add, one at a time, most essential first. Each one ships
+with a fallback (Firefox's own behavior while no UI listens), a section in
+[docs/api.md](docs/api.md), a demo in the demo UI (`ui/`), and checks in
+`tools/test_api.js` ([CLAUDE.md](CLAUDE.md) has the rules). The order is a
+recommendation: the user's browser decides what comes next, since features
+get added as it needs them.
+
+"Today" notes what happens without the feature, as of Firefox 156.0.1.
+
+## Done
+
+- [x] **Tabs and navigation** (v0.1.0): list, open, close, select, change
+  events; go, back, forward, reload, URL, title, loading state.
+- [x] **Address bar requests** (v0.1.0): Cmd+L and new New Tab pages ask the
+  UI's address bar; Firefox's own address bar is the fallback.
+
+## API features, in order
+
+1. [ ] **Permission prompts and other doorhangers.** Camera, microphone,
+   location, notifications, pop-ups, password saving, add-on installs: the
+   UI gets the request and answers it. Fallback: Firefox's own prompt,
+   anchored somewhere sensible. Today: Firefox's prompt still opens, but
+   pinned to the window's top-left corner, because the icon it anchors to is
+   hidden.
+2. [ ] **Fullscreen.** Web page fullscreen (videos) and window fullscreen:
+   the UI hears about it and can get out of the way; by default the page
+   fills the window. Today: to check; the page area is pinned to the UI's
+   content slot, so fullscreen video may stay inside it.
+3. [ ] **Downloads.** List, progress, open, show in Finder, cancel, and a
+   "download started" event. Fallback: Firefox's downloads panel. Today:
+   files download silently; the panel anchors on a hidden button and never
+   shows.
+4. [ ] **Favicons, by reference.** Each tab's icon as a URL the UI can put
+   in an `<img>`, never image data copied through the API.
+5. [ ] **Context menus.** The UI can draw its own menu for pages, links,
+   images and selections, with Firefox's actions available. Fallback:
+   Firefox's own context menu.
+6. [ ] **Find in page.** Find, next, previous, match count. Fallback:
+   Firefox's find bar.
+7. [ ] **Address bar suggestions.** History, bookmark and open-tab matches
+   for what the user types, and search suggestions, fetched only when the
+   UI asks (search suggestions send what you type to the search engine,
+   which is why they're off in Firefox's hidden address bar).
+8. [ ] **History.** Search and list visits, delete entries.
+9. [ ] **Bookmarks.** Read, add, edit, remove, with change events.
+10. [ ] **Tab sleeping.** Unload a tab to save memory, and a `sleeping`
+    field on tabs. Needed for "a bajillion tabs".
+11. [ ] **Tab previews, by reference.** Thumbnails the UI shows without
+    copying image data.
+12. [ ] **Extensions UI.** List extensions' toolbar buttons, show their
+    badges and open their popups from the UI. Today: extensions work, but
+    their buttons live in the hidden toolbar.
+13. [ ] **DevTools.** Open and close DevTools for the page, and the Browser
+    Toolbox for the UI (dev builds already allow it).
+14. [ ] **Performance test with a budget.** Automated: hundreds of tabs,
+    memory and tab-switch time, measured against stock Firefox, failing
+    when Neeko gets slower.
+15. [ ] **"Trick" mode.** Run the UI as a sandboxed, unprivileged page that
+    can only use the API. The API is already messages of plain data, so
+    this swaps the channel, not the calls.
+
+## Privacy
+
+- [ ] **Protection from website tracking.** A separate problem from Mozilla
+  telemetry, which is done: this is about what websites and their trackers
+  learn. Tracking protection strictness (Firefox's standard mode is on
+  today), fingerprinting resistance, cookie isolation, and speculative
+  connections and prefetch (#23 in the privacy inventory, left alone so far).
+  Research what Firefox 156 offers, compare Betterfox, arkenfox and
+  LibreWolf, and propose defaults with their trade-offs (some sites break
+  under strict settings).
+
+## Shipping (for when browsers are distributed)
+
+- [ ] **Signing and notarization** for macOS, with the browser's own Apple
+  Developer ID, in `make release`.
+- [ ] **Updates** from the browser's own update server (app updates are
+  compiled out today; Surfer can generate update manifests).
+- [ ] **Crash reports** to a self-hosted server, if wanted (compiled out
+  today).
+- [ ] **Safe Browsing** with the browser's own Google API key, if wanted
+  (off today: no key, so no phishing and malware warnings).
+- [ ] **Linux and Windows builds** (untested so far).
+
+## Open decisions (the user's)
+
+- **Neeko's license.** `package.json` says MPL-2.0 as a placeholder, the same
+  as Firefox's. Not confirmed.
+- **Neeko's name and branding** beyond the placeholder: the demo app is
+  "Neeko" with an icon made from the README banner's fox mask.
+- **Publishing Neeko:** creating a GitHub repo and pushing. Until then,
+  browsers use a local path as the submodule URL.
+- **Remote Settings filtering** (recommended: leave as is). Firefox's
+  Remote Settings keeps about 35 data collections fresh, not just the
+  security lists: search engine config, website compatibility fixes,
+  password-form rules, some New Tab data. They come from the same host as
+  the security lists in the same requests, sending nothing about you, so
+  filtering them would save downloads, not privacy. It would take a patch
+  to Firefox's Remote Settings code, as LibreWolf does.
+- **Firefox Suggest if a region is set** (recommended: leave as is). If a
+  user or a browser sets `browser.search.region` to the US, UK, Germany,
+  France or Italy, Firefox turns on Suggest in its own (fallback) address
+  bar at runtime, over Neeko's defaults. Region detection is off, so this
+  only happens by choice, and custom address bars don't use it. Blocking it
+  anyway would mean Neeko fighting Firefox's runtime prefs.
+- **Firefox Labs** (decided: no policy for now). Only an enterprise policy
+  turns it off, which would show "managed by your organization". It enrolls
+  in nothing unless the user opts in from Settings.

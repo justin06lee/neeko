@@ -188,7 +188,17 @@ checkout), send it to Neeko, and point this repo at the release that has it.
 
 After \`make build\`: \`python3 neeko/tools/test_api.py\` checks the API, and
 \`python3 neeko/tools/test_privacy.py\` checks that nothing is sent anywhere
-Neeko turns off, with this browser's UI.
+Neeko turns off, with this browser's UI. After \`make release\`,
+\`python3 neeko/tools/test_release.py dist/${name}.app\` checks the packaged
+app is its own browser.
+
+## Privacy
+
+${name} inherits Neeko's privacy defaults: no telemetry, studies, ads or
+crash reports, from the first launch.
+[neeko/PRIVACY.md](neeko/PRIVACY.md) lists every connection it makes, in
+plain language. If you change a privacy default in \`branding/prefs.js\`,
+say so in your own privacy notice.
 `,
 };
 for (let [path, contents] of Object.entries(files)) {

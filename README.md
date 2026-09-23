@@ -155,9 +155,10 @@ launcher too, so they carry the app's own name and profile folder.
 
 Privacy is on by default: nothing is sent to Mozilla for telemetry, studies,
 ads or crash reports, from the first launch, in every browser built on Neeko.
-`src/browser/neeko/firefox-neeko-privacy.js` holds those defaults, and
-[docs/privacy/](docs/privacy/implementation.md) explains every connection
-that's left and why.
+`src/browser/neeko/firefox-neeko-privacy.js` holds those defaults.
+[PRIVACY.md](PRIVACY.md) lists every connection that's left and why, in
+plain language, and [docs/privacy/](docs/privacy/implementation.md) has the
+details.
 
 ```
 neeko/
@@ -171,13 +172,23 @@ neeko/
 │       ├── neeko/            Window hook, API, hide styles, prefs, privacy defaults
 │       ├── moz-build.patch   Adds neeko/ to the build
 │       └── installer/        Adds Neeko's prefs to packaged builds
-├── docs/         API reference, build plan, using Neeko in a browser, privacy
+├── docs/         API reference, using Neeko in a browser, privacy research,
+│                 lessons learned, history
 ├── tools/        The app step (app.ts), the starter (new-browser.ts), tests
 ├── assets/       README artwork
 ├── Makefile
 ├── engine/       Firefox source, downloaded by Surfer (not committed)
 └── dist/         Release packages from make release (not committed)
 ```
+
+## More
+
+- [ARCHITECTURE.md](ARCHITECTURE.md): how the layers connect, and why.
+- [ROADMAP.md](ROADMAP.md): the API features coming next, in order.
+- [PRIVACY.md](PRIVACY.md): every connection a browser built on Neeko makes,
+  in plain language.
+- [CLAUDE.md](CLAUDE.md): the rules for working on Neeko.
+- [docs/lessons.md](docs/lessons.md): Firefox and tooling traps.
 
 ## License
 
