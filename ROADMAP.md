@@ -93,9 +93,8 @@ get added as it needs them.
 
 - **Neeko's license.** `package.json` says MPL-2.0 as a placeholder, the same
   as Firefox's. Not confirmed.
-- **Neeko's name and branding** beyond the placeholder. The README banner
-  shows the golden ring icon (light mode) and the blue butterfly (dark
-  mode); both are in `assets/` in macOS app icon shape. The demo app itself
+- **Neeko's name and branding** beyond the placeholder. The README shows
+  the golden ring icon (light mode) and the blue butterfly (dark mode); both are in `assets/` in macOS app icon shape. The demo app itself
   still has the placeholder fox-mask icon (`branding/`). If the icons'
   artwork is someone else's, using it publicly needs their permission.
 - **Making Neeko public.** It's on GitHub as a private repo
