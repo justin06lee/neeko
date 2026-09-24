@@ -1,6 +1,9 @@
 <div align="center">
 
-<img src="assets/neeko.svg" alt="neeko" width="620" />
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/banner-dark.svg" />
+  <img src="assets/banner-light.svg" alt="neeko" width="620" />
+</picture>
 
 # neeko
 
