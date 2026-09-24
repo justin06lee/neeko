@@ -1,11 +1,14 @@
 <div align="center">
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/banner-dark.svg" />
-  <img src="assets/banner-light.svg" alt="neeko" width="620" />
+  <source media="(prefers-color-scheme: dark)" srcset="assets/icon-butterfly.svg" />
+  <img src="assets/icon-ring.svg" alt="" width="200" />
 </picture>
-
-# neeko
+<br>
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/wordmark-dark.svg" />
+  <img src="assets/wordmark-light.svg" alt="neeko" width="240" />
+</picture>
 
 **Build any browser UI you want in plain HTML, CSS and JS. Firefox does the rest.**<br>
 *Firefox underneath, any face on top.*
