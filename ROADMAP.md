@@ -93,10 +93,14 @@ get added as it needs them.
 
 - **Neeko's license.** `package.json` says MPL-2.0 as a placeholder, the same
   as Firefox's. Not confirmed.
-- **Neeko's name and branding** beyond the placeholder: the demo app is
-  "Neeko" with an icon made from the README banner's fox mask.
-- **Publishing Neeko:** creating a GitHub repo and pushing. Until then,
-  browsers use a local path as the submodule URL.
+- **Neeko's name and branding** beyond the placeholder. The README banner
+  shows the golden ring icon (light mode) and the blue butterfly (dark
+  mode); both are in `assets/` in macOS app icon shape. The demo app itself
+  still has the placeholder fox-mask icon (`branding/`). If the icons'
+  artwork is someone else's, using it publicly needs their permission.
+- **Making Neeko public.** It's on GitHub as a private repo
+  (github.com/justin06lee/neeko, since 2026-09-24); browsers use it as
+  their submodule URL. Public depends on the license and branding above.
 - **Remote Settings filtering** (recommended: leave as is). Firefox's
   Remote Settings keeps about 35 data collections fresh, not just the
   security lists: search engine config, website compatibility fixes,
