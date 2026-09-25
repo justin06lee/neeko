@@ -258,7 +258,12 @@ def run_in(binary, prefs, script, timeout=120000):
     try:
         m = connect(port, browser)
         m.send("WebDriver:SetTimeouts", {"script": timeout})
+        # The whole script is one Marionette command, so its reply can take
+        # longer than the socket's usual minute.
+        m.sock.settimeout(timeout / 1000 + 30)
+        started = time.time()
         results = m.run(script)
+        print(f"(the checks took {time.time() - started:.0f} seconds)")
         if isinstance(results, str):  # the script itself threw
             results = [f"FAIL {results}"]
         try:
