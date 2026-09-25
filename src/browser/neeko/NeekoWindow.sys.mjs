@@ -19,6 +19,7 @@
 
 import { AppConstants } from "resource://gre/modules/AppConstants.sys.mjs";
 import { NeekoAPI } from "moz-src:///browser/neeko/NeekoAPI.sys.mjs";
+import { NeekoBookmarks } from "moz-src:///browser/neeko/NeekoBookmarks.sys.mjs";
 import { NeekoPanels } from "moz-src:///browser/neeko/NeekoPanels.sys.mjs";
 import { NeekoSettings } from "moz-src:///browser/neeko/NeekoSettings.sys.mjs";
 
@@ -165,6 +166,7 @@ function connectAPI(win, uiWin) {
     platform: PLATFORMS[AppConstants.platform] ?? AppConstants.platform,
     settings: NeekoSettings.all(),
     colorScheme: NeekoSettings.colorScheme(),
+    bookmarkFolders: NeekoBookmarks.folders,
   });
 
   let api = null;
@@ -223,6 +225,22 @@ function handleOpenLocation(win) {
       return;
     }
     showFirefoxAddressBar(win);
+  });
+}
+
+/**
+ * Cmd+D (Bookmarks > Bookmark Current Tab) asks to bookmark the page. A UI
+ * that listens for the "bookmarks.request" event gets it instead of
+ * Firefox, whose own bookmark panel otherwise opens at the top of the page
+ * (NeekoPanels).
+ */
+function handleBookmarkPage(win) {
+  let command = win.document.getElementById("Browser:AddBookmarkAs");
+  command?.addEventListener("command", event => {
+    if (apis.get(win)?.requestBookmark()) {
+      // Firefox's own handler listens further up; it never hears this one.
+      event.stopPropagation();
+    }
   });
 }
 
@@ -542,6 +560,7 @@ export const NeekoWindow = {
     doc.body.prepend(frame);
 
     handleOpenLocation(win);
+    handleBookmarkPage(win);
     NeekoPanels.init(win, () => apis.get(win));
   },
 };

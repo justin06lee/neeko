@@ -352,6 +352,33 @@ Add to it whenever something costs you time.
   current. NeekoAPI starts in the same task as the install (gBrowser
   exists by then), so no change falls in between; if it ever starts later,
   `resync()` sends every setting again.
+- **Cmd+D did nothing under Neeko** (until v0.6.0). The bookmark panel
+  hangs from the address bar's star: `BookmarkingUI.anchor` asks
+  `BrowserPageActions.panelAnchorNodeForAction`, which throws "PageActions:
+  No anchor node for bookmark" when the star isn't laid out, so
+  `StarUI.showEditBookmarkPopup` fails, and since new bookmarks are only
+  saved when that panel closes (`StarUI.showForNewBookmarks`), nothing is
+  bookmarked either. `NeekoPanels` redefines the `anchor` getter to fall
+  back to the page's anchor. Cmd+D is the `Browser:AddBookmarkAs` command,
+  handled by `browser-sets.js` further up, like Cmd+L.
+- **Bookmarks are Places items with GUIDs** (12 characters, the same across
+  sessions). `PlacesUtils.bookmarks.fetch()` throws on a malformed GUID
+  ("Invalid value for property 'guid'"), so check `PlacesUtils.isValidGuid`
+  first. `promiseBookmarksTree(guid)` reads a folder with everything under
+  it, and each bookmark's `iconUri` if Firefox has an icon for the page.
+  Tags are bookmarks inside folders under `tagsGuid`; Places events for them
+  have `isTagging`, and `fetch({ url })` leaves them out. Removing a folder
+  sends `bookmark-removed` for everything in it too, marked
+  `isDescendantRemoval`. Places event times are in milliseconds; the tree's
+  are in microseconds.
+- **`page-icon:<page URL>`** serves the icon Firefox has stored for a page
+  (Places' `PageIconProtocolHandler`), or Firefox's default icon if it has
+  none, so check for one (`PlacesUtils.favicons.getFaviconForPage`) to
+  report null. Firefox's own bookmarks toolbar uses these URLs.
+- **The API's methods can't touch NeekoAPI's private fields.** `METHODS`
+  is outside the class, so `this.#field` there is a syntax error that stops
+  NeekoAPI loading at all (and with it every window's UI). Give the class a
+  method instead.
 - **Firefox's names for platforms** (`AppConstants.platform`) are
   `macosx`, `win` and `linux`; `neeko.platform` says `macos`, `windows`,
   `linux`.

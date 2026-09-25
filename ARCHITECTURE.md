@@ -83,6 +83,8 @@ official startup hooks (`Neeko.manifest`):
   answers calls and turns Firefox's tab and navigation signals into events.
 - **`NeekoDownloads.sys.mjs`** follows the window's downloads for the API,
   once the UI asks about them.
+- **`NeekoBookmarks.sys.mjs`** turns Firefox's bookmarks (Places) into plain
+  data and events for the API.
 - **`NeekoSettings.sys.mjs`** keeps the UI's settings (prefs named
   `neeko.settings.*`, shared by every window) and the color scheme
   (Firefox's `ui.systemUsesDarkTheme`). The UI gets both with `neeko`,
@@ -151,6 +153,7 @@ and sends events, but only the ones the UI listens for.
   the UI.
 - No `downloads` `start` listener: Firefox's downloads panel opens when a
   download starts.
+- No `bookmarks` `request` listener: Cmd+D opens Firefox's bookmark panel.
 
 Every future feature with a Firefox fallback (context menus, find in page)
 works the same way. Until then, Firefox's own versions of those already

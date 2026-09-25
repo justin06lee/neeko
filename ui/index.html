@@ -7,8 +7,9 @@
   overlap it. On macOS the window buttons appear wherever
   data-neeko-window-buttons is.
 
-  This is the demo UI: a tab list, an address bar, a menu, a bar for
-  permission prompts and a downloads list, built only on the Neeko API (the global
+  This is the demo UI: a tab list, an address bar with a bookmark star, a
+  menu, a bar for permission prompts, and bookmarks and downloads lists,
+  built only on the Neeko API (the global
   `neeko` object, see docs/api.md). It's plain on purpose, just enough to show every API feature
   working. Replace it with your own.
 -->
@@ -28,6 +29,10 @@
     <aside>
       <button id="new-tab" title="New tab (Cmd+T)">+ New tab</button>
       <ol id="tabs"></ol>
+      <section id="bookmarks" hidden>
+        <h2>Bookmarks</h2>
+        <ol></ol>
+      </section>
       <section id="downloads" hidden>
         <h2>Downloads</h2>
         <ol></ol>
@@ -43,6 +48,7 @@
         spellcheck="false"
         autocomplete="off"
       />
+      <button id="star" title="Bookmark this page (Cmd+D)" disabled>&#x2606;</button>
       <button id="fullscreen" title="Full screen (Ctrl+Cmd+F)">&#x2922;</button>
       <button id="menu-button" title="Menu" aria-haspopup="menu">&#x22EF;</button>
     </header>

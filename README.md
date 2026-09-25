@@ -31,8 +31,9 @@ the UI a small JavaScript API for tabs (with their icons, sound, crashes
 and error pages), navigation, permission prompts, fullscreen and downloads.
 `ui/` holds a deliberately plain demo UI built only on that API: a tab list
 you can reorder, mute and duplicate from, back, forward and reload, an
-address bar, a bar for permission prompts, a downloads list, and a layout
-that steps aside for fullscreen videos. A browser built on Neeko keeps Neeko as a
+address bar with a bookmark star, a menu over the page, light and dark
+looks, a bar for permission prompts, bookmarks and downloads lists, and a
+layout that steps aside for fullscreen videos. A browser built on Neeko keeps Neeko as a
 submodule and brings its own UI, name and icon, and `make release` turns it
 into a packaged app with its own identity.
 
@@ -99,8 +100,8 @@ browsers use.
 - Your scripts get a global `neeko` object, the Neeko API: list, open, close,
   switch, move, duplicate and mute tabs (with their icons), navigate, answer
   sites' permission requests, lay out fullscreen, follow and manage
-  downloads, keep your UI's settings for every window, make pages light or
-  dark, and hear about every change. It's documented in
+  downloads, read and edit bookmarks, keep your UI's settings for every
+  window, make pages light or dark, and hear about every change. It's documented in
   [docs/api.md](docs/api.md), and `ui/app.js` shows all of it in use.
 - Scripts must be separate files (the page's security policy blocks inline
   scripts). They load from `chrome://neeko-ui/content/`, which maps to `ui/`.

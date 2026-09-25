@@ -18,6 +18,7 @@
  * UI steps in.
  */
 
+import { NeekoBookmarks } from "moz-src:///browser/neeko/NeekoBookmarks.sys.mjs";
 import { NeekoDownloads } from "moz-src:///browser/neeko/NeekoDownloads.sys.mjs";
 import { NeekoPanels } from "moz-src:///browser/neeko/NeekoPanels.sys.mjs";
 import { NeekoSettings } from "moz-src:///browser/neeko/NeekoSettings.sys.mjs";
@@ -158,6 +159,11 @@ const EVENTS = [
   "downloads.remove",
   "settings.change",
   "colorScheme.change",
+  "bookmarks.add",
+  "bookmarks.remove",
+  "bookmarks.move",
+  "bookmarks.update",
+  "bookmarks.request",
 ];
 
 // Events sent whether or not the UI listens: neeko-api.js keeps its copy of
@@ -254,6 +260,8 @@ const METHODS = {
     if (event.startsWith("downloads.")) {
       // Download events come from following the window's list.
       this.downloads();
+    } else if (event.startsWith("bookmarks.") && event != "bookmarks.request") {
+      this.watchBookmarks();
     } else if (event == "prompts.open") {
       NeekoPanels.setUIShowsPrompts(this.win, listening);
     } else if (event == "fullscreen.page") {
@@ -492,6 +500,30 @@ const METHODS = {
   "colorScheme.set"(scheme) {
     NeekoSettings.setColorScheme(scheme);
   },
+
+  "bookmarks.list"(folderId) {
+    return NeekoBookmarks.list(folderId);
+  },
+
+  "bookmarks.get"(id) {
+    return NeekoBookmarks.get(id);
+  },
+
+  "bookmarks.find"(url) {
+    return NeekoBookmarks.find(url);
+  },
+
+  "bookmarks.add"(item) {
+    return NeekoBookmarks.add(item);
+  },
+
+  "bookmarks.update"(id, changes) {
+    return NeekoBookmarks.update(id, changes);
+  },
+
+  "bookmarks.remove"(id) {
+    return NeekoBookmarks.remove(id);
+  },
 };
 
 export class NeekoAPI {
@@ -514,6 +546,8 @@ export class NeekoAPI {
   #crashes;
   /** Stop following the settings and the color scheme. */
   #unwatch = [];
+  /** Stops following the bookmarks, once the UI listens for their events. */
+  #unwatchBookmarks = null;
   #ui;
   #send;
   #destroyed = false;
@@ -596,6 +630,7 @@ export class NeekoAPI {
     for (let unwatch of this.#unwatch) {
       unwatch();
     }
+    this.#unwatchBookmarks?.();
     // The icons' blob: URLs go with the UI page.
     this.#icons.clear();
   }
@@ -645,6 +680,33 @@ export class NeekoAPI {
       return false;
     }
     this.#emit("nav.addressbar", {});
+    return true;
+  }
+
+  /**
+   * Follows Firefox's bookmarks for the API's events, from the first time the
+   * UI listens for one.
+   */
+  watchBookmarks() {
+    this.#unwatchBookmarks ??= NeekoBookmarks.watch((name, data) =>
+      this.#emit(name, data)
+    );
+  }
+
+  /**
+   * Tells the UI that the user wants to bookmark the page (Cmd+D), if it
+   * bookmarks pages itself.
+   *
+   * @returns {boolean} false if the UI doesn't listen for that, so Firefox's
+   *   own bookmark panel should open instead.
+   */
+  requestBookmark() {
+    if (!this.listening.has("bookmarks.request")) {
+      return false;
+    }
+    this.#emit("bookmarks.request", {
+      tabId: tabId(this.gBrowser.selectedTab),
+    });
     return true;
   }
 

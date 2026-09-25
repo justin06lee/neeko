@@ -137,6 +137,10 @@ function showToolbar() {
   }
   back.disabled = !tab.canGoBack;
   forward.disabled = !tab.canGoForward;
+  if (star.dataset.url != tab.url) {
+    star.dataset.url = tab.url;
+    showStar().catch(reportError);
+  }
   reload.classList.toggle("loading", tab.loading);
   if (!editing) {
     address.value = BLANK_PAGES.includes(tab.url) ? "" : tab.url;
@@ -379,6 +383,127 @@ function toggleWindowFullscreen() {
 }
 fullscreenButton.addEventListener("click", toggleWindowFullscreen);
 
+// Bookmarks: the star in the toolbar bookmarks the page (or unbookmarks
+// it), and the bookmarks toolbar's contents show in the sidebar, where
+// folders open in place. Cmd+D is the star's too: listening for "request"
+// tells Neeko not to open Firefox's own bookmark panel.
+const star = document.getElementById("star");
+const bookmarkList = document.querySelector("#bookmarks ol");
+const openFolders = new Set();
+
+async function showStar() {
+  let tab = tabs.get(currentId);
+  let page = tab && !BLANK_PAGES.includes(tab.url) ? tab.url : null;
+  let bookmarked = page && (await neeko.bookmarks.find(page)).length > 0;
+  if (tabs.get(currentId)?.url != tab?.url) {
+    return;
+  }
+  star.disabled = !page;
+  star.textContent = bookmarked ? "★" : "☆";
+  star.classList.toggle("on", !!bookmarked);
+  star.title = bookmarked ? "Remove bookmark" : "Bookmark this page (Cmd+D)";
+}
+
+async function toggleBookmark() {
+  let tab = tabs.get(currentId);
+  if (!tab || BLANK_PAGES.includes(tab.url)) {
+    return;
+  }
+  let existing = await neeko.bookmarks.find(tab.url);
+  if (existing.length) {
+    await Promise.all(existing.map(b => neeko.bookmarks.remove(b.id)));
+  } else {
+    await neeko.bookmarks.add({ url: tab.url, title: tab.title });
+  }
+}
+
+async function showBookmarks() {
+  let rows = async (folderId, depth) => {
+    let items = [];
+    for (let bookmark of await neeko.bookmarks.list(folderId)) {
+      if (bookmark.type == "separator") {
+        continue;
+      }
+      let item = document.createElement("li");
+      item.dataset.id = bookmark.id;
+      item.dataset.type = bookmark.type;
+      item.style.paddingInlineStart = `${10 + depth * 14}px`;
+      let icon = document.createElement("span");
+      icon.className = "icon";
+      if (bookmark.type == "folder") {
+        icon.textContent = openFolders.has(bookmark.id) ? "▾" : "▸";
+      } else if (bookmark.icon) {
+        let image = document.createElement("img");
+        image.src = bookmark.icon;
+        icon.append(image);
+      }
+      let title = document.createElement("span");
+      title.className = "title";
+      title.textContent = bookmark.title || bookmark.url;
+      item.title = bookmark.url ?? bookmark.title;
+      item.dataset.url = bookmark.url ?? "";
+      let remove = document.createElement("button");
+      remove.className = "remove";
+      remove.title = "Remove";
+      remove.textContent = "×";
+      item.append(icon, title, remove);
+      items.push(item);
+      if (bookmark.type == "folder" && openFolders.has(bookmark.id)) {
+        items.push(...(await rows(bookmark.id, depth + 1)));
+      }
+    }
+    return items;
+  };
+  let items = await rows(neeko.bookmarks.folders.toolbar, 0);
+  bookmarkList.replaceChildren(...items);
+  bookmarkList.parentNode.hidden = !items.length;
+}
+
+// Any change redraws the list and the star, at most once per frame.
+let bookmarksChanged = false;
+function redrawBookmarks() {
+  if (!bookmarksChanged) {
+    bookmarksChanged = true;
+    requestAnimationFrame(() => {
+      bookmarksChanged = false;
+      showBookmarks().catch(reportError);
+      showStar().catch(reportError);
+    });
+  }
+}
+for (let type of ["add", "remove", "move", "update"]) {
+  neeko.bookmarks.on(type, redrawBookmarks);
+}
+neeko.bookmarks.on("request", async () => {
+  let tab = tabs.get(currentId);
+  if (tab && !(await neeko.bookmarks.find(tab.url)).length) {
+    toggleBookmark().catch(reportError);
+  }
+});
+star.addEventListener("click", () => toggleBookmark().catch(reportError));
+bookmarkList.addEventListener("click", event => {
+  let item = event.target.closest("li");
+  if (!item) {
+    return;
+  }
+  if (event.target.closest(".remove")) {
+    neeko.bookmarks.remove(item.dataset.id).catch(reportError);
+  } else if (item.dataset.type == "folder") {
+    let id = item.dataset.id;
+    openFolders.has(id) ? openFolders.delete(id) : openFolders.add(id);
+    showBookmarks().catch(reportError);
+  } else {
+    neeko.nav.go(item.dataset.url).catch(reportError);
+  }
+});
+// Middle-click opens a bookmark in a new tab behind this one.
+bookmarkList.addEventListener("auxclick", event => {
+  let item = event.target.closest("li");
+  if (item?.dataset.url && event.button == 1) {
+    neeko.tabs.open(item.dataset.url, { background: true }).catch(reportError);
+  }
+});
+
 // The ⋯ menu drops down over the web page: it's marked data-neeko-overlay,
 // so Neeko draws it over the page, which stays live around it. A click in
 // the page moves focus there, which closes the menu like a click elsewhere
@@ -494,6 +619,7 @@ for (let download of await neeko.downloads.list()) {
 let fullscreen = await neeko.fullscreen.state();
 document.body.classList.toggle("page-fullscreen", fullscreen.page);
 document.body.classList.toggle("window-fullscreen", fullscreen.window);
+showBookmarks().catch(reportError);
 let list = await neeko.tabs.list();
 tabList.replaceChildren();
 items.clear();

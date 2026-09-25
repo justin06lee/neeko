@@ -7,6 +7,7 @@ EXTRA_COMPONENTS += ["Neeko.manifest"]
 
 MOZ_SRC_FILES += [
     "NeekoAPI.sys.mjs",
+    "NeekoBookmarks.sys.mjs",
     "NeekoDownloads.sys.mjs",
     "NeekoPanels.sys.mjs",
     "NeekoPrivacy.sys.mjs",
