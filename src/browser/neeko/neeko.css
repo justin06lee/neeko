@@ -38,6 +38,14 @@
   anchor-name: --neeko-page;
 }
 
+/* While an element the UI marks with data-neeko-overlay (a menu, say)
+   overlaps the page, the UI goes above it, clipped by NeekoWindow to
+   everything but the page plus those elements: they're drawn over the page,
+   which stays visible and live everywhere else. */
+:root[neeko][neeko-ui-over-page] #neeko-ui {
+  z-index: 3;
+}
+
 /* What Firefox's own panels (permission prompts and the like) hang from,
    since their toolbar icons are hidden (NeekoPanels): an invisible line along
    the top of the page, 8px inside its corners, wherever the page is. */
@@ -77,7 +85,7 @@
   top: 0;
   left: 0;
   right: 0;
-  z-index: 3;
+  z-index: 4;
 }
 
 :root[neeko][neeko-firefox-address-bar] #navigator-toolbox > :not(#nav-bar) {

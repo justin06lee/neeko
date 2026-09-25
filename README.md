@@ -91,6 +91,9 @@ browsers use.
   `data-neeko-content`. Neeko keeps the real page on top of it, matching its
   position, size and corner rounding, and follows it when it moves or
   animates.
+- Mark menus, dropdowns and anything else that should cover the website with
+  `data-neeko-overlay`. While one overlaps the page, it's drawn over it and
+  takes the pointer there, and the rest of the page stays live.
 - On macOS, the window's close, minimize and zoom buttons appear wherever you
   put an element with `data-neeko-window-buttons`.
 - Your scripts get a global `neeko` object, the Neeko API: list, open, close,

@@ -373,10 +373,56 @@ downloadList.addEventListener("click", event => {
   }
 });
 
-fullscreenButton.addEventListener("click", () => {
+function toggleWindowFullscreen() {
   let fullscreen = document.body.classList.contains("window-fullscreen");
   neeko.fullscreen.setWindow(!fullscreen);
+}
+fullscreenButton.addEventListener("click", toggleWindowFullscreen);
+
+// The ⋯ menu drops down over the web page: it's marked data-neeko-overlay,
+// so Neeko draws it over the page, which stays live around it. A click in
+// the page moves focus there, which closes the menu like a click elsewhere
+// in the UI does.
+const menuButton = document.getElementById("menu-button");
+const menu = document.getElementById("menu");
+const menuCommands = {
+  newTab: () => neeko.tabs.open(),
+  duplicate: () => neeko.tabs.duplicate(),
+  mute: () => neeko.tabs.setMuted(!tabs.get(currentId)?.muted),
+  moveToStart: () => neeko.tabs.move(0),
+  fullscreen: toggleWindowFullscreen,
+};
+
+function showMenu(show) {
+  menu.hidden = !show;
+  menuButton.classList.toggle("open", show);
+  if (show) {
+    let muted = tabs.get(currentId)?.muted;
+    menu.querySelector("[data-command=mute]").textContent = muted
+      ? "Unmute tab"
+      : "Mute tab";
+  }
+}
+
+menuButton.addEventListener("click", () => showMenu(menu.hidden));
+menu.addEventListener("click", event => {
+  let command = event.target.closest("button")?.dataset.command;
+  if (command) {
+    showMenu(false);
+    Promise.resolve(menuCommands[command]()).catch(reportError);
+  }
 });
+document.addEventListener("pointerdown", event => {
+  if (!menu.hidden && !event.target.closest("#menu, #menu-button")) {
+    showMenu(false);
+  }
+});
+document.addEventListener("keydown", event => {
+  if (event.key == "Escape" && !menu.hidden) {
+    showMenu(false);
+  }
+});
+window.addEventListener("blur", () => showMenu(false));
 back.addEventListener("click", () => neeko.nav.back());
 forward.addEventListener("click", () => neeko.nav.forward());
 reload.addEventListener("click", () => neeko.nav.reload());

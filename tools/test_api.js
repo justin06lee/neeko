@@ -340,6 +340,61 @@ check(document.activeElement == frame, "the UI has focus");
 await neeko.tabs.focus();
 check(document.activeElement == gBrowser.selectedBrowser, "focus() hands it to the page");
 
+// Drawing over the page. While an element marked data-neeko-overlay overlaps
+// the page, it's drawn over the page and takes the pointer there, shadow
+// included; the rest of the page stays visible and takes the pointer.
+let overTab = await neeko.tabs.open(`${BASE}/tall`);
+await waitFor(() => updated(overTab.id, t => t.title == "0" && !t.loading), "a page to draw over");
+let menu = frame.contentDocument.getElementById("menu");
+let uiOverPage = () => document.documentElement.hasAttribute("neeko-ui-over-page");
+let hit = (x, y) => {
+  let element = document.elementFromPoint(x, y);
+  return element == frame ? "ui" : document.getElementById("tabbrowser-tabbox").contains(element) ? "page" : element?.id;
+};
+let colorAt = async (x, y) => {
+  let bitmap = await browsingContext.currentWindowGlobal.drawSnapshot(new DOMRect(x, y, 1, 1), 1, "white");
+  let canvas = document.createElementNS("http://www.w3.org/1999/xhtml", "canvas");
+  canvas.width = canvas.height = 1;
+  let context = canvas.getContext("2d");
+  context.drawImage(bitmap, 0, 0);
+  return [...context.getImageData(0, 0, 1, 1).data.slice(0, 3)].join();
+};
+let green = "0,200,0";
+check(hit(450, 150) == "page" && !uiOverPage(), "the page is on top to begin with");
+menu.hidden = false;
+await waitFor(uiOverPage, "an overlay over the page puts the UI above it");
+check(hit(450, 150) == "ui", `the overlay takes the pointer (${hit(450, 150)})`);
+check(hit(390, 150) == "ui", `and so does its shadow (${hit(390, 150)})`);
+check(hit(800, 400) == "page", `the rest of the page still takes it (${hit(800, 400)})`);
+check(hit(80, 300) == "ui", `and the UI around the page (${hit(80, 300)})`);
+// The wheel scrolls the page, but not through the overlay. (The page titles
+// itself with how far it's scrolled.)
+let scrolled = async (x, y) => {
+  let before = gBrowser.selectedTab.label;
+  windowUtils.sendWheelEvent(x, y, 0, 300, 0, WheelEvent.DOM_DELTA_PIXEL, 0, 0, 0, 0);
+  for (let i = 0; i < 20 && gBrowser.selectedTab.label == before; i++) {
+    await new Promise(r => setTimeout(r, 50));
+  }
+  return gBrowser.selectedTab.label != before;
+};
+check(await scrolled(800, 400), "the wheel still scrolls the page");
+check(!(await scrolled(450, 150)), "but not through the overlay");
+let painted = await colorAt(450, 150);
+check(painted == green, `the overlay is drawn over the page (${painted})`);
+painted = await colorAt(800, 400);
+check(painted == "255,255,255", `the rest of the page is still drawn (${painted})`);
+// Moved off the page (the page starts 160px from the left), it doesn't.
+menu.style.left = "10px";
+menu.style.width = "100px";
+await waitFor(() => !uiOverPage(), "an overlay beside the page leaves the page on top");
+menu.style.left = "400px";
+menu.style.width = "200px";
+await waitFor(uiOverPage, "back over the page");
+menu.hidden = true;
+await waitFor(() => !uiOverPage() && !frame.style.clipPath, "hidden, it leaves the page on top");
+check(hit(450, 150) == "page", "and the page takes the pointer again");
+await neeko.tabs.close(overTab.id);
+
 // The address bar. Listening takes effect once Neeko has read the message,
 // which any later reply confirms.
 let openLocation = () =>

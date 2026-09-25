@@ -8,12 +8,14 @@ body {
   height: 100%;
 }
 
-/* A tab list on the left; the toolbar and the website on the right. */
+/* A tab list on the left; the toolbar and the website on the right. The
+   UI's background is drawn around the website's slot, not under it (see
+   main), so wherever the UI draws over the website, the website shows
+   through what the UI leaves transparent, like the menu's shadow. */
 body {
   display: grid;
   grid-template-columns: 230px 1fr;
   grid-template-rows: 48px auto 1fr;
-  background: #16161a;
   color: #ddd;
   font: 13px system-ui, sans-serif;
   /* Drag the window by any bare background. */
@@ -341,11 +343,57 @@ header {
 }
 
 /* Where the website shows. Placed explicitly, so it keeps its row while the
-   prompt bar is hidden. */
+   prompt bar is hidden. Its shadow is the UI's background, filling the window
+   around it, beneath everything else (z-index -1). */
 main {
   grid-area: 3 / 2;
   margin: 0 12px 12px 0;
   border-radius: 10px;
+  position: relative;
+  z-index: -1;
+  box-shadow: 0 0 0 100vmax #16161a;
+}
+
+/* The ⋯ menu, dropping down over the website at its top right. */
+#menu {
+  position: fixed;
+  top: 44px;
+  right: 12px;
+  display: flex;
+  flex-direction: column;
+  min-width: 200px;
+  padding: 4px;
+  background: #26262c;
+  border: 1px solid #3a3a44;
+  border-radius: 10px;
+  box-shadow: 0 10px 30px rgb(0 0 0 / 0.45);
+  -moz-window-dragging: no-drag;
+}
+
+#menu[hidden] {
+  display: none;
+}
+
+#menu button {
+  text-align: start;
+  border: none;
+  background: none;
+  padding: 6px 10px;
+}
+
+#menu button:hover {
+  background: #34343e;
+}
+
+#menu hr {
+  width: 100%;
+  border: none;
+  border-top: 1px solid #3a3a44;
+  margin: 4px 0;
+}
+
+#menu-button.open {
+  background: #34343e;
 }
 
 /* A fullscreen window has no window buttons, so the tab list moves up; and
