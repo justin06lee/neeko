@@ -551,11 +551,15 @@ check(
   (await neeko.prompts.list()).some(p => p.id == request?.id),
   "list() has the waiting prompt"
 );
+// Under heavy load, half a second can pass before the answer arrives, so the
+// delay is longer for this check.
+Services.prefs.setIntPref("security.notification_enable_delay", 60000);
 await rejects(
   neeko.prompts.answer(request?.id, 0),
   /Too soon/,
   "allowing right away is refused, against clickjacking"
 );
+Services.prefs.setIntPref("security.notification_enable_delay", 500);
 await rejects(neeko.prompts.answer(request?.id, 5), /no action/, "answer() with no such action");
 await rejects(neeko.prompts.answer(999999, 1), /No prompt/, "answer() of an unknown prompt");
 // Block needs no delay.

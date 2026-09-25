@@ -358,6 +358,15 @@ Add to it whenever something costs you time.
   a prompt's buttons work (`security.notification_enable_delay` 0). They're
   only applied where the profile has no value of its own, so the API test
   puts Firefox's defaults back in `user.js` (`FIREFOX_PREFS`).
+- **The whole API test is one Marionette command,** so its reply comes
+  only at the end: 40 seconds on a quiet machine, over 90 under heavy load
+  (2026-09-25, load average 40 on 8 cores). `test_api.py` sets the socket's
+  timeout to the script's; the old fixed minute failed as a socket
+  `TimeoutError`.
+- **Timing checks race under load.** "Allow right away is refused" answered
+  more than the 500ms delay after the prompt appeared, so Allow went
+  through and the next answer found no prompt. The test raises
+  `security.notification_enable_delay` for that one check.
 - **Crashing a tab on purpose:** kill its content process with
   `nsIProcessToolsService.kill(browser.frameLoader.remoteTab.osPid)` (what
   about:processes does). A SIGKILL leaves no minidump, so there's no crash
