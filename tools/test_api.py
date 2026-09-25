@@ -64,12 +64,44 @@ def png(width, height):
 FAVICON = "/favicon.png"
 FAVICON_PNG = png(2, 2)
 
+# The app's own pages (NeekoPages), in the throwaway profile's pages/ folder.
+# The start page does what its query says, with neekoPage, and titles itself
+# with the outcome, which the checks read from its tab.
+TEST_PAGES = {
+    "start.html": "<title>start</title><script>"
+    "let q = new URLSearchParams(location.search);"
+    "let show = t => document.title = t;"
+    "let fail = e => show('refused ' + e.message);"
+    "switch (q.get('test')) {"
+    "case null: show([typeof neekoPage, typeof ChromeUtils, typeof neeko].join()); break;"
+    "case 'go': neekoPage.go(q.get('to')).catch(fail); break;"
+    "case 'js': neekoPage.go('javascript:document.title=1').catch(fail); break;"
+    "case 'open': neekoPage.open(q.get('to'), { background: true })"
+    ".then(() => show('opened'), fail); break;"
+    "case 'settings': neekoPage.settings.get('shared')"
+    ".then(v => neekoPage.settings.set('fromPage', 'yes').then(() => show('read ' + v)))"
+    ".catch(fail); break;"
+    "case 'listen': neekoPage.settings.on('change',"
+    " ({ key, value }) => show(`change ${key}=${value}`)); show('listening'); break;"
+    "case 'engines': neekoPage.search.engines().then(list => show("
+    "`engines ${list.length} ${list.filter(e => e.isDefault).length}`), fail); break;"
+    "case 'default': neekoPage.search.setDefault(q.get('id'))"
+    ".then(() => show('default set'), fail); break;"
+    "}</script>",
+    # Named like Firefox's own about:preferences, so it isn't served.
+    "preferences.html": "<title>not Firefox's</title>",
+}
+
 PAGES = {
     "/one": "<title>Page one</title>",
     "/two": "<title>Page two</title>",
     # Titles itself with what a web page can see of the Neeko API.
     "/probe": "<title>probe</title><script>document.title = "
-    "[typeof neeko, typeof parent.neeko, typeof top.neeko].join()</script>",
+    "[typeof neeko, typeof parent.neeko, typeof top.neeko, typeof neekoPage].join()</script>",
+    # Tries to go to one of the browser's own pages, which web pages can't.
+    "/reach-start": "<title>reach</title><script>"
+    "try { location.href = 'about:start' } catch (e) { document.title = 'blocked' }"
+    "</script>",
     # Asks for the location, which opens a permission prompt, and titles
     # itself with the outcome: "error 1" means the permission was refused.
     "/geo": "<title>geo</title><script>"
@@ -210,11 +242,19 @@ for (let i = 0; i < 100 && !(slot?.getBoundingClientRect().height > 100); i++) {
   await new Promise(r => setTimeout(r, 50));
 }
 let height = Math.round(slot?.getBoundingClientRect().height ?? 0);
+// And the app's pages bundled inside it: the demo app's about:start.
+let tab = gBrowser.addTrustedTab("about:start");
+gBrowser.selectedTab = tab;
+for (let i = 0; i < 100 && tab.label != "New Tab"; i++) {
+  await new Promise(r => setTimeout(r, 50));
+}
+let started = tab.label == "New Tab" && tab.linkedBrowser.remoteType == "privilegedabout";
 let ok = test => (test ? "ok  " : "FAIL");
 return [
   `${ok(frame?.contentWindow?.neeko)} without neeko.ui.path, the bundled UI loads with the API`,
   `${ok(served.includes("/chrome/browser/content/neeko-ui/"))} it comes from inside the app (${served})`,
   `${ok(height > 100)} its content slot has room for the page (${height}px high)`,
+  `${ok(started)} without neeko.pages.path, the bundled start page loads (${tab.label}, ${tab.linkedBrowser.remoteType})`,
 ];
 """
 
@@ -265,6 +305,19 @@ def run_in(binary, prefs, script, timeout=120000):
     }
     if prefs.get("neeko.ui.path") == "TEST_UI":
         prefs["neeko.ui.path"] = ui
+    if prefs.get("neeko.pages.path") == "TEST_PAGES":
+        pages = os.path.realpath(os.path.join(profile, "pages"))
+        os.mkdir(pages)
+        for name, body in TEST_PAGES.items():
+            with open(os.path.join(pages, name), "w") as f:
+                f.write(body)
+        prefs["neeko.pages.path"] = pages
+        # The pages run in a content process: let its sandbox read them, and
+        # Neeko's own files, which dev builds link to in src/ (see make run).
+        prefs["security.sandbox.content.mac.testing_read_path1"] = os.path.realpath(
+            os.path.join(ROOT, "src")
+        )
+        prefs["security.sandbox.content.mac.testing_read_path2"] = pages
     browser = launch(binary, profile, prefs)
     try:
         m = connect(port, browser)
@@ -305,9 +358,16 @@ def main():
             script = script.replace("__SLOW_SIZE__", str(SLOW_SIZE))
             script = script.replace("__CLOSED__", f"http://127.0.0.1:{free_port()}")
         with LeaveNoTrace(app):
-            prefs = {"neeko.ui.path": "TEST_UI", **FIREFOX_PREFS}
-            results = run_in(binary, prefs, script)
-            results += run_in(binary, {}, BUNDLED_CHECK, timeout=30000)
+            prefs = {"neeko.ui.path": "TEST_UI", "neeko.pages.path": "TEST_PAGES", **FIREFOX_PREFS}
+            results = run_in(binary, prefs, script, timeout=300000)
+            # A dev build's content processes need to read Neeko's own files,
+            # which it links to in src/ (see make run); packaged ones don't.
+            bundled_prefs = {}
+            if not args.app:
+                bundled_prefs["security.sandbox.content.mac.testing_read_path1"] = (
+                    os.path.realpath(os.path.join(ROOT, "src"))
+                )
+            results += run_in(binary, bundled_prefs, BUNDLED_CHECK, timeout=30000)
     finally:
         server.shutdown()
     print("\n".join(results))

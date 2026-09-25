@@ -36,6 +36,8 @@ const BLANK_PAGES = [
   "about:home",
   "about:newtab",
   "about:privatebrowsing",
+  // The demo app's own start page (pages/start.html).
+  "about:start",
 ];
 
 // The tab rows, in order, without the group headers between them.

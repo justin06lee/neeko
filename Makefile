@@ -33,11 +33,17 @@ all: build run
 build: configure
 	$(MACH) build
 
-# Same `mach run` that `surfer run` wraps, pointed at the app's UI folder, so
-# UI changes only need a relaunch. Dev launches also allow Firefox's Browser
-# Toolbox, which Neeko's privacy defaults turn off for shipped browsers.
+# Same `mach run` that `surfer run` wraps, pointed at the app's UI and pages
+# folders, so changes only need a relaunch. The app's pages run in a content
+# process, whose sandbox would refuse Neeko's files (the build links to them
+# in src/) and the pages folder, so dev launches let it read those two.
+# Dev launches also allow Firefox's Browser Toolbox, which Neeko's privacy
+# defaults turn off for shipped browsers.
 run:
 	$(MACH) run --setpref neeko.ui.path=$(abspath $(APP))/ui \
+		--setpref neeko.pages.path=$(abspath $(APP))/pages \
+		--setpref security.sandbox.content.mac.testing_read_path1=$(realpath $(CURDIR))/src \
+		--setpref security.sandbox.content.mac.testing_read_path2=$(abspath $(APP))/pages \
 		--setpref devtools.chrome.enabled=true \
 		--setpref devtools.debugger.remote-enabled=true \
 		--setpref devtools.debugger.prompt-connection=false

@@ -26,13 +26,16 @@ From what a browser's developer writes, down to Firefox itself:
 
 ### 1. The app: a browser's own files
 
-A browser built on Neeko is a folder with three things:
+A browser built on Neeko is a folder with three things, and a fourth if it
+wants:
 
 - `browser.json`: its name, vendor, app id and version.
 - `ui/`: its interface, an ordinary web page (`index.html` and whatever it
   loads).
 - `branding/`: its icon, its own default prefs, and any Firefox branding
   file it wants to replace.
+- `pages/` (optional): its own pages in tabs, like a start page, served as
+  `about:<name>`.
 
 That folder is the browser's own git repo, with Neeko inside it as a pinned
 submodule (`neeko/`). Neeko's own repo is built the same way: its
@@ -85,6 +88,14 @@ official startup hooks (`Neeko.manifest`):
   once the UI asks about them.
 - **`NeekoBookmarks.sys.mjs`** turns Firefox's bookmarks (Places) into plain
   data and events for the API.
+- **`NeekoPages.sys.mjs`** serves the app's own pages (`pages/<name>.html`)
+  as `about:<name>`, at startup: web content with no privileges, in
+  Firefox's privileged about: process, not linkable by websites, with the
+  start page as the New Tab and home page. A process script registers them
+  in content processes too, and a window actor (`NeekoPageChild` and
+  `NeekoPageParent`) gives them `neekoPage`, checking every call. This is
+  the one place web content gets an API (the user's decision, with those
+  locks).
 - **`NeekoSettings.sys.mjs`** keeps the UI's settings (prefs named
   `neeko.settings.*`, shared by every window) and the color scheme
   (Firefox's `ui.systemUsesDarkTheme`). The UI gets both with `neeko`,

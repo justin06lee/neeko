@@ -10,9 +10,10 @@
  * - --ref: the Neeko version to pin. Default: the newest vX.Y.Z tag here,
  *   or the current commit if there are no tags yet.
  *
- * It writes browser.json, a copy of Neeko's demo UI as the starting point,
- * branding/prefs.js, a Makefile that hands everything to Neeko, a README and
- * a .gitignore, then makes the first commit. Then: cd <folder> && make.
+ * It writes browser.json, copies of Neeko's demo UI and start page as the
+ * starting point, branding/prefs.js, a Makefile that hands everything to
+ * Neeko, a README and a .gitignore, then makes the first commit. Then:
+ * cd <folder> && make.
  */
 
 import { spawnSync } from "node:child_process";
@@ -158,6 +159,7 @@ a minute, and changes to \`ui/\` only need a relaunch.
 ${lower}/
 ├── browser.json   Name, vendor, app id and version
 ├── ui/            The browser's UI (started as a copy of Neeko's demo UI)
+├── pages/         The browser's own pages: start.html is about:start, the New Tab page
 ├── branding/      prefs.js, and icon.png (a square PNG, 1024 px) when you have one
 ├── neeko/         Neeko itself, pinned to a release
 └── Makefile       Hands everything to neeko/
@@ -165,6 +167,9 @@ ${lower}/
 
 - **The UI:** \`ui/index.html\` and whatever it loads. The API is documented in
   [neeko/docs/api.md](neeko/docs/api.md).
+- **Pages:** \`pages/<name>.html\` is \`about:<name>\`, a page of the browser's
+  own in a tab, with the small \`neekoPage\` API. \`start.html\` is the New Tab
+  and home page.
 - **Identity:** set \`appId\` in \`browser.json\` to your own reverse-DNS id
   before you ship. \`name\` names the profile folder, so pick it once.
 - **Icon:** put a square \`branding/icon.png\` (at least 1024 pixels) there and
@@ -206,6 +211,7 @@ for (let [path, contents] of Object.entries(files)) {
   writeFileSync(join(folder, path), contents);
 }
 cpSync(join(folder, "neeko/ui"), join(folder, "ui"), { recursive: true });
+cpSync(join(folder, "neeko/pages"), join(folder, "pages"), { recursive: true });
 
 git(["add", "-A"], folder);
 let pinned = git(["describe", "--tags", "--match", "v*", "--always"], join(folder, "neeko"));
