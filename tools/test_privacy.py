@@ -305,8 +305,8 @@ def main():
                  60, "mitmproxy to listen")
 
         # A brand-new profile that trusts the proxy's certificate and sends
-        # everything through the proxy. Nothing else is set: the test is of
-        # Neeko's defaults.
+        # everything through the proxy. Nothing else is set but what the
+        # test needs: the test is of Neeko's defaults.
         subprocess.run([certutil, "-N", "-d", f"sql:{profile}", "--empty-password"], check=True)
         subprocess.run([certutil, "-A", "-n", "neeko privacy test", "-t", "C,,",
                         "-i", ca, "-d", f"sql:{profile}"], check=True)
@@ -322,6 +322,13 @@ def main():
                 ("network.proxy.failover_direct", False),
                 ("marionette.port", marionette_port),
                 ("remote.prefs.recommended", False),
+                # A dev build's content processes need to read Neeko's own
+                # files, which it links to in src/, for the app's start page
+                # (see make run). Packaged builds carry them inside the app.
+                *([] if args.app else [(
+                    "security.sandbox.content.mac.testing_read_path1",
+                    os.path.realpath(os.path.join(ROOT, "src")),
+                )]),
                 *[(p.split("=", 1)[0], json.loads(p.split("=", 1)[1])) for p in args.pref],
             ]:
                 f.write(f"user_pref({json.dumps(name)}, {json.dumps(value)});\n")
