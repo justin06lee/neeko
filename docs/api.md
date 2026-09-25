@@ -316,6 +316,41 @@ Every method but `list` takes a download's `id`.
 | `update` | `{ download }` | A download progressed, finished, failed or was canceled. |
 | `remove` | `{ id }` | A download left the list. |
 
+## Drawing over the page
+
+The web page is drawn on top of your UI, over the element you mark
+`data-neeko-content`. To draw something of your UI over the page (a menu or
+dropdown, a sidebar sliding out, a bar peeking down, your own error page),
+mark it `data-neeko-overlay`. No script needed:
+
+```html
+<div class="menu" data-neeko-overlay hidden>…</div>
+```
+
+While a marked element is showing and overlaps the page, it's drawn over the
+page and takes the pointer there. Everywhere else the page is drawn and
+takes the pointer (clicks, the wheel) as usual. Show and hide overlays any
+way you like: `hidden`, a class, a `:hover` rule, an animation; Neeko
+follows along, frame by frame while things move.
+
+- **An overlay's area is its box plus its `box-shadow`.** Its shadow and
+  rounded corners are drawn over the page too. Anything it draws further
+  out (a `filter`, an `outline`) is cut off at that area: mark a wrapper
+  that covers it.
+- **Within that area, the page shows only where your UI is transparent.** If
+  your UI paints a background under its content slot (on `body`, say), a
+  shadow falling on the page shows that background instead. Paint the
+  background around the slot instead; the demo UI gives its slot a huge
+  `box-shadow` in the background color, beneath everything else
+  (`ui/style.css`).
+- **Showing means rendered**: not `display: none`, `visibility: hidden` or
+  `opacity: 0`.
+- **A click in the page** goes to the page, not your UI, even with a menu
+  open. To close a menu when that happens, listen for your UI window's
+  `blur`: a click in the page moves the keyboard focus there. For a modal
+  overlay that should block the page, mark a transparent element covering
+  the whole slot.
+
 ## Fallbacks
 
 Firefox keeps running underneath your UI, so a browser built on Neeko works
@@ -323,6 +358,8 @@ even where its UI has no controls yet.
 
 - **Keyboard shortcuts** work as usual: Cmd+T, Cmd+W, Ctrl+Tab, Cmd+[ and
   Cmd+], Cmd+R, and Ctrl+M to mute a tab.
+- **Drawing over the page.** Without elements marked `data-neeko-overlay`,
+  the page stays on top of your UI everywhere in its slot.
 - **Error pages and crashed tabs.** Firefox's own error pages ("Hmm. We're
   having trouble finding that site.") and its crashed tab page show in the
   page area, with their buttons working, whether or not your UI reads a

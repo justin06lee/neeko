@@ -44,7 +44,11 @@ submodule (`neeko/`). Neeko's own repo is built the same way: its
 The UI is a web page loaded into a frame that fills the browser window. It
 marks where the website should appear with `data-neeko-content`, and Neeko
 lays Firefox's real page area exactly over that spot, following it as it
-moves, resizes or animates. On macOS, the window's close, minimize and zoom
+moves, resizes or animates. The page is on top of the UI, except where the
+UI marks elements with `data-neeko-overlay` (menus, a sliding sidebar): while
+one overlaps the page, the UI goes above the page, clipped to everything but
+the page plus those elements, so they're drawn over it and the rest of the
+page stays visible and live. On macOS, the window's close, minimize and zoom
 buttons go wherever the page puts `data-neeko-window-buttons`.
 
 The page gets one global, `neeko`, before any of its scripts run. It's the
@@ -66,7 +70,8 @@ official startup hooks (`Neeko.manifest`):
 - **`NeekoWindow.sys.mjs`** runs for every browser window, before it's first
   drawn. It hides Firefox's toolbars and sidebar (`neeko.css`), mounts the
   UI frame, keeps the page area over the UI's content slot (or over the
-  whole screen while a page is fullscreen), gives the UI page its API, and
+  whole screen while a page is fullscreen) and the UI's overlays over the
+  page, gives the UI page its API, and
   sends Cmd+L to the UI's address bar (or shows Firefox's own if the UI has
   none). Pop-up windows keep Firefox's minimal UI.
 - **`NeekoPanels.sys.mjs`** gives Firefox's own panels (permission prompts,

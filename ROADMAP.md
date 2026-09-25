@@ -34,65 +34,65 @@ get added as it needs them.
   its place; open in the background or at a position, duplicate, move,
   mute, hand the keys to the page, and `neeko.platform`. Fallbacks:
   Firefox's own error and crashed tab pages, and its shortcuts.
+- [x] **UI drawn over the web page** (v0.4.0): elements the UI marks
+  `data-neeko-overlay` (menus, a sidebar sliding out, its own error page)
+  are drawn over the page, shadows included, and take the pointer there,
+  while the rest of the page stays visible and live. Fallback: the page
+  stays on top.
 
 ## API features, in order
 
-The first six are what Toji, the user's browser, asked for next, in its
+The first five are what Toji, the user's browser, asked for next, in its
 order (2026-09-25).
 
-1. [ ] **UI drawn over the web page.** Today the page is always above the UI,
-   so nothing can overlap it: menus, dropdowns, a sidebar sliding out over
-   the page, a bar peeking down over its top, the UI's own error page. The
-   UI marks the elements that may overlap the page, and while one does, the
-   UI goes above the page there. Fallback: the page stays on top.
-2. [ ] **UI settings shared across windows.** A few values the UI keeps for
+1. [ ] **UI settings shared across windows.** A few values the UI keeps for
    itself (a theme, a layout), saved, the same in every window, with change
    events, and readable before the UI first draws so a new window never
    flashes the wrong look. Plus making web pages and Firefox's own pages
    follow the UI's light or dark choice (`prefers-color-scheme`).
-3. [ ] **Bookmarks**, the bookmarks toolbar first: list (with icons, by
+2. [ ] **Bookmarks**, the bookmarks toolbar first: list (with icons, by
    reference), add, remove, change events, and whether a URL is bookmarked.
-4. [ ] **The browser's own pages.** A start page (the New Tab page and home
+3. [ ] **The browser's own pages.** A start page (the New Tab page and home
    page) and later settings pages, as ordinary pages from the app folder in
    tabs, with a small, safe API of their own: go where the user typed, open
    a tab, the UI settings, the search engines. These run in web content
    processes, so what they get needs the user's approval first (the rule
    that web pages never reach the API).
-5. [ ] **Pointer at the page's edges.** Events when the pointer reaches the
+4. [ ] **Pointer at the page's edges.** Events when the pointer reaches the
    page's top edge or the window's left edge, where the page covers the
    window, so the UI can peek a bar or a sidebar out.
-6. [ ] **Tab groups**, Firefox's own: list groups (name, color, collapsed),
+5. [ ] **Tab groups**, Firefox's own: list groups (name, color, collapsed),
    each tab's group, create, rename, collapse, ungroup, move tabs in and
    out, with events.
-7. [ ] **Camera, microphone, passwords and add-on installs.** Permission
+6. [ ] **Camera, microphone, passwords and add-on installs.** Permission
    prompts are done (see Done); these doorhangers stay Firefox's for now,
    hanging from the top of the page. Camera and microphone prompts let the
    user pick a device inside Firefox's panel (`WebRTCParent.sys.mjs` reads
    the choice from it), so the API would need device lists; password saving
    and add-on installs show forms and permission lists.
-8. [ ] **Context menus.** The UI can draw its own menu for pages, links,
+7. [ ] **Context menus.** The UI can draw its own menu for pages, links,
    images and selections, with Firefox's actions available. Fallback:
    Firefox's own context menu.
-9. [ ] **Find in page.** Find, next, previous, match count. Fallback:
+8. [ ] **Find in page.** Find, next, previous, match count. Fallback:
    Firefox's find bar.
-10. [ ] **Address bar suggestions.** History, bookmark and open-tab matches
+9. [ ] **Address bar suggestions.** History, bookmark and open-tab matches
     for what the user types, and search suggestions, fetched only when the
     UI asks (search suggestions send what you type to the search engine,
     which is why they're off in Firefox's hidden address bar).
-11. [ ] **History.** Search and list visits, delete entries.
-12. [ ] **Tab sleeping.** Unload a tab to save memory, and a `sleeping`
+10. [ ] **History.** Search and list visits, delete entries.
+11. [ ] **Tab sleeping.** Unload a tab to save memory, and a `sleeping`
     field on tabs. Needed for "a bajillion tabs".
-13. [ ] **Tab previews, by reference.** Thumbnails the UI shows without
+12. [ ] **Tab previews, by reference.** Thumbnails the UI shows without
     copying image data (the way tab icons work).
-14. [ ] **Extensions UI.** List extensions' toolbar buttons, show their
+13. [ ] **Extensions UI.** List extensions' toolbar buttons, show their
     badges and open their popups from the UI. Today: extensions work, but
     their buttons live in the hidden toolbar.
-15. [ ] **DevTools.** Open and close DevTools for the page, and the Browser
+14. [ ] **DevTools.** Open and close DevTools for the page, and the Browser
     Toolbox for the UI (dev builds already allow it).
-16. [ ] **Performance test with a budget.** Automated: hundreds of tabs,
+15. [ ] **Performance test with a budget.** Automated: hundreds of tabs,
     memory and tab-switch time, measured against stock Firefox, failing
     when Neeko gets slower.
-17. [ ] **"Trick" mode.** Run the UI as a sandboxed, unprivileged page that
+16. [ ] **"Trick" mode.** Run the UI as a sandboxed, unprivileged page that
     can only use the API. The API is already messages of plain data, so
     this swaps the channel, not the calls.
 

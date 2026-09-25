@@ -3,10 +3,12 @@
   Your browser's UI. Neeko loads this page in place of Firefox's interface.
   Put the website wherever you like: Neeko keeps it on top of the element
   marked data-neeko-content, matching its position, size and corner rounding.
-  On macOS the window buttons appear wherever data-neeko-window-buttons is.
+  Elements marked data-neeko-overlay are drawn over the page when they
+  overlap it. On macOS the window buttons appear wherever
+  data-neeko-window-buttons is.
 
-  This is the demo UI: a tab list, an address bar, a bar for permission
-  prompts and a downloads list, built only on the Neeko API (the global
+  This is the demo UI: a tab list, an address bar, a menu, a bar for
+  permission prompts and a downloads list, built only on the Neeko API (the global
   `neeko` object, see docs/api.md). It's plain on purpose, just enough to show every API feature
   working. Replace it with your own.
 -->
@@ -41,9 +43,20 @@
         autocomplete="off"
       />
       <button id="fullscreen" title="Full screen (Ctrl+Cmd+F)">&#x2922;</button>
+      <button id="menu-button" title="Menu" aria-haspopup="menu">&#x22EF;</button>
     </header>
-    <!-- The web page is drawn over its slot, so nothing can overlap it: the
-         prompt bar sits above the page and pushes it down. -->
+    <!-- A menu that drops down over the web page. data-neeko-overlay tells
+         Neeko to draw it over the page, and give it the pointer there. -->
+    <div id="menu" role="menu" data-neeko-overlay hidden>
+      <button data-command="newTab">New tab</button>
+      <button data-command="duplicate">Duplicate tab</button>
+      <button data-command="mute">Mute tab</button>
+      <button data-command="moveToStart">Move tab to the top</button>
+      <hr />
+      <button data-command="fullscreen">Full screen</button>
+    </div>
+    <!-- The prompt bar sits above the page and pushes it down. (It could
+         overlap the page instead, marked data-neeko-overlay like the menu.) -->
     <section id="prompt" hidden>
       <div class="text">
         <p class="message"></p>

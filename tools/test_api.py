@@ -31,11 +31,14 @@ from builds import ROOT, LeaveNoTrace, dev_app, program  # noqa: E402
 from marionette import Marionette  # noqa: E402
 
 # A UI with nothing but a content slot, away from the window's corner so the
-# checks can tell the page's corner from the window's, and a field to take
-# keyboard focus.
+# checks can tell the page's corner from the window's, a field to take
+# keyboard focus, and a "menu" to draw over the page.
 TEST_UI = (
     "<!doctype html><html><body style='margin: 0'>"
     "<input id='field' style='position: fixed; top: 0; left: 0; width: 150px'>"
+    "<div id='menu' data-neeko-overlay hidden style='position: fixed; left: 400px;"
+    " top: 100px; width: 200px; height: 100px; background: rgb(0, 200, 0);"
+    " box-shadow: 0 0 20px black'></div>"
     "<main data-neeko-content style='position: fixed; inset: 40px 0 0 160px'>"
     "</main></body></html>"
 )
@@ -76,6 +79,9 @@ PAGES = {
     # Goes fullscreen as soon as it loads (the test allows it without a click).
     "/fullscreen": "<title>fullscreen</title><script>"
     "onload = () => document.documentElement.requestFullscreen()</script>",
+    # A page to scroll, which titles itself with how far it's scrolled.
+    "/tall": "<title>0</title><body style='height: 5000px'><script>"
+    "onscroll = () => document.title = Math.round(scrollY)</script>",
     # A page with an icon.
     "/icon": f"<title>icon</title><link rel='icon' href='{FAVICON}'>",
     # Plays a tone, too quietly to hear but not silent, which makes its tab

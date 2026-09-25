@@ -159,6 +159,26 @@ Add to it whenever something costs you time.
   `[data-neeko-window-buttons]`.
 - **Hit-testing checks out:** the UI background gets UI clicks, and the slot
   gets the remote page.
+- **An iframe takes the pointer over its whole box,** transparent or not
+  (`nsSubDocumentFrame` adds its own event-receiving background item), so a
+  UI raised above the page can't let clicks through where it's
+  transparent. Only `pointer-events: none` on the frame does, for all of it.
+  So for `data-neeko-overlay`, NeekoWindow raises the UI frame (z-index 3)
+  and gives it a `clip-path`: the whole window, minus the page (a path with
+  its rounded corners, wound the other way), plus each overlay's box and
+  shadow. `clip-path` clips hit-testing as well as painting, and the wheel
+  still scrolls the page through the clipped-out part (checked 2026-09-25).
+- **A blurred shadow reaches about 1.41 times its blur radius** past the
+  shadow's edge: `nsContextBoxBlur::GetBlurRadiusMargin` uses a standard
+  deviation of half the blur radius, times `GAUSSIAN_SCALE_FACTOR` (2.82).
+  Clipping at the blur radius left a hard edge; NeekoWindow allows 1.5
+  times.
+- **The UI frame is transparent** where the UI page paints nothing (no
+  opaque canvas, even with `color-scheme: dark`), so the page shows through
+  an overlay's shadow if the UI paints no background under its slot.
+- **Testing what's drawn, remote page included:**
+  `browsingContext.currentWindowGlobal.drawSnapshot(rect, 1, "white")` in
+  the browser window gives an `ImageBitmap` of the window as composited.
 - **Measured with 300 tabs:** same memory and tab-switch time as stock Firefox,
   and faster to open tabs.
 - **Fullscreen has two signals.** `MozDOMFullscreen:Entered` and
