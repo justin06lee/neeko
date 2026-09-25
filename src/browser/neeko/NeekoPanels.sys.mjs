@@ -3,12 +3,13 @@
  *
  * Firefox hangs its panels from icons in its toolbars: permission prompts
  * (camera, microphone, location, notifications), password saving and add-on
- * installs from the address bar, the downloads panel from its button,
- * notices like "add-on added" from the menu button. Neeko hides those
- * toolbars, so Firefox would open these panels in the window's top-left
- * corner, or (the downloads panel) not at all. Instead they hang from the top
- * edge of the web page: the address bar's panels at its left end and the
- * toolbar buttons' at its right end, as in Firefox.
+ * installs from the address bar, the bookmark panel from its star, the
+ * downloads panel from its button, notices like "add-on added" from the menu
+ * button. Neeko hides those toolbars, so Firefox would open these panels in
+ * the window's top-left corner, or (the downloads and bookmark panels) not at
+ * all. Instead they hang from the top edge of the web page: the address
+ * bar's panels at its left end and the toolbar buttons' at its right end, as
+ * in Firefox.
  *
  * This is the fallback for UIs that don't show these things themselves. A
  * UI that listens for the API's "prompts.open" shows permission prompts
@@ -139,6 +140,36 @@ function anchorDownloadsPanel(win) {
     button.getAnchor = function () {
       return getAnchor.call(this) ?? win.document.getElementById(ANCHOR_ID);
     };
+  });
+}
+
+/**
+ * Firefox's bookmark panel (Cmd+D, when the UI doesn't bookmark pages itself)
+ * hangs from the address bar's star, which is hidden: finding it throws
+ * ("PageActions: No anchor node for bookmark") and the panel never opens.
+ * Given the page's anchor instead, it opens at the top right of the page.
+ */
+function anchorBookmarkPanel(win) {
+  whenCreated(win, "BookmarkingUI", ui => {
+    let get = Object.getOwnPropertyDescriptor(ui, "anchor")?.get;
+    if (!get) {
+      return;
+    }
+    Object.defineProperty(ui, "anchor", {
+      configurable: true,
+      enumerable: true,
+      get() {
+        try {
+          let anchor = get.call(this);
+          if (anchor?.checkVisibility()) {
+            return anchor;
+          }
+        } catch (e) {
+          // The star isn't laid out.
+        }
+        return win.document.getElementById(ANCHOR_ID);
+      },
+    });
   });
 }
 
@@ -334,6 +365,7 @@ export const NeekoPanels = {
       capture: true,
     });
     anchorDownloadsPanel(win);
+    anchorBookmarkPanel(win);
 
     let state = { prompts: new Map(), getAPI, popups: null };
     windows.set(win, state);

@@ -9,8 +9,8 @@
  *
  * The file's value is a function Neeko calls with the MessagePort that
  * carries the messages, and what the UI can read without waiting
- * ({ platform, settings, colorScheme }), so nothing else leaks into the
- * page's globals.
+ * ({ platform, settings, colorScheme, bookmarkFolders }), so nothing else
+ * leaks into the page's globals.
  */
 
 (port, facts) => {
@@ -151,6 +151,17 @@
       all: () => Object.fromEntries(settings),
       set: (key, value) => call("settings.set", key, value),
       on: events("settings", ["change"]),
+    }),
+    bookmarks: Object.freeze({
+      // The folders every profile has: { toolbar, menu, other, mobile }.
+      folders: Object.freeze({ ...facts.bookmarkFolders }),
+      list: folderId => call("bookmarks.list", folderId),
+      get: id => call("bookmarks.get", id),
+      find: url => call("bookmarks.find", url),
+      add: item => call("bookmarks.add", item),
+      update: (id, changes) => call("bookmarks.update", id, changes),
+      remove: id => call("bookmarks.remove", id),
+      on: events("bookmarks", ["add", "remove", "move", "update", "request"]),
     }),
     colorScheme: Object.freeze({
       get: () => colorScheme,

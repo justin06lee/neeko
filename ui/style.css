@@ -209,6 +209,82 @@ aside {
   color: var(--text-quiet);
 }
 
+/* The bookmarks toolbar's contents, below the tabs. */
+#bookmarks {
+  border-top: 1px solid var(--selected);
+  padding-top: 8px;
+  max-height: 35%;
+  overflow-y: auto;
+  -moz-window-dragging: no-drag;
+}
+
+#bookmarks[hidden] {
+  display: none;
+}
+
+#bookmarks h2 {
+  margin: 0 0 6px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--text-quiet);
+}
+
+#bookmarks ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+#bookmarks li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 4px 4px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+#bookmarks li:hover {
+  background: var(--hover);
+}
+
+#bookmarks .icon {
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  flex: none;
+  color: var(--text-quiet);
+}
+
+#bookmarks .icon img {
+  width: 16px;
+  height: 16px;
+}
+
+#bookmarks .title {
+  flex: 1;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+#bookmarks .remove {
+  border: none;
+  background: none;
+  padding: 0 4px;
+  visibility: hidden;
+}
+
+#bookmarks li:hover .remove {
+  visibility: visible;
+}
+
+#star.on {
+  color: #f0b44c;
+}
+
 /* Downloads, newest first, at the bottom of the tab list. */
 #downloads {
   border-top: 1px solid var(--selected);

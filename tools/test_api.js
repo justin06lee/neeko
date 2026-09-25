@@ -844,6 +844,129 @@ await waitFor(() => otherWindow.closed, "the second window to close");
 window.focus();
 await waitFor(() => Services.focus.activeWindow == window, "this window to be active again", 30000);
 
+// Bookmarks: Firefox's own, identified by ids that last across sessions.
+let folders = neeko.bookmarks.folders;
+check(
+  folders.toolbar == "toolbar_____" && folders.other == "unfiled_____",
+  `the folders every profile has (${JSON.stringify(folders)})`
+);
+let bookmarkEvents = [];
+for (let type of ["add", "remove", "move", "update"]) {
+  neeko.bookmarks.on(type, data => bookmarkEvents.push({ type, ...data }));
+}
+await neeko.tabs.current();
+let toolbarBefore = await neeko.bookmarks.list();
+// A page whose icon Firefox has stored, to bookmark.
+let iconPage = `${BASE}/icon`;
+let bookmarkTab = await neeko.tabs.open(iconPage);
+await waitFor(
+  async () => !!(await PlacesUtils.favicons.getFaviconForPage(Services.io.newURI(iconPage))),
+  "Firefox to store the page's icon"
+);
+let saved = await neeko.bookmarks.add({ url: iconPage, title: "Icon page" });
+check(
+  saved.type == "bookmark" && saved.parentId == folders.toolbar && saved.title == "Icon page" && saved.url == iconPage,
+  "add() bookmarks a page, on the toolbar by default"
+);
+check(saved.icon == `page-icon:${iconPage}`, `with its icon (${saved.icon})`);
+let markImage = new frame.contentWindow.Image();
+markImage.src = saved.icon;
+check(await markImage.decode().then(() => markImage.naturalWidth > 0, () => false), "which the UI can show");
+await waitFor(
+  () => bookmarkEvents.some(e => e.type == "add" && e.bookmark.id == saved.id && e.index == toolbarBefore.length),
+  "an add event, with its position"
+);
+let toolbarNow = await neeko.bookmarks.list();
+check(
+  toolbarNow.at(-1)?.id == saved.id && toolbarNow.length == toolbarBefore.length + 1,
+  "list() has it, at the end"
+);
+check((await neeko.bookmarks.find(iconPage)).map(b => b.id).join() == saved.id, "find() finds it by its URL");
+check((await neeko.bookmarks.find(`${BASE}/two`)).length == 0, "and nothing for a page that isn't bookmarked");
+check((await neeko.bookmarks.get(saved.id)).title == "Icon page", "get()");
+
+// Folders and separators; renaming, moving, removing.
+let folder = await neeko.bookmarks.add({ type: "folder", title: "Stuff" });
+let separator = await neeko.bookmarks.add({ type: "separator" });
+check(
+  folder.type == "folder" && folder.url === null && separator.type == "separator",
+  "add() makes folders and separators"
+);
+let inside = await neeko.bookmarks.add({ url: `${BASE}/one`, title: "One", parentId: folder.id });
+check((await neeko.bookmarks.list(folder.id)).map(b => b.id).join() == inside.id, "list() of a folder");
+check(inside.icon === null, "a page without an icon has none");
+await rejects(neeko.bookmarks.list(inside.id), /isn't a folder/, "list() of a bookmark");
+check((await neeko.bookmarks.update(saved.id, { title: "Renamed" })).title == "Renamed", "update() renames");
+await waitFor(
+  () => bookmarkEvents.some(e => e.type == "update" && e.bookmark.id == saved.id && e.bookmark.title == "Renamed" && e.changed.includes("title")),
+  "with an update event"
+);
+await neeko.bookmarks.update(saved.id, { url: `${BASE}/two` });
+await waitFor(
+  () => bookmarkEvents.some(e => e.type == "update" && e.bookmark.url == `${BASE}/two` && e.changed.includes("url")),
+  "update() changes the URL"
+);
+await neeko.bookmarks.update(saved.id, { parentId: folder.id, index: 0 });
+await waitFor(
+  () => bookmarkEvents.some(e => e.type == "move" && e.id == saved.id && e.parentId == folder.id && e.index == 0 && e.oldParentId == folders.toolbar),
+  "update() moves it into a folder, with a move event"
+);
+check(
+  (await neeko.bookmarks.list(folder.id)).map(b => b.id).join() == [saved.id, inside.id].join(),
+  "at the position asked"
+);
+await neeko.bookmarks.remove(folder.id);
+await waitFor(
+  () => bookmarkEvents.some(e => e.type == "remove" && e.id == folder.id && e.parentId == folders.toolbar),
+  "remove() removes a folder, with a remove event"
+);
+check(
+  !bookmarkEvents.some(e => e.type == "remove" && [saved.id, inside.id].includes(e.id)),
+  "just one event, for the folder"
+);
+check((await neeko.bookmarks.find(`${BASE}/two`)).length == 0, "and what was in it goes too");
+await neeko.bookmarks.remove(separator.id);
+
+// Tags are bookmarks in a folder Firefox hides; they stay out.
+let tagged = await neeko.bookmarks.add({ url: `${BASE}/one`, title: "Tagged" });
+let beforeTagging = bookmarkEvents.length;
+PlacesUtils.tagging.tagURI(Services.io.newURI(`${BASE}/one`), ["neeko-test"]);
+await new Promise(r => setTimeout(r, 300));
+check(bookmarkEvents.length == beforeTagging, "tagging a page doesn't look like bookmarks being added");
+check((await neeko.bookmarks.find(`${BASE}/one`)).length == 1, "find() doesn't count tags");
+check(!(await neeko.bookmarks.list(folders.toolbar)).some(b => b.title == "neeko-test"), "nor does list()");
+PlacesUtils.tagging.untagURI(Services.io.newURI(`${BASE}/one`), ["neeko-test"]);
+await neeko.bookmarks.remove(tagged.id);
+
+await rejects(neeko.bookmarks.add({ url: "not a url" }), /URL/, "add() with a bad URL");
+await rejects(neeko.bookmarks.add({ title: "Nothing" }), /url, or type/, "add() with neither a URL nor a type");
+await rejects(neeko.bookmarks.get("nope"), /No bookmark/, "get() of an unknown bookmark");
+
+// Cmd+D: the UI bookmarks the page itself if it listens, and otherwise
+// Firefox's own bookmark panel opens at the top of the page.
+let requests = [];
+let stopRequests = neeko.bookmarks.on("request", data => requests.push(data));
+await neeko.tabs.current();
+let bookmarkPage = () => document.getElementById("Browser:AddBookmarkAs").doCommand();
+bookmarkPage();
+await waitFor(() => requests[0]?.tabId == bookmarkTab.id, "Cmd+D reaches a UI that listens, with the tab");
+await new Promise(r => setTimeout(r, 300));
+check(
+  StarUI.panel.state == "closed" && !(await neeko.bookmarks.find(iconPage)).length,
+  "and Firefox neither opens its panel nor bookmarks the page"
+);
+stopRequests();
+await neeko.tabs.current();
+bookmarkPage();
+await waitFor(() => StarUI.panel.state == "open", "without a listener, Firefox's bookmark panel opens");
+check(hangsFrom(StarUI.panel, "right"), `at the top right of the page (${where(StarUI.panel)})`);
+StarUI.panel.hidePopup();
+await waitFor(async () => (await neeko.bookmarks.find(iconPage)).length == 1, "and bookmarks the page");
+for (let bookmark of await neeko.bookmarks.find(iconPage)) {
+  await neeko.bookmarks.remove(bookmark.id);
+}
+await neeko.tabs.close(bookmarkTab.id);
+
 // Neeko sends only the events the UI listens for.
 let heardSelect = 0;
 let stopSelect = neeko.tabs.on("select", () => heardSelect++);

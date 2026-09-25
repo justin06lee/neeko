@@ -45,55 +45,58 @@ get added as it needs them.
   pages, Firefox's own pages and panels, and the UI's
   `prefers-color-scheme`. Fallback: no settings, and the system's color
   scheme.
+- [x] **Bookmarks** (v0.6.0): list folders (the toolbar by default), find a
+  URL's bookmarks (the star), add, update (rename, move), remove, with
+  events; icons by reference (`page-icon:` URLs). Cmd+D goes to a UI that
+  listens. Fallback: Firefox's bookmark panel (Cmd+D, which didn't open at
+  all under Neeko before) and Library window.
 
 ## API features, in order
 
-The first four are what Toji, the user's browser, asked for next, in its
+The first three are what Toji, the user's browser, asked for next, in its
 order (2026-09-25).
 
-1. [ ] **Bookmarks**, the bookmarks toolbar first: list (with icons, by
-   reference), add, remove, change events, and whether a URL is bookmarked.
-2. [ ] **The browser's own pages.** A start page (the New Tab page and home
+1. [ ] **The browser's own pages.** A start page (the New Tab page and home
    page) and later settings pages, as ordinary pages from the app folder in
    tabs, with a small, safe API of their own: go where the user typed, open
    a tab, the UI settings, the search engines. These run in web content
    processes, so what they get needs the user's approval first (the rule
    that web pages never reach the API).
-3. [ ] **Pointer at the page's edges.** Events when the pointer reaches the
+2. [ ] **Pointer at the page's edges.** Events when the pointer reaches the
    page's top edge or the window's left edge, where the page covers the
    window, so the UI can peek a bar or a sidebar out.
-4. [ ] **Tab groups**, Firefox's own: list groups (name, color, collapsed),
+3. [ ] **Tab groups**, Firefox's own: list groups (name, color, collapsed),
    each tab's group, create, rename, collapse, ungroup, move tabs in and
    out, with events.
-5. [ ] **Camera, microphone, passwords and add-on installs.** Permission
+4. [ ] **Camera, microphone, passwords and add-on installs.** Permission
    prompts are done (see Done); these doorhangers stay Firefox's for now,
    hanging from the top of the page. Camera and microphone prompts let the
    user pick a device inside Firefox's panel (`WebRTCParent.sys.mjs` reads
    the choice from it), so the API would need device lists; password saving
    and add-on installs show forms and permission lists.
-6. [ ] **Context menus.** The UI can draw its own menu for pages, links,
+5. [ ] **Context menus.** The UI can draw its own menu for pages, links,
    images and selections, with Firefox's actions available. Fallback:
    Firefox's own context menu.
-7. [ ] **Find in page.** Find, next, previous, match count. Fallback:
+6. [ ] **Find in page.** Find, next, previous, match count. Fallback:
    Firefox's find bar.
-8. [ ] **Address bar suggestions.** History, bookmark and open-tab matches
+7. [ ] **Address bar suggestions.** History, bookmark and open-tab matches
     for what the user types, and search suggestions, fetched only when the
     UI asks (search suggestions send what you type to the search engine,
     which is why they're off in Firefox's hidden address bar).
-9. [ ] **History.** Search and list visits, delete entries.
-10. [ ] **Tab sleeping.** Unload a tab to save memory, and a `sleeping`
+8. [ ] **History.** Search and list visits, delete entries.
+9. [ ] **Tab sleeping.** Unload a tab to save memory, and a `sleeping`
     field on tabs. Needed for "a bajillion tabs".
-11. [ ] **Tab previews, by reference.** Thumbnails the UI shows without
+10. [ ] **Tab previews, by reference.** Thumbnails the UI shows without
     copying image data (the way tab icons work).
-12. [ ] **Extensions UI.** List extensions' toolbar buttons, show their
+11. [ ] **Extensions UI.** List extensions' toolbar buttons, show their
     badges and open their popups from the UI. Today: extensions work, but
     their buttons live in the hidden toolbar.
-13. [ ] **DevTools.** Open and close DevTools for the page, and the Browser
+12. [ ] **DevTools.** Open and close DevTools for the page, and the Browser
     Toolbox for the UI (dev builds already allow it).
-14. [ ] **Performance test with a budget.** Automated: hundreds of tabs,
+13. [ ] **Performance test with a budget.** Automated: hundreds of tabs,
     memory and tab-switch time, measured against stock Firefox, failing
     when Neeko gets slower.
-15. [ ] **"Trick" mode.** Run the UI as a sandboxed, unprivileged page that
+14. [ ] **"Trick" mode.** Run the UI as a sandboxed, unprivileged page that
     can only use the API. The API is already messages of plain data, so
     this swaps the channel, not the calls.
 

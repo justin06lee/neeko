@@ -5,8 +5,8 @@ before your first script runs, in your UI page (`ui/index.html`) and nowhere
 else. Web pages never get it.
 
 So far it covers tabs, navigation, permission prompts, fullscreen,
-downloads, your UI's settings and the color scheme, and drawing over the
-page. Features get
+downloads, bookmarks, your UI's settings and the color scheme, and drawing
+over the page. Features get
 added one at a time as browsers built on Neeko need them. The demo UI in
 `ui/` uses every one of them.
 
@@ -386,6 +386,66 @@ It's Firefox's `ui.systemUsesDarkTheme` pref, which stands in for the
 system's light or dark setting. A Firefox theme with a color scheme of its
 own, if the user installs one, still wins in its windows.
 
+## Bookmarks
+
+Firefox's own bookmarks: the same ones its Library window shows, saved in
+the profile and shared by every window.
+
+```js
+let toolbar = await neeko.bookmarks.list();          // the bookmarks toolbar
+let starred = (await neeko.bookmarks.find(tab.url)).length > 0;
+await neeko.bookmarks.add({ url: tab.url, title: tab.title });
+neeko.bookmarks.on("add", ({ bookmark, index }) => draw(bookmark, index));
+```
+
+A bookmark looks like this:
+
+```js
+{
+  id: "Ab3dE7fGhI0k",        // stays the same across sessions
+  type: "bookmark",          // or "folder" or "separator"
+  parentId: "toolbar_____",  // the folder it's in
+  title: "Example Domain",
+  url: "https://example.com/",           // null for folders and separators
+  icon: "page-icon:https://example.com/",  // or null
+  added: 1790000000000,      // when it was added, in milliseconds
+}
+```
+
+**`icon`** is a URL for an `<img>`: Firefox serves the page's icon from its
+own store, so no image data goes through the API. It's `null` if Firefox has
+no icon for the page (it gets one when the page is visited).
+
+**Folders.** `neeko.bookmarks.folders` has the ids of the folders every
+profile has, at once: `toolbar` (the bookmarks toolbar), `menu` (the
+bookmarks menu), `other` ("Other Bookmarks") and `mobile`. Folders can hold
+folders. Firefox's tags are left out.
+
+### Methods
+
+| Method | What it does |
+| --- | --- |
+| `neeko.bookmarks.list(folderId?)` | What's in a folder, in order: the bookmarks toolbar if you leave the id out. Folders inside come as items of type `folder`; list them for their contents. |
+| `neeko.bookmarks.get(id)` | One bookmark, folder or separator. |
+| `neeko.bookmarks.find(url)` | Every bookmark of this URL, in any folder. An empty list means the page isn't bookmarked: that's your star. |
+| `neeko.bookmarks.add(item)` | Adds `{ url, title }`, a folder (`{ type: "folder", title }`) or a separator (`{ type: "separator" }`), in `parentId` at `index` (0 is the first). By default it goes at the end of the folder Firefox puts new bookmarks in, the toolbar unless the user chose another. Resolves to the new item. |
+| `neeko.bookmarks.update(id, changes)` | Changes `title` or `url`, or moves the item: to `index` in its folder, or into `parentId` (at `index`, or the end). Resolves to the item as it is now. |
+| `neeko.bookmarks.remove(id)` | Removes a bookmark or separator, or a folder with everything in it. |
+| `neeko.bookmarks.on(event, listener)` | Listens for an event, as `tabs.on` does. |
+
+### Events
+
+Changes arrive however they're made: by your UI, another window, or
+Firefox's Library window.
+
+| Event | Data | When |
+| --- | --- | --- |
+| `add` | `{ bookmark, index }` | Something was added, at position `index` in its folder. |
+| `remove` | `{ id, parentId }` | Something was removed. Removing a folder sends one event, for the folder. |
+| `move` | `{ id, parentId, index, oldParentId }` | Something moved to position `index` in `parentId`. |
+| `update` | `{ bookmark, changed }` | Its title or URL changed; `changed` says which (`["title"]`, or `["url", "icon"]`). |
+| `request` | `{ tabId }` | The user asked to bookmark the page: Cmd+D, or Bookmarks > Bookmark Current Tab. Listening for this is how your UI says it bookmarks pages itself. |
+
 ## Drawing over the page
 
 The web page is drawn on top of your UI, over the element you mark
@@ -428,6 +488,10 @@ even where its UI has no controls yet.
 
 - **Keyboard shortcuts** work as usual: Cmd+T, Cmd+W, Ctrl+Tab, Cmd+[ and
   Cmd+], Cmd+R, and Ctrl+M to mute a tab.
+- **Bookmarking.** If your UI doesn't listen for `bookmarks` `request`,
+  Cmd+D opens Firefox's own bookmark panel at the top right of the page, to
+  name and file the bookmark. Cmd+Shift+O always opens Firefox's Library
+  window, with every bookmark.
 - **Drawing over the page.** Without elements marked `data-neeko-overlay`,
   the page stays on top of your UI everywhere in its slot.
 - **Error pages and crashed tabs.** Firefox's own error pages ("Hmm. We're
@@ -500,6 +564,8 @@ The pieces:
   over the page, and handles Cmd+L and its fallback.
 - `src/browser/neeko/NeekoSettings.sys.mjs` keeps the settings and the
   color scheme, in prefs.
+- `src/browser/neeko/NeekoBookmarks.sys.mjs` turns Firefox's bookmarks
+  (Places) into plain data and events.
 
 ## Testing
 
