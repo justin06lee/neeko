@@ -115,6 +115,7 @@
       duplicate: (tabId, options) => call("tabs.duplicate", tabId, options),
       move: (index, tabId) => call("tabs.move", index, tabId),
       setMuted: (muted, tabId) => call("tabs.setMuted", muted, tabId),
+      setGroup: (groupId, tabId) => call("tabs.setGroup", groupId, tabId),
       focus: () => call("tabs.focus"),
       on: events("tabs", ["open", "close", "select", "move", "update"]),
     }),
@@ -162,6 +163,13 @@
       update: (id, changes) => call("bookmarks.update", id, changes),
       remove: id => call("bookmarks.remove", id),
       on: events("bookmarks", ["add", "remove", "move", "update", "request"]),
+    }),
+    groups: Object.freeze({
+      list: () => call("groups.list"),
+      create: (tabIds, options) => call("groups.create", tabIds, options),
+      update: (groupId, changes) => call("groups.update", groupId, changes),
+      ungroup: groupId => call("groups.ungroup", groupId),
+      on: events("groups", ["create", "remove", "update"]),
     }),
     pointer: Object.freeze({
       setEdges: edges => call("pointer.setEdges", edges),
