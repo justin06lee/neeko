@@ -333,6 +333,25 @@ Add to it whenever something costs you time.
   once the original's state is flushed; selecting it at once is fine.
 - **`"use strict"` is a syntax error in a function with destructured
   parameters.** `neeko-api.js` takes its second argument whole.
+- **One pref makes everything light or dark: `ui.systemUsesDarkTheme`**
+  (int, 1 or 0; `nsXPLookAndFeel`). It stands in for the system's setting,
+  and changing it restyles every window (`IntPrefChanged`). The browser
+  window, the UI page, Firefox's panels, web pages
+  (`layout.css.prefers-color-scheme.content-override`, default 2: "auto")
+  and Firefox's own pages (about:preferences, in the parent process, too)
+  all follow it, because with the default theme they all come down to the
+  system's scheme. `LightweightThemeConsumer` writes
+  `browser.theme.toolbar-theme` and `content-theme` (2, "system", for the
+  default theme) on every theme update, so setting those instead would be
+  undone; a theme with a color scheme of its own still wins in its windows.
+- **UI settings are prefs of their own type.** A pref keeps its type: to
+  store a boolean where a string was, clear the user value first, which
+  only works if there's no default of the old type.
+- **What the UI reads without waiting** comes with `neeko-api.js`'s install
+  call (`facts`), and change events that NeekoAPI always sends keep it
+  current. NeekoAPI starts in the same task as the install (gBrowser
+  exists by then), so no change falls in between; if it ever starts later,
+  `resync()` sends every setting again.
 - **Firefox's names for platforms** (`AppConstants.platform`) are
   `macosx`, `win` and `linux`; `neeko.platform` says `macos`, `windows`,
   `linux`.

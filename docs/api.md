@@ -4,8 +4,9 @@ Your UI talks to Firefox through one global object, `neeko`. It's there
 before your first script runs, in your UI page (`ui/index.html`) and nowhere
 else. Web pages never get it.
 
-So far it covers tabs, navigation, permission prompts, fullscreen and
-downloads. Features get
+So far it covers tabs, navigation, permission prompts, fullscreen,
+downloads, your UI's settings and the color scheme, and drawing over the
+page. Features get
 added one at a time as browsers built on Neeko need them. The demo UI in
 `ui/` uses every one of them.
 
@@ -34,7 +35,8 @@ await neeko.nav.back();
   before its reply. So the usual pattern is safe: subscribe to events, call
   `list()` once, then apply events as they come.
 - **Listening means "my UI handles this".** Neeko only sends the events your
-  UI listens for. Where a feature has a fallback, Firefox's own version
+  UI listens for (settings and color scheme changes always come, since
+  `neeko` keeps its copy of them current). Where a feature has a fallback, Firefox's own version
   steps in only while nobody listens (see [Fallbacks](#fallbacks)).
 - **Options are checked.** Methods that take an options object reject
   options they don't know, so a typo fails loudly instead of doing nothing.
@@ -316,6 +318,74 @@ Every method but `list` takes a download's `id`.
 | `update` | `{ download }` | A download progressed, finished, failed or was canceled. |
 | `remove` | `{ id }` | A download left the list. |
 
+## Settings
+
+Your UI's own settings (a theme, a layout, whether a sidebar is open):
+saved in the profile, the same in every window, and there without waiting
+when a window's UI starts.
+
+```js
+let layout = neeko.settings.get("layout") ?? "top";   // at once, no promise
+await neeko.settings.set("layout", "side");
+neeko.settings.on("change", ({ key, value }) => apply(key, value));
+```
+
+Read them in a plain `<script>` in your page's `<head>` (not a module,
+which runs later) and your UI's first paint is already right, so a new
+window never flashes the wrong layout. The demo UI's `ui/early.js` does
+that.
+
+Names are 1 to 64 letters, digits, `-` or `_`. Values are strings (up to
+4096 characters), `true` or `false`, or whole numbers; store anything
+bigger or more structured some other way. `get` returns `undefined` for a
+setting that isn't there.
+
+| Method | What it does |
+| --- | --- |
+| `neeko.settings.get(key)` | A setting's value, or `undefined`. At once. |
+| `neeko.settings.all()` | Every setting, as `{ key: value }`. At once. |
+| `neeko.settings.set(key, value)` | Saves a setting for every window. `null` removes it. Resolves once saved; by then `get` already returns the new value. |
+| `neeko.settings.on(event, listener)` | Listens for an event, as `tabs.on` does. |
+
+| Event | Data | When |
+| --- | --- | --- |
+| `change` | `{ key, value }` | A setting changed, in this window or another (or in about:config). `value` is `null` if it was removed. |
+
+Settings are Firefox prefs named `neeko.settings.<key>`. Your browser can
+ship defaults for them in its `branding/prefs.js`, such as
+`pref("neeko.settings.layout", "side");`; removing a setting with `null`
+goes back to that default.
+
+## Color scheme
+
+Makes web pages, Firefox's own pages and panels, and your UI's own
+`prefers-color-scheme` light or dark, or follow the system's setting again,
+in every window:
+
+```js
+await neeko.colorScheme.set("dark");   // "light", "dark" or "system"
+neeko.colorScheme.get();               // "dark", at once
+```
+
+It's saved, and it's in effect before your UI's first paint, so a UI that
+styles itself with `@media (prefers-color-scheme: …)` is right from the
+start and follows every change on its own (the demo UI's `style.css` does
+this). Web pages that support dark mode switch as you change it.
+
+| Method | What it does |
+| --- | --- |
+| `neeko.colorScheme.get()` | `"light"`, `"dark"`, or `"system"` when the system's setting applies. At once. |
+| `neeko.colorScheme.set(scheme)` | Sets it for everything, in every window. |
+| `neeko.colorScheme.on(event, listener)` | Listens for an event, as `tabs.on` does. |
+
+| Event | Data | When |
+| --- | --- | --- |
+| `change` | `{ colorScheme }` | It changed, in this window or another. |
+
+It's Firefox's `ui.systemUsesDarkTheme` pref, which stands in for the
+system's light or dark setting. A Firefox theme with a color scheme of its
+own, if the user installs one, still wins in its windows.
+
 ## Drawing over the page
 
 The web page is drawn on top of your UI, over the element you mark
@@ -425,7 +495,11 @@ The pieces:
 - `src/browser/neeko/NeekoAPI.sys.mjs` is Firefox's side. It carries out the
   calls and watches the tabs for events.
 - `src/browser/neeko/NeekoWindow.sys.mjs` connects the two when your UI
-  loads, and handles Cmd+L and its fallback.
+  loads (handing `neeko` the platform, settings and color scheme to read
+  without waiting), lays the page over your content slot and your overlays
+  over the page, and handles Cmd+L and its fallback.
+- `src/browser/neeko/NeekoSettings.sys.mjs` keeps the settings and the
+  color scheme, in prefs.
 
 ## Testing
 

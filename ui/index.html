@@ -20,6 +20,7 @@
       content="script-src chrome:; object-src 'none'"
     />
     <link rel="stylesheet" href="style.css" />
+    <script src="early.js"></script>
     <script type="module" src="app.js"></script>
   </head>
   <body>
@@ -52,6 +53,12 @@
       <button data-command="duplicate">Duplicate tab</button>
       <button data-command="mute">Mute tab</button>
       <button data-command="moveToStart">Move tab to the top</button>
+      <hr />
+      <button data-command="tabsSide">Tabs on the right</button>
+      <p class="label">Appearance</p>
+      <button data-command="colorScheme" data-scheme="system">System</button>
+      <button data-command="colorScheme" data-scheme="light">Light</button>
+      <button data-command="colorScheme" data-scheme="dark">Dark</button>
       <hr />
       <button data-command="fullscreen">Full screen</button>
     </div>

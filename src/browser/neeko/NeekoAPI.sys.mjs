@@ -20,6 +20,7 @@
 
 import { NeekoDownloads } from "moz-src:///browser/neeko/NeekoDownloads.sys.mjs";
 import { NeekoPanels } from "moz-src:///browser/neeko/NeekoPanels.sys.mjs";
+import { NeekoSettings } from "moz-src:///browser/neeko/NeekoSettings.sys.mjs";
 
 const lazy = {};
 ChromeUtils.defineESModuleGetters(lazy, {
@@ -155,7 +156,13 @@ const EVENTS = [
   "downloads.start",
   "downloads.update",
   "downloads.remove",
+  "settings.change",
+  "colorScheme.change",
 ];
+
+// Events sent whether or not the UI listens: neeko-api.js keeps its copy of
+// the settings and color scheme (read without waiting) up to date with them.
+const ALWAYS_SENT = ["settings.change", "colorScheme.change"];
 
 // Set on the window's root while the UI lays out page fullscreen itself, which
 // turns off neeko.css's fallback (the page filling the window over the UI).
@@ -466,6 +473,25 @@ const METHODS = {
   "downloads.remove"(id) {
     return this.downloads().remove(id);
   },
+
+  /**
+   * Saves one of the UI's settings, for every window. null removes it.
+   */
+  "settings.set"(key, value) {
+    NeekoSettings.set(key, value);
+  },
+
+  "settings.all"() {
+    return NeekoSettings.all();
+  },
+
+  /**
+   * Makes web pages, Firefox's own pages and panels, and the UI's own
+   * prefers-color-scheme light or dark, or follow the system again.
+   */
+  "colorScheme.set"(scheme) {
+    NeekoSettings.setColorScheme(scheme);
+  },
 };
 
 export class NeekoAPI {
@@ -486,6 +512,8 @@ export class NeekoAPI {
   #tabIcons = new WeakMap();
   /** Follows the "crashed" attribute of the window's tabs. */
   #crashes;
+  /** Stop following the settings and the color scheme. */
+  #unwatch = [];
   #ui;
   #send;
   #destroyed = false;
@@ -520,6 +548,27 @@ export class NeekoAPI {
     for (let type of FULLSCREEN_EVENTS) {
       win.addEventListener(type, this, true);
     }
+    this.#unwatch.push(
+      NeekoSettings.watch((key, value) =>
+        this.#emit("settings.change", { key, value })
+      ),
+      NeekoSettings.watchColorScheme(colorScheme =>
+        this.#emit("colorScheme.change", { colorScheme })
+      )
+    );
+  }
+
+  /**
+   * Sends every setting and the color scheme as change events, for a UI page
+   * whose API started after its `neeko` object took their values.
+   */
+  resync() {
+    for (let [key, value] of Object.entries(NeekoSettings.all())) {
+      this.#emit("settings.change", { key, value });
+    }
+    this.#emit("colorScheme.change", {
+      colorScheme: NeekoSettings.colorScheme(),
+    });
   }
 
   destroy() {
@@ -544,6 +593,9 @@ export class NeekoAPI {
     }
     this.gBrowser.removeTabsProgressListener(this);
     this.#crashes.disconnect();
+    for (let unwatch of this.#unwatch) {
+      unwatch();
+    }
     // The icons' blob: URLs go with the UI page.
     this.#icons.clear();
   }
@@ -574,7 +626,10 @@ export class NeekoAPI {
   }
 
   #emit(event, data) {
-    if (!this.#destroyed && this.listening.has(event)) {
+    if (
+      !this.#destroyed &&
+      (this.listening.has(event) || ALWAYS_SENT.includes(event))
+    ) {
       this.#send({ event, data });
     }
   }

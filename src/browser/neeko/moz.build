@@ -10,6 +10,7 @@ MOZ_SRC_FILES += [
     "NeekoDownloads.sys.mjs",
     "NeekoPanels.sys.mjs",
     "NeekoPrivacy.sys.mjs",
+    "NeekoSettings.sys.mjs",
     "NeekoWindow.sys.mjs",
 ]
 

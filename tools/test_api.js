@@ -753,6 +753,97 @@ check(
 );
 await neeko.tabs.close(downloadTab.id);
 
+// Settings: the UI's own, saved, the same in every window, and there at once
+// when a window's UI starts.
+let settingEvents = [];
+neeko.settings.on("change", data => settingEvents.push(data));
+check(JSON.stringify(neeko.settings.all()) == "{}", "a fresh profile has no settings");
+await neeko.settings.set("theme", "dark");
+check(neeko.settings.get("theme") == "dark", "set() saves a setting, and get() reads it at once");
+check(
+  settingEvents.some(e => e.key == "theme" && e.value == "dark"),
+  "with a change event, before set() resolves"
+);
+check(Services.prefs.getStringPref("neeko.settings.theme", "") == "dark", "it's a pref, saved with the profile");
+await neeko.settings.set("sidebarOpen", true);
+await neeko.settings.set("width", 240);
+check(
+  neeko.settings.get("sidebarOpen") === true && neeko.settings.get("width") === 240,
+  "true/false and whole numbers keep their type"
+);
+await neeko.settings.set("width", "wide");
+check(neeko.settings.get("width") === "wide", "a setting can change type");
+await neeko.settings.set("width", null);
+check(
+  neeko.settings.get("width") === undefined &&
+    !("width" in neeko.settings.all()) &&
+    settingEvents.some(e => e.key == "width" && e.value === null),
+  "null removes a setting, with a change event"
+);
+await rejects(neeko.settings.set("theme", 1.5), /whole numbers/, "set() with a fraction");
+await rejects(neeko.settings.set("theme", { a: 1 }), /strings/, "set() with an object");
+await rejects(neeko.settings.set("no spaces", 1), /Setting names/, "set() with a bad name");
+Services.prefs.setStringPref("neeko.settings.layout", "side");
+await waitFor(
+  () => neeko.settings.get("layout") == "side",
+  "a change from elsewhere (about:config) reaches the UI"
+);
+
+// A new window's UI has them before its first script runs, and every
+// window hears every change.
+let otherWindow = OpenBrowserWindow();
+let otherNeeko = await waitFor(
+  () => otherWindow.document?.getElementById("neeko-ui")?.contentWindow?.neeko,
+  "a second window's UI"
+);
+check(
+  otherNeeko?.settings.get("theme") == "dark" && otherNeeko.settings.get("layout") == "side",
+  "it starts with the settings"
+);
+await otherNeeko?.settings.set("theme", "light");
+await waitFor(() => neeko.settings.get("theme") == "light", "a change in one window reaches the others");
+
+// The color scheme: web pages, Firefox's own pages and the UI's
+// prefers-color-scheme follow it.
+check(neeko.colorScheme.get() == "system", "the color scheme follows the system to begin with");
+let schemes = [];
+neeko.colorScheme.on("change", ({ colorScheme }) => schemes.push(colorScheme));
+let schemeTab = await neeko.tabs.open(`${BASE}/scheme`);
+await waitFor(() => updated(schemeTab.id, t => ["dark", "light"].includes(t.title)), "a page that shows its color scheme");
+let uiDark = () => frame.contentWindow.matchMedia("(prefers-color-scheme: dark)").matches;
+// Firefox's settings page runs in this process, so it can be asked directly.
+let prefsTab = await neeko.tabs.open("about:preferences", { background: true });
+let prefsBrowser = gBrowser.tabs.at(-1).linkedBrowser;
+await waitFor(
+  () => prefsBrowser.contentDocument?.readyState == "complete" && prefsBrowser.currentURI.spec == "about:preferences",
+  "Firefox's settings page"
+);
+let firefoxPageDark = () =>
+  prefsBrowser?.contentWindow?.matchMedia("(prefers-color-scheme: dark)").matches;
+for (let scheme of ["dark", "light"]) {
+  await neeko.colorScheme.set(scheme);
+  check(neeko.colorScheme.get() == scheme && schemes.at(-1) == scheme, `colorScheme.set("${scheme}")`);
+  await waitFor(() => updated(schemeTab.id, t => t.title == scheme), `web pages turn ${scheme}`);
+  await waitFor(() => uiDark() == (scheme == "dark"), `and so does the UI's prefers-color-scheme`);
+  await waitFor(() => firefoxPageDark() == (scheme == "dark"), "and Firefox's own pages");
+  check(
+    otherNeeko?.colorScheme.get() == scheme,
+    "in every window"
+  );
+}
+await neeko.colorScheme.set("system");
+check(
+  neeko.colorScheme.get() == "system" && !Services.prefs.prefHasUserValue("ui.systemUsesDarkTheme"),
+  "and back to the system's"
+);
+await rejects(neeko.colorScheme.set("blue"), /light/, "colorScheme.set() with something else");
+await neeko.tabs.close(schemeTab.id);
+await neeko.tabs.close(prefsTab.id);
+otherWindow.close();
+await waitFor(() => otherWindow.closed, "the second window to close");
+window.focus();
+await waitFor(() => Services.focus.activeWindow == window, "this window to be active again", 30000);
+
 // Neeko sends only the events the UI listens for.
 let heardSelect = 0;
 let stopSelect = neeko.tabs.on("select", () => heardSelect++);
@@ -775,6 +866,7 @@ check(
   (await fresh.tabs.current()).id == first.id,
   "tab ids survive a UI reload"
 );
+check(fresh.settings.get("theme") == "light", "and so do the settings");
 let heard = [];
 fresh.tabs.on("open", data => heard.push(data));
 let extra = await fresh.tabs.open(`${BASE}/one`);

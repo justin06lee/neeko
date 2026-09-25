@@ -20,6 +20,7 @@
 import { AppConstants } from "resource://gre/modules/AppConstants.sys.mjs";
 import { NeekoAPI } from "moz-src:///browser/neeko/NeekoAPI.sys.mjs";
 import { NeekoPanels } from "moz-src:///browser/neeko/NeekoPanels.sys.mjs";
+import { NeekoSettings } from "moz-src:///browser/neeko/NeekoSettings.sys.mjs";
 
 const HTML_NS = "http://www.w3.org/1999/xhtml";
 const UI_ORIGIN = "chrome://neeko-ui/";
@@ -158,8 +159,12 @@ function connectAPI(win, uiWin) {
     target: uiWin,
     wantReturnValue: true,
   });
+  // What the UI can read without waiting: its settings and the color scheme
+  // are there before its first paint, and change events keep them current.
   install(port2, {
     platform: PLATFORMS[AppConstants.platform] ?? AppConstants.platform,
+    settings: NeekoSettings.all(),
+    colorScheme: NeekoSettings.colorScheme(),
   });
 
   let api = null;
@@ -197,6 +202,8 @@ function connectAPI(win, uiWin) {
       if (win.gBrowser) {
         win.removeEventListener("DOMContentLoaded", onLoaded);
         start();
+        // Settings may have changed since the UI got them.
+        api?.resync();
       }
     });
   }
