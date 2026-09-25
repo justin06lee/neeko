@@ -403,5 +403,7 @@ localhost (no internet needed), and drives every method and event through
 `neeko`. That includes checks that web pages can't see it, that sleeping tabs
 stay asleep, and that each fallback (the address bar, prompts, fullscreen,
 the downloads panel) steps in only when nobody listens. It asks for a
-location, goes fullscreen (the screen switches for a moment) and downloads a
-few small files, all from localhost, into its throwaway profile.
+location, goes fullscreen (the screen switches for a moment), downloads a
+few small files, plays a tone too quietly to hear, and crashes one test
+tab on purpose (it stops that tab's content process), all from localhost,
+in its throwaway profile.
