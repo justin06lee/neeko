@@ -1,0 +1,42 @@
+<!doctype html>
+<!--
+  The demo app's start page: about:start, its New Tab page and home page.
+  Your browser's own pages go in pages/ like this one: pages/<name>.html is
+  about:<name>. They're web pages with no privileges, run away from websites,
+  and get one small API, `neekoPage` (see docs/api.md).
+
+  about:start isn't a folder, so relative URLs don't work: the <base> below
+  makes them relative to chrome://neeko-pages/content/, where the pages are.
+-->
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src chrome:; object-src 'none'"
+    />
+    <base href="chrome://neeko-pages/content/" />
+    <title>New Tab</title>
+    <link rel="stylesheet" href="start.css" />
+    <script type="module" src="start.js"></script>
+  </head>
+  <body>
+    <main>
+      <h1>Neeko</h1>
+      <form id="search">
+        <input
+          id="query"
+          type="search"
+          placeholder="Search or enter address"
+          autocomplete="off"
+          spellcheck="false"
+          autofocus
+        />
+      </form>
+      <p class="options">
+        <label>Search with <select id="engine"></select></label>
+        <label><input id="tabs-right" type="checkbox" /> Tabs on the right</label>
+      </p>
+    </main>
+  </body>
+</html>

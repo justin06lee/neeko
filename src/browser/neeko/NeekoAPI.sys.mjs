@@ -284,6 +284,53 @@ function addressInput(input) {
 }
 
 /**
+ * Loads what a user typed into an address bar in a tab's browser: a URL, or
+ * anything Firefox can turn into one ("example.com"), or else search terms
+ * for the default search engine. For the UI (nav.go) and the browser's own
+ * pages (neekoPage.go).
+ */
+export function goTo(win, browser, input) {
+  win.openTrustedLinkIn(addressInput(input), "current", {
+    targetBrowser: browser,
+    allowThirdPartyFixup: true,
+    allowInheritPrincipal: false,
+    allowPinnedTabHostChange: true,
+    indicateErrorPageLoad: true,
+  });
+}
+
+/**
+ * Opens a tab the way the address bar or Cmd+T would: what Firefox's
+ * openLinkIn() does for a new tab (URILoadingHelper), with a position,
+ * which openLinkIn() can't take. With no input, the New Tab page.
+ *
+ * @param {object} options { background, index, addressbar }, as tabs.open
+ *   takes them.
+ */
+export function openTab(win, input, { background = false, index, addressbar = true } = {}) {
+  let url =
+    input === undefined || input === null
+      ? win.BROWSER_NEW_TAB_URL
+      : addressInput(input);
+  let blank = win.isBlankPageURL(url);
+  let focusUrlBar =
+    !background && blank && addressbar && !lazy.AboutNewTab.willNotifyUser;
+  let tab = win.gBrowser.addTab(url, {
+    triggeringPrincipal: Services.scriptSecurityManager.getSystemPrincipal(),
+    allowThirdPartyFixup: true,
+    inBackground: background,
+    tabIndex: index,
+    focusUrlBar,
+  });
+  // The page gets the keys, unless a New Tab page asks for the address bar,
+  // or the UI keeps them (addressbar: false).
+  if (!background && !focusUrlBar && (addressbar || !blank)) {
+    tab.linkedBrowser.focus();
+  }
+  return tab;
+}
+
+/**
  * The API's methods, by the name the UI calls them with. They run with the
  * NeekoAPI as `this`, take and return plain data, and throw to reject the
  * UI's call.
@@ -335,37 +382,12 @@ const METHODS = {
    * page doesn't ask for the address bar).
    */
   "tabs.open"(input, options) {
-    let url =
-      input === undefined || input === null
-        ? this.win.BROWSER_NEW_TAB_URL
-        : addressInput(input);
-    let {
-      background = false,
-      index,
-      addressbar = true,
-    } = checkOptions(options, {
+    let checked = checkOptions(options, {
       background: "boolean",
       index: "index",
       addressbar: "boolean",
     });
-    // What Firefox's openLinkIn() does for a new tab (URILoadingHelper), with
-    // a position, which openLinkIn() can't take.
-    let blank = this.win.isBlankPageURL(url);
-    let focusUrlBar =
-      !background && blank && addressbar && !lazy.AboutNewTab.willNotifyUser;
-    let tab = this.gBrowser.addTab(url, {
-      triggeringPrincipal: Services.scriptSecurityManager.getSystemPrincipal(),
-      allowThirdPartyFixup: true,
-      inBackground: background,
-      tabIndex: index,
-      focusUrlBar,
-    });
-    // The page gets the keys, unless a New Tab page asks for the address bar,
-    // or the UI keeps them (addressbar: false).
-    if (!background && !focusUrlBar && (addressbar || !blank)) {
-      tab.linkedBrowser.focus();
-    }
-    return this.describe(tab);
+    return this.describe(openTab(this.win, input, checked));
   },
 
   /**
@@ -448,14 +470,7 @@ const METHODS = {
    * search engine.
    */
   "nav.go"(input, id) {
-    let url = addressInput(input);
-    this.win.openTrustedLinkIn(url, "current", {
-      targetBrowser: this.findTab(id).linkedBrowser,
-      allowThirdPartyFixup: true,
-      allowInheritPrincipal: false,
-      allowPinnedTabHostChange: true,
-      indicateErrorPageLoad: true,
-    });
+    goTo(this.win, this.findTab(id).linkedBrowser, input);
   },
 
   "nav.back"(id) {

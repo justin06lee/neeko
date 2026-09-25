@@ -1,0 +1,67 @@
+:root {
+  color-scheme: light dark;
+  font: 15px system-ui, sans-serif;
+  background: #16161a;
+  color: #ddd;
+  --field: #0f0f12;
+  --border: #34343c;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    background: #f4f4f7;
+    color: #222;
+    --field: #fff;
+    --border: #cfcfd8;
+  }
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+}
+
+main {
+  width: min(560px, 90vw);
+  margin-bottom: 15vh;
+  text-align: center;
+}
+
+h1 {
+  font-weight: 600;
+  font-size: 44px;
+  letter-spacing: -0.02em;
+  margin: 0 0 24px;
+}
+
+#query {
+  width: 100%;
+  box-sizing: border-box;
+  height: 48px;
+  padding: 0 18px;
+  font: inherit;
+  font-size: 17px;
+  color: inherit;
+  background: var(--field);
+  border: 1px solid var(--border);
+  border-radius: 24px;
+}
+
+#query:focus {
+  outline: 2px solid #4a7dff;
+  outline-offset: -1px;
+}
+
+.options {
+  display: flex;
+  justify-content: center;
+  gap: 24px;
+  font-size: 13px;
+  opacity: 0.75;
+}
+
+select {
+  font: inherit;
+}

@@ -4,3 +4,4 @@ browser.jar:
     content/neeko/neeko.css (neeko.css)
     content/neeko/neeko-ui.css (neeko-ui.css)
     content/neeko/neeko-api.js (neeko-api.js)
+    content/neeko/neeko-pages-process.js (neeko-pages-process.js)

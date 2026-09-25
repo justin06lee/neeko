@@ -32,6 +32,7 @@ building) uses Neeko, so that Neeko and the browser both stay easy to update.
 mybrowser/
 ├── neeko/           Neeko itself, a git submodule pinned to a release tag
 ├── ui/              The browser's UI (HTML, CSS, JS on the neeko API)
+├── pages/           The browser's own pages, like its start page (optional)
 ├── branding/        prefs.js, icon.png, and any Firefox branding file to replace
 ├── browser.json     Name, vendor, app id, version: the browser's identity
 ├── Makefile         A few lines that hand everything to neeko/
@@ -127,7 +128,10 @@ Surfer and Firefox's build need. Firefox's own files stay untouched.
    whenever the `neeko.ui.path` pref is empty, which is how packaged
    browsers run. Dev launches (`make run`) set `neeko.ui.path` to the app's
    `ui/` folder, which wins over the bundled copy, so UI changes still only
-   need a relaunch.
+   need a relaunch. The app's `pages/` go in the same way, at
+   `chrome://neeko-pages/content/` (readable by the pages themselves, which
+   run as web content), with `neeko.pages.path` for dev launches, and their
+   names in the `neeko.pages.names` pref.
 4. **Build settings** (`app.mozconfig` in that folder, read by
    `configs/common/mozconfig`): the program name (`--with-app-basename`), the
    bundle id prefix (`--with-distribution-id`), and the version files

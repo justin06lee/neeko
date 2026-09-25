@@ -399,6 +399,36 @@ Add to it whenever something costs you time.
   - The tab strip's `insertBefore(tab, node)` is `node.before(tab)`, so
     `moveTabTo` to a position among a group's tabs puts the tab in the
     group, as dragging does.
+- **The app's pages (`about:<name>`) need registering in every process.**
+  Pages with `URI_MUST_LOAD_IN_CHILD` load in a content process, which
+  resolves the `about:` address itself, so a dynamically registered
+  `nsIAboutModule` (`registerFactory` for
+  `@mozilla.org/network/protocol/about;1?what=<name>`) must be registered
+  there too: `NeekoPages` shares the names with `Services.ppmm.sharedData`
+  and loads a process script (`loadProcessScript(url, true)`, so future
+  processes get it too).
+  - `URI_CAN_LOAD_IN_PRIVILEGEDABOUT_PROCESS` puts them in the
+    `privilegedabout` process, which "cannot be disabled"
+    (`ProcessIsolation.cpp`). `URI_SAFE_FOR_UNTRUSTED_CONTENT` gives them a
+    content principal for their `about:` address; without
+    `MAKE_LINKABLE`, web pages can't load them.
+  - Such a page still sees a `Components` object (`typeof Components` is
+    "object"), but not `ChromeUtils`, which chrome-only code has.
+  - `about:` addresses aren't hierarchical: relative URLs in the page don't
+    resolve, hence `<base href="chrome://neeko-pages/content/">`.
+  - Runtime chrome registrations (`aomStartup.registerChrome`) reach
+    content processes (`nsChromeRegistryChrome` sends them), **but only as
+    long as the returned handle lives**: an unkept handle is collected and
+    the package vanishes, and later loads fail as "file not found".
+- **The content sandbox can't read Neeko's files in dev builds.** The app
+  bundle's files are symlinks into `engine/`, and Neeko's there are Surfer's
+  symlinks to `src/`, outside the repo dir (`engine/`) that non-packaged
+  builds let content processes read. Content-process code of Neeko's (the
+  pages' process script and actor) failed to load until `make run` and the
+  test tools set `security.sandbox.content.mac.testing_read_path1` (Neeko's
+  `src/`) and `_path2` (the app's `pages/`), real paths (`/var` is
+  `/private/var`). Packaged builds carry everything inside the app. Never
+  set these in shipped prefs: they widen every content process's sandbox.
 - **The browser window hears the pointer over web pages.** Mouse events
   are dispatched in the parent's document first, with the page's
   `<browser>` as their target, before Firefox forwards them to the content

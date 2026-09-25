@@ -6,7 +6,8 @@ else. Web pages never get it.
 
 So far it covers tabs and tab groups, navigation, permission prompts, fullscreen,
 downloads, bookmarks, your UI's settings and the color scheme, drawing over
-the page, and the pointer at the page's edges. Features get
+the page, the pointer at the page's edges, and your browser's own pages
+(which get a small API of their own, `neekoPage`). Features get
 added one at a time as browsers built on Neeko need them. The demo UI in
 `ui/` uses every one of them.
 
@@ -496,6 +497,66 @@ Firefox's Library window.
 | `update` | `{ bookmark, changed }` | Its title or URL changed; `changed` says which (`["title"]`, or `["url", "icon"]`). |
 | `request` | `{ tabId }` | The user asked to bookmark the page: Cmd+D, or Bookmarks > Bookmark Current Tab. Listening for this is how your UI says it bookmarks pages itself. |
 
+## The browser's own pages
+
+Pages of your browser's own, shown in tabs like web pages: a start page,
+settings, a welcome page. Put them in your app's `pages/` folder:
+`pages/<name>.html` is `about:<name>`. `pages/start.html` is also the New
+Tab page and the home page (unless the user picks another).
+
+```
+pages/
+├── start.html      about:start: the New Tab page and home page
+├── settings.html   about:settings... except that's Firefox's (see below)
+└── start.js, style.css, images...
+```
+
+**They're web pages, locked down.** Each is its own `about:` address with no
+privileges, the same as a website's. They run in Firefox's privileged
+about: process, never in a process with websites. Websites can't open,
+link to or frame them. And instead of `neeko`, they get `neekoPage`, a small
+API of their own, which Firefox's side checks on every call really comes
+from one of these pages, as a tab's page.
+
+- **Names are lowercase letters, digits and `-`.** Firefox's own `about:`
+  pages keep their names: a page named like one (`preferences`, `settings`,
+  `welcome`, `newtab`...) isn't served, and the console says so. Firefox's
+  pages stay there as the fallbacks.
+- **Use absolute URLs, or a `<base>`.** `about:start` isn't a folder, so
+  relative URLs don't resolve. Put
+  `<base href="chrome://neeko-pages/content/">` in the page's `<head>` and
+  relative paths work, as in the demo app's `pages/start.html`.
+- **They can't link to each other** (since websites can't either): use
+  `neekoPage.go()` or `neekoPage.open()`, or have your UI open them with
+  `neeko.tabs.open("about:settings")`.
+- **Everything is a promise**, even reading a setting: `neekoPage` isn't in
+  your UI's process.
+
+```js
+document.querySelector("form").onsubmit = event => {
+  event.preventDefault();
+  neekoPage.go(input.value);          // this tab goes where the user typed
+};
+let theme = await neekoPage.settings.get("theme");
+```
+
+| Method | What it does |
+| --- | --- |
+| `neekoPage.go(input)` | This tab goes where the user typed, as `neeko.nav.go` does: an address, or a search with the default search engine. `javascript:` and `data:` addresses are refused. |
+| `neekoPage.open(input, options?)` | Opens what the user typed in a new tab next to this one, selected unless `{ background: true }`. |
+| `neekoPage.settings.get(key)` | One of your UI's settings (see Settings), or `undefined`. |
+| `neekoPage.settings.all()` | Every setting, as `{ key: value }`. |
+| `neekoPage.settings.set(key, value)` | Saves a setting for every window and page, as `neeko.settings.set` does. |
+| `neekoPage.settings.on("change", listener)` | Calls `listener({ key, value })` when a setting changes, from anywhere. Returns a function that stops it. |
+| `neekoPage.search.engines()` | Firefox's search engines, as `[{ id, name, isDefault }]`, in Firefox's order. |
+| `neekoPage.search.setDefault(id)` | Makes one of them the default, as Firefox's settings do. |
+
+In dev launches (`make`), pages load from your app's `pages/` folder, so
+changes only need a relaunch or a reload of the page. Firefox's content
+sandbox only lets them read their own files there because `make` passes it
+two extra read paths (`security.sandbox.content.mac.testing_read_path1` and
+`2`); packaged browsers carry their pages inside the app and need none.
+
 ## Drawing over the page
 
 The web page is drawn on top of your UI, over the element you mark
@@ -567,6 +628,8 @@ even where its UI has no controls yet.
 
 - **Keyboard shortcuts** work as usual: Cmd+T, Cmd+W, Ctrl+Tab, Cmd+[ and
   Cmd+], Cmd+R, and Ctrl+M to mute a tab.
+- **Your browser's own pages.** Without a `pages/` folder, the New Tab page
+  and the home page are Firefox's own.
 - **Tab groups.** Groups made before your UI showed them (restored with
   the session) keep working: their tabs are listed like any others, with a
   `groupId`.
@@ -648,6 +711,9 @@ The pieces:
   color scheme, in prefs.
 - `src/browser/neeko/NeekoBookmarks.sys.mjs` turns Firefox's bookmarks
   (Places) into plain data and events.
+- `src/browser/neeko/NeekoPages.sys.mjs` serves the app's pages as `about:`
+  pages, in every process; `NeekoPageChild.sys.mjs` gives them `neekoPage`,
+  and `NeekoPageParent.sys.mjs` checks and carries out its calls.
 
 ## Testing
 

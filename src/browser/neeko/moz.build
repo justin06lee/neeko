@@ -2,13 +2,16 @@
 # Firefox builds this folder because of the one-line src/browser/moz-build.patch.
 
 # Registers NeekoWindow on Firefox's per-window startup hook, and
-# NeekoPrivacy on its once-per-startup hook.
+# NeekoPrivacy and NeekoPages on its once-per-startup hook.
 EXTRA_COMPONENTS += ["Neeko.manifest"]
 
 MOZ_SRC_FILES += [
     "NeekoAPI.sys.mjs",
     "NeekoBookmarks.sys.mjs",
     "NeekoDownloads.sys.mjs",
+    "NeekoPageChild.sys.mjs",
+    "NeekoPageParent.sys.mjs",
+    "NeekoPages.sys.mjs",
     "NeekoPanels.sys.mjs",
     "NeekoPrivacy.sys.mjs",
     "NeekoSettings.sys.mjs",

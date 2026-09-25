@@ -57,47 +57,44 @@ get added as it needs them.
 - [x] **Tab groups** (v0.8.0): Firefox's own. List, create, rename,
   recolor, collapse, ungroup, move tabs in and out, each tab's `groupId`,
   and events. Groups restored with the session keep working without it.
+- [x] **The browser's own pages** (v0.9.0): `pages/<name>.html` in the app
+  folder as `about:<name>`, with `start` as the New Tab and home page, and
+  a small API of their own (`neekoPage`: go, open, the UI's settings, the
+  search engines). Locked down with the user's approval: no privileges,
+  Firefox's privileged about: process, not linkable, every call checked.
+  Fallback: Firefox's own New Tab and home pages.
 
 ## API features, in order
 
-The first is the last of what Toji, the user's browser, asked for
-(2026-09-25); it waits on the user's approval.
-
-1. [ ] **The browser's own pages.** A start page (the New Tab page and home
-   page) and later settings pages, as ordinary pages from the app folder in
-   tabs, with a small, safe API of their own: go where the user typed, open
-   a tab, the UI settings, the search engines. These run in web content
-   processes, so what they get needs the user's approval first (the rule
-   that web pages never reach the API).
-2. [ ] **Camera, microphone, passwords and add-on installs.** Permission
+1. [ ] **Camera, microphone, passwords and add-on installs.** Permission
    prompts are done (see Done); these doorhangers stay Firefox's for now,
    hanging from the top of the page. Camera and microphone prompts let the
    user pick a device inside Firefox's panel (`WebRTCParent.sys.mjs` reads
    the choice from it), so the API would need device lists; password saving
    and add-on installs show forms and permission lists.
-3. [ ] **Context menus.** The UI can draw its own menu for pages, links,
+2. [ ] **Context menus.** The UI can draw its own menu for pages, links,
    images and selections, with Firefox's actions available. Fallback:
    Firefox's own context menu.
-4. [ ] **Find in page.** Find, next, previous, match count. Fallback:
+3. [ ] **Find in page.** Find, next, previous, match count. Fallback:
    Firefox's find bar.
-5. [ ] **Address bar suggestions.** History, bookmark and open-tab matches
+4. [ ] **Address bar suggestions.** History, bookmark and open-tab matches
     for what the user types, and search suggestions, fetched only when the
     UI asks (search suggestions send what you type to the search engine,
     which is why they're off in Firefox's hidden address bar).
-6. [ ] **History.** Search and list visits, delete entries.
-7. [ ] **Tab sleeping.** Unload a tab to save memory, and a `sleeping`
+5. [ ] **History.** Search and list visits, delete entries.
+6. [ ] **Tab sleeping.** Unload a tab to save memory, and a `sleeping`
     field on tabs. Needed for "a bajillion tabs".
-8. [ ] **Tab previews, by reference.** Thumbnails the UI shows without
+7. [ ] **Tab previews, by reference.** Thumbnails the UI shows without
     copying image data (the way tab icons work).
-9. [ ] **Extensions UI.** List extensions' toolbar buttons, show their
+8. [ ] **Extensions UI.** List extensions' toolbar buttons, show their
     badges and open their popups from the UI. Today: extensions work, but
     their buttons live in the hidden toolbar.
-10. [ ] **DevTools.** Open and close DevTools for the page, and the Browser
+9. [ ] **DevTools.** Open and close DevTools for the page, and the Browser
     Toolbox for the UI (dev builds already allow it).
-11. [ ] **Performance test with a budget.** Automated: hundreds of tabs,
+10. [ ] **Performance test with a budget.** Automated: hundreds of tabs,
     memory and tab-switch time, measured against stock Firefox, failing
     when Neeko gets slower.
-12. [ ] **"Trick" mode.** Run the UI as a sandboxed, unprivileged page that
+11. [ ] **"Trick" mode.** Run the UI as a sandboxed, unprivileged page that
     can only use the API. The API is already messages of plain data, so
     this swaps the channel, not the calls.
 

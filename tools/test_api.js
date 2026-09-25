@@ -173,8 +173,8 @@ let probed = await waitFor(
   "the probe page"
 );
 check(
-  probed?.tab.title == "undefined,undefined,undefined",
-  `web pages have no neeko (${probed?.tab.title})`
+  probed?.tab.title == "undefined,undefined,undefined,undefined",
+  `web pages have no neeko, nor neekoPage (${probed?.tab.title})`
 );
 
 // Selecting and moving
@@ -946,6 +946,90 @@ await waitFor(
 for (let t of groupTabs.slice(0, 2)) {
   await neeko.tabs.close(t.id);
 }
+
+// The browser's own pages: pages/<name>.html as about:<name>, in Firefox's
+// privileged about: process, with neekoPage and nothing more.
+let { NeekoPages } = ChromeUtils.importESModule("moz-src:///browser/neeko/NeekoPages.sys.mjs");
+check(
+  NeekoPages.names.join() == "start",
+  `pages/start.html is served, and not pages/preferences.html, Firefox's own name (${NeekoPages.names})`
+);
+let startTab = await neeko.tabs.open("about:start");
+let startPage = await waitFor(() => updated(startTab.id, t => t.title.includes(",")), "about:start");
+check(startPage?.tab.title == "object,undefined,undefined", `it has neekoPage, no privileges and no neeko (${startPage?.tab.title})`);
+check(gBrowser.selectedBrowser.remoteType == "privilegedabout", `in the privileged about: process (${gBrowser.selectedBrowser.remoteType})`);
+check(
+  gBrowser.selectedBrowser.contentPrincipal.isContentPrincipal &&
+    gBrowser.selectedBrowser.contentPrincipal.spec == "about:start",
+  "with a content principal of its own"
+);
+check(BROWSER_NEW_TAB_URL == "about:start", "it's the New Tab page");
+check(
+  Services.prefs.getDefaultBranch("").getStringPref("browser.startup.homepage") == "about:start",
+  "and the home page"
+);
+let blankTab = await neeko.tabs.open();
+check(blankTab.url == "about:start" || (await waitFor(() => updated(blankTab.id, t => t.url == "about:start"), "a new tab shows it")), "Cmd+T opens it");
+await neeko.tabs.close(blankTab.id);
+let prefsPage = await neeko.tabs.open("about:preferences");
+await new Promise(r => setTimeout(r, 500));
+check(!gBrowser.selectedBrowser.isRemoteBrowser, "about:preferences stays Firefox's");
+await neeko.tabs.close(prefsPage.id);
+let reachTab = await neeko.tabs.open(`${BASE}/reach-start`);
+await new Promise(r => setTimeout(r, 1500));
+check(
+  (await neeko.tabs.list()).find(t => t.id == reachTab.id)?.url == `${BASE}/reach-start`,
+  "a web page can't go to the browser's own pages"
+);
+await neeko.tabs.close(reachTab.id);
+
+let pageTest = async (query, expected, what) => {
+  let tab = await neeko.tabs.open(`about:start?test=${query}`);
+  let done = await waitFor(() => updated(tab.id, t => expected(t.title)), what);
+  return { tab, title: done?.tab.title };
+};
+let goTest = await pageTest(`go&to=${encodeURIComponent(`${HOST}/two`)}`, title => title == "Page two", "neekoPage.go() takes its tab where the user typed");
+await neeko.tabs.close(goTest.tab.id);
+let jsTest = await pageTest("js", title => title.startsWith("refused"), "but not to javascript:");
+await neeko.tabs.close(jsTest.tab.id);
+let openedBefore = events.length;
+let openTest = await pageTest(`open&to=${encodeURIComponent(`${BASE}/one`)}`, title => title == "opened", "neekoPage.open() opens a tab");
+let openedTab = await waitFor(
+  () => events.slice(openedBefore).find(e => e.type == "open" && e.tab.id != openTest.tab.id),
+  "the tab it opened"
+);
+let pageTabIndex = events.find(e => e.type == "open" && e.tab.id == openTest.tab.id)?.index;
+check(
+  openedTab && !openedTab.tab.selected && openedTab.index == pageTabIndex + 1,
+  `in the background, next to the page's tab (${openedTab?.index} after ${pageTabIndex}; ${openTest.title})`
+);
+if (openedTab) {
+  await neeko.tabs.close(openedTab.tab.id);
+}
+await neeko.tabs.close(openTest.tab.id);
+await neeko.settings.set("shared", "fromUI");
+let settingsTest = await pageTest("settings", title => title.startsWith("read") || title.startsWith("refused"), "neekoPage.settings");
+check(settingsTest.title == "read fromUI", `a page reads the UI's settings (${settingsTest.title})`);
+await waitFor(() => neeko.settings.get("fromPage") == "yes", "and writes them, for the UI too");
+await neeko.tabs.close(settingsTest.tab.id);
+let listenTest = await pageTest("listen", title => title == "listening", "a page listening for settings changes");
+await neeko.settings.set("ping", "1");
+await waitFor(() => updated(listenTest.tab.id, t => t.title == "change ping=1"), "hears them");
+await neeko.tabs.close(listenTest.tab.id);
+let { SearchService } = ChromeUtils.importESModule("moz-src:///toolkit/components/search/SearchService.sys.mjs");
+let engines = await SearchService.getVisibleEngines();
+let enginesTest = await pageTest("engines", title => title.startsWith("engines") || title.startsWith("refused"), "neekoPage.search.engines()");
+check(enginesTest.title == `engines ${engines.length} 1`, `lists the search engines, one of them the default (${enginesTest.title})`);
+await neeko.tabs.close(enginesTest.tab.id);
+let defaultEngine = await SearchService.getDefault();
+let otherEngine = engines.find(e => e.id != defaultEngine.id);
+if (otherEngine) {
+  let defaultTest = await pageTest(`default&id=${otherEngine.id}`, title => title == "default set" || title.startsWith("refused"), "neekoPage.search.setDefault()");
+  check((await SearchService.getDefault()).id == otherEngine.id, `sets the default search engine (${defaultTest.title})`);
+  await SearchService.setDefault(defaultEngine, SearchService.CHANGE_REASON.USER);
+  await neeko.tabs.close(defaultTest.tab.id);
+}
+await neeko.tabs.close(startTab.id);
 
 // Bookmarks: Firefox's own, identified by ids that last across sessions.
 let folders = neeko.bookmarks.folders;
