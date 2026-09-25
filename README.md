@@ -30,7 +30,7 @@ loads a custom UI with the web page placed wherever that UI says, and gives
 the UI a small JavaScript API for tabs (with their icons, sound, crashes
 and error pages), navigation, permission prompts, fullscreen and downloads.
 `ui/` holds a deliberately plain demo UI built only on that API: a tab list
-you can reorder, mute and duplicate from, back, forward and reload, an
+with tab groups, that you can reorder, mute and duplicate from, back, forward and reload, an
 address bar with a bookmark star, a menu over the page, light and dark
 looks, a bar for permission prompts, bookmarks and downloads lists, and a
 layout that steps aside for fullscreen videos. A browser built on Neeko keeps Neeko as a
@@ -98,7 +98,7 @@ browsers use.
 - On macOS, the window's close, minimize and zoom buttons appear wherever you
   put an element with `data-neeko-window-buttons`.
 - Your scripts get a global `neeko` object, the Neeko API: list, open, close,
-  switch, move, duplicate and mute tabs (with their icons), navigate, answer
+  switch, move, duplicate, mute and group tabs (with their icons), navigate, answer
   sites' permission requests, lay out fullscreen, follow and manage
   downloads, read and edit bookmarks, keep your UI's settings for every
   window, make pages light or dark, hear when the pointer reaches the

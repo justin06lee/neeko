@@ -379,6 +379,26 @@ Add to it whenever something costs you time.
   is outside the class, so `this.#field` there is a syntax error that stops
   NeekoAPI loading at all (and with it every window's UI). Give the class a
   method instead.
+- **Tab groups are `<tab-group>` elements** among the tabs
+  (`tabgroup.js`), holding their tabs, so `tab.group` is the group.
+  - `gBrowser.addTabGroup(tabs, { label, color, insertBefore })` puts the
+    group at the end of the tabs unless given `insertBefore`; Firefox's
+    own "new group" passes the first tab. `color` defaults to
+    `tabGroupMenu.nextUnusedColor`; the colors are
+    `customElements.get("tabgroup-menu").COLORS`.
+  - `group.ungroupTabs()` ungroups; `gBrowser.removeTabGroup(group)`
+    closes its tabs. `gBrowser.ungroupTab(tab)` puts a tab just after its
+    group; `moveTabToExistingGroup(tab, group)` at its end.
+  - Events: `TabGroupCreate` (once, when the element is first connected,
+    before its tabs are added), `TabGroupRemoved` (when its last tab
+    leaves, from a MutationObserver), `TabGroupUpdate` (label, color),
+    `TabGroupCollapse` and `TabGroupExpand`. `TabGrouped` and
+    `TabUngrouped` are dispatched on the group, with the tab as `detail`,
+    because a tab moving to another window is detached by then. All bubble
+    to `tabContainer`.
+  - The tab strip's `insertBefore(tab, node)` is `node.before(tab)`, so
+    `moveTabTo` to a position among a group's tabs puts the tab in the
+    group, as dragging does.
 - **The browser window hears the pointer over web pages.** Mouse events
   are dispatched in the parent's document first, with the page's
   `<browser>` as their target, before Firefox forwards them to the content

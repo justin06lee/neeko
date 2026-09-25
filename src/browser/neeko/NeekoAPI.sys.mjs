@@ -89,8 +89,37 @@ function describeTab(tab, icon) {
     muted: tab.hasAttribute("muted"),
     crashed: tab.hasAttribute("crashed"),
     error: asleep ? null : errorPage(browser),
+    groupId: tab.group?.id ?? null,
   };
 }
+
+/**
+ * What the UI knows about a tab group, one of Firefox's own. Its tabs are
+ * the ones whose groupId is its id, next to each other in the window's
+ * tabs.
+ */
+function describeGroup(group) {
+  return {
+    id: group.id,
+    name: group.label,
+    color: group.color,
+    collapsed: group.collapsed,
+  };
+}
+
+// Firefox's tab group colors (MozTabbrowserTabGroupMenu.COLORS in
+// tabgroup-menu.js), for when that element isn't defined yet.
+const GROUP_COLORS = [
+  "blue",
+  "purple",
+  "cyan",
+  "orange",
+  "yellow",
+  "pink",
+  "green",
+  "gray",
+  "red",
+];
 
 /**
  * Makes a blob: URL in the UI page for an icon Firefox keeps as a data: URL,
@@ -165,6 +194,9 @@ const EVENTS = [
   "bookmarks.update",
   "bookmarks.request",
   "pointer.edge",
+  "groups.create",
+  "groups.remove",
+  "groups.update",
 ];
 
 // The page's edges, in the order a corner counts as one of them.
@@ -201,6 +233,7 @@ const UPDATE_FIELDS = [
   "muted",
   "crashed",
   "error",
+  "groupId",
 ];
 
 // Tab attributes Firefox reports changing (TabAttrModified) that affect a
@@ -229,6 +262,15 @@ const TAB_EVENTS = [
   "TabAttrModified",
   "TabBrowserInserted",
   "TabBrowserDiscarded",
+  // Tab groups: these come from the group, even TabGrouped and TabUngrouped
+  // (their detail is the tab).
+  "TabGrouped",
+  "TabUngrouped",
+  "TabGroupCreate",
+  "TabGroupRemoved",
+  "TabGroupUpdate",
+  "TabGroupCollapse",
+  "TabGroupExpand",
 ];
 
 /**
@@ -363,6 +405,23 @@ const METHODS = {
     if (tab.hasAttribute("muted") != muted) {
       tab.toggleMuteAudio();
     }
+  },
+
+  /**
+   * Puts a tab in one of the window's tab groups, at its end, or with null
+   * takes it out of its group, to just after it.
+   */
+  "tabs.setGroup"(groupId, id) {
+    let tab = this.findTab(id);
+    if (groupId === null) {
+      this.gBrowser.ungroupTab(tab);
+      return;
+    }
+    let group = this.findGroup(groupId);
+    if (tab.pinned) {
+      throw new Error("Pinned tabs can't be in a group.");
+    }
+    this.gBrowser.moveTabToExistingGroup(tab, group);
   },
 
   /**
@@ -531,6 +590,68 @@ const METHODS = {
     return NeekoBookmarks.remove(id);
   },
 
+  "groups.list"() {
+    return this.gBrowser.tabGroups.map(describeGroup);
+  },
+
+  /**
+   * Makes a tab group of some tabs, where the first of them is. Options:
+   * `name`, and `color` (by default one no other group uses).
+   */
+  "groups.create"(tabIds, options) {
+    if (!Array.isArray(tabIds) || !tabIds.length) {
+      throw new TypeError("Expected the ids of the tabs to group.");
+    }
+    let { name = "", color } = checkOptions(options, {
+      name: "string",
+      color: "string",
+    });
+    if (color !== undefined) {
+      this.checkGroupColor(color);
+    }
+    let tabs = tabIds
+      .map(id => this.findTab(id))
+      .sort((a, b) => a.index - b.index);
+    if (tabs.some(tab => tab.pinned)) {
+      throw new Error("Pinned tabs can't be in a group.");
+    }
+    let group = this.gBrowser.addTabGroup(tabs, {
+      label: name,
+      color,
+      insertBefore: tabs[0],
+    });
+    return describeGroup(group);
+  },
+
+  /**
+   * Renames a group, changes its color, or collapses or expands it.
+   */
+  "groups.update"(id, changes) {
+    let group = this.findGroup(id);
+    let { name, color, collapsed } = checkOptions(changes, {
+      name: "string",
+      color: "string",
+      collapsed: "boolean",
+    });
+    if (color !== undefined) {
+      group.color = this.checkGroupColor(color);
+    }
+    if (name !== undefined) {
+      group.label = name;
+    }
+    if (collapsed !== undefined) {
+      group.collapsed = collapsed;
+    }
+    return describeGroup(group);
+  },
+
+  /**
+   * Ends a group. Its tabs stay where they are, in no group.
+   */
+  "groups.ungroup"(id) {
+    this.findGroup(id).ungroupTabs();
+  },
+
   /**
    * Which of the page's edges to watch the pointer at, and how deep a band
    * along each, in CSS pixels: { top: 10, left: 4 }. Edges left out aren't
@@ -578,6 +699,8 @@ export class NeekoAPI {
   #unwatch = [];
   /** Stops following the bookmarks, once the UI listens for their events. */
   #unwatchBookmarks = null;
+  /** What each tab group looked like when the UI last heard about it. */
+  #groupsSent = new WeakMap();
   /** The page edges watched for the pointer, by edge: their depth. */
   #edges = {};
   /** The edge the UI last heard the pointer is at, and whether outside. */
@@ -924,6 +1047,44 @@ export class NeekoAPI {
   }
 
   /**
+   * The tab group with this id in this window.
+   */
+  findGroup(id) {
+    if (typeof id != "string") {
+      throw new TypeError("Expected a group id.");
+    }
+    let group = this.gBrowser.tabGroups.find(g => g.id === id);
+    if (!group) {
+      throw new Error(`No tab group with id ${id} in this window.`);
+    }
+    return group;
+  }
+
+  checkGroupColor(color) {
+    let colors =
+      this.win.customElements.get("tabgroup-menu")?.COLORS ?? GROUP_COLORS;
+    if (!colors.includes(color)) {
+      throw new TypeError(`A group's color is one of: ${colors.join(", ")}.`);
+    }
+    return color;
+  }
+
+  /**
+   * Tells the UI a tab group changed, and how.
+   */
+  #groupChanged(group) {
+    let before = this.#groupsSent.get(group);
+    let now = describeGroup(group);
+    this.#groupsSent.set(group, now);
+    let changed = ["name", "color", "collapsed"].filter(
+      field => now[field] !== before?.[field]
+    );
+    if (changed.length) {
+      this.#emit("groups.update", { group: now, changed });
+    }
+  }
+
+  /**
    * The tab with this id in this window. With no id, the selected tab.
    */
   findTab(id) {
@@ -968,6 +1129,29 @@ export class NeekoAPI {
         return;
       case "fullscreen":
         this.#fullscreenChanged(this.#fullscreen.page);
+        return;
+    }
+    switch (event.type) {
+      case "TabGrouped":
+      case "TabUngrouped": {
+        // Tabs leaving for another window close here instead.
+        let tab = event.detail;
+        if (tab.ownerDocument == this.win.document && tab.isConnected) {
+          this.#update(tab);
+        }
+        return;
+      }
+      case "TabGroupCreate":
+        this.#groupsSent.set(event.target, describeGroup(event.target));
+        this.#emit("groups.create", { group: describeGroup(event.target) });
+        return;
+      case "TabGroupRemoved":
+        this.#emit("groups.remove", { id: event.target.id });
+        return;
+      case "TabGroupUpdate":
+      case "TabGroupCollapse":
+      case "TabGroupExpand":
+        this.#groupChanged(event.target);
         return;
     }
     let tab = event.target;

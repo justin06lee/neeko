@@ -4,7 +4,7 @@ Your UI talks to Firefox through one global object, `neeko`. It's there
 before your first script runs, in your UI page (`ui/index.html`) and nowhere
 else. Web pages never get it.
 
-So far it covers tabs, navigation, permission prompts, fullscreen,
+So far it covers tabs and tab groups, navigation, permission prompts, fullscreen,
 downloads, bookmarks, your UI's settings and the color scheme, drawing over
 the page, and the pointer at the page's edges. Features get
 added one at a time as browsers built on Neeko need them. The demo UI in
@@ -63,6 +63,7 @@ A tab looks like this:
   muted: false,
   crashed: false,               // its content process went away
   error: null,                  // or { page: "neterror", code: "dnsNotFound" }
+  groupId: null,                // the tab group it's in (see Tab groups)
 }
 ```
 
@@ -109,8 +110,9 @@ working, in the page area.
 | `neeko.tabs.current()` | The selected tab. |
 | `neeko.tabs.open(url?, options?)` | Opens a tab and selects it. `url` is anything a user could type in an address bar (see `nav.go`). With no `url` (or `null`), it opens the New Tab page, like Cmd+T. Resolves to the new tab. Options below. |
 | `neeko.tabs.duplicate(tabId?, options?)` | Opens a copy of a tab right after it, with its page and history, and selects it. Pass `{ background: true }` to leave the selection alone. Resolves to the copy. |
-| `neeko.tabs.move(index, tabId?)` | Moves a tab to position `index` (0 is the first). Firefox keeps pinned tabs first, and a position past the end means the end. |
+| `neeko.tabs.move(index, tabId?)` | Moves a tab to position `index` (0 is the first). Firefox keeps pinned tabs first, and a position past the end means the end. A position among a group's tabs puts it in that group, as dragging it there in Firefox would. |
 | `neeko.tabs.setMuted(muted, tabId?)` | Mutes (`true`) or unmutes (`false`) a tab. |
+| `neeko.tabs.setGroup(groupId, tabId?)` | Puts a tab at the end of a tab group, or with `null` takes it out of its group, to just after the group. Pinned tabs can't be in a group. |
 | `neeko.tabs.focus()` | Puts keyboard focus in the selected tab's page, as clicking it would. Call it when your address bar is done: after Escape, say. |
 | `neeko.tabs.close(tabId?)` | Closes a tab. Closing the last one closes the window, as in Firefox. |
 | `neeko.tabs.select(tabId)` | Switches to a tab. |
@@ -135,7 +137,55 @@ Firefox; one on the New Tab page asks for the address bar instead.
 | `close` | `{ id }` | A tab closed. |
 | `select` | `{ id, previousId }` | The selected tab changed. |
 | `move` | `{ id, index }` | A tab moved to position `index`. |
-| `update` | `{ tab, changed }` | Anything in a tab's description changed but `selected`: its URL, title, icon, loading state, back/forward availability, sound, crash or error page. `changed` lists which fields, such as `["title", "icon"]`. |
+| `update` | `{ tab, changed }` | Anything in a tab's description changed but `selected`: its URL, title, icon, loading state, back/forward availability, sound, crash, error page or group. `changed` lists which fields, such as `["title", "icon"]`. |
+
+## Tab groups
+
+Firefox's own tab groups: named, colored sets of tabs that sit together in
+the window's tabs and can be collapsed. They're saved with the session.
+
+```js
+let group = await neeko.groups.create([tab1.id, tab2.id], { name: "Reading" });
+await neeko.groups.update(group.id, { collapsed: true });
+```
+
+A group looks like this:
+
+```js
+{
+  id: "1790000000000-42",  // stays the same for the group's life
+  name: "Reading",         // "" if the user didn't name it
+  color: "purple",
+  collapsed: false,
+}
+```
+
+Its tabs are the ones whose `groupId` is its `id`, always next to each
+other in `tabs.list()`, so draw the group's header before the first of
+them. A collapsed group's tabs are still listed; Firefox shows only the
+selected one of them, if any. The colors are `blue`, `purple`, `cyan`,
+`orange`, `yellow`, `pink`, `green`, `gray` and `red`: draw them however
+you like.
+
+| Method | What it does |
+| --- | --- |
+| `neeko.groups.list()` | This window's groups, in the order they appear. |
+| `neeko.groups.create(tabIds, options?)` | Makes a group of these tabs, gathered where the first of them is. Options: `name`, and `color` (by default one no other group uses). Resolves to the group. |
+| `neeko.groups.update(groupId, changes)` | Changes `name` or `color`, or `collapsed`: `true` collapses it, `false` expands it. Resolves to the group. |
+| `neeko.groups.ungroup(groupId)` | Ends the group. Its tabs stay where they are, in no group. |
+| `neeko.groups.on(event, listener)` | Listens for an event, as `tabs.on` does. |
+
+`tabs.setGroup(groupId, tabId?)` moves a tab into or out of a group (see
+Tabs).
+
+| Event | Data | When |
+| --- | --- | --- |
+| `create` | `{ group }` | A group was made, by your UI or otherwise (a restored session). Its tabs follow, each with a tabs `update` for its `groupId`. |
+| `remove` | `{ id }` | A group is gone: ungrouped, or its last tab closed or left it. |
+| `update` | `{ group, changed }` | Its name, color or collapsed state changed; `changed` says which. |
+
+Tabs joining or leaving a group arrive as tabs `update` events with
+`groupId` among the changes.
 
 ## Navigation
 
@@ -517,6 +567,9 @@ even where its UI has no controls yet.
 
 - **Keyboard shortcuts** work as usual: Cmd+T, Cmd+W, Ctrl+Tab, Cmd+[ and
   Cmd+], Cmd+R, and Ctrl+M to mute a tab.
+- **Tab groups.** Groups made before your UI showed them (restored with
+  the session) keep working: their tabs are listed like any others, with a
+  `groupId`.
 - **Bookmarking.** If your UI doesn't listen for `bookmarks` `request`,
   Cmd+D opens Firefox's own bookmark panel at the top right of the page, to
   name and file the bookmark. Cmd+Shift+O always opens Firefox's Library

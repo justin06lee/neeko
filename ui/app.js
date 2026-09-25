@@ -38,12 +38,22 @@ const BLANK_PAGES = [
   "about:privatebrowsing",
 ];
 
-function addTab(tab, index = tabList.children.length) {
+// The tab rows, in order, without the group headers between them.
+const tabRows = () => [...tabList.querySelectorAll("li.tab")];
+
+// Inserts a tab row at a position among the tab rows.
+function placeTabRow(item, index) {
+  let rows = tabRows().filter(row => row != item);
+  tabList.insertBefore(item, rows[index] ?? null);
+}
+
+function addTab(tab, index = tabRows().length) {
   if (items.has(tab.id)) {
     updateTab(tab);
     return;
   }
   let item = document.createElement("li");
+  item.className = "tab";
   item.dataset.id = tab.id;
   // Drag a tab up or down the list to move it.
   item.draggable = true;
@@ -65,7 +75,7 @@ function addTab(tab, index = tabList.children.length) {
   });
   item.append(icon, title, ...buttons);
   items.set(tab.id, item);
-  tabList.insertBefore(item, tabList.children[index] ?? null);
+  placeTabRow(item, index);
   updateTab(tab);
 }
 
@@ -93,6 +103,10 @@ function updateTab(tab) {
   sound.textContent = tab.muted ? "🔇" : "🔊";
   sound.title = tab.muted ? "Unmute tab" : "Mute tab";
   item.classList.toggle("loading", tab.loading);
+  if (item.dataset.group != (tab.groupId ?? "")) {
+    item.dataset.group = tab.groupId ?? "";
+    showGroups();
+  }
   item.classList.toggle(
     "asking",
     [...prompts.values()].some(prompt => prompt.tabId == tab.id)
@@ -106,18 +120,68 @@ function removeTab(id) {
   items.get(id)?.remove();
   items.delete(id);
   tabs.delete(id);
+  showGroups();
 }
+
+// Tab groups: a header before each group's tabs (click it to collapse or
+// expand the group, × to ungroup it), and the group's color along its tabs.
+// A collapsed group shows only its selected tab, if any, as in Firefox.
+const groups = new Map();
+
+function showGroups() {
+  for (let header of tabList.querySelectorAll("li.group")) {
+    header.remove();
+  }
+  let previous = null;
+  for (let row of tabRows()) {
+    let group = groups.get(row.dataset.group);
+    row.classList.toggle("grouped", !!group);
+    row.style.setProperty("--group-color", group ? `var(--group-${group.color})` : "");
+    row.hidden = !!group?.collapsed && Number(row.dataset.id) != currentId;
+    if (group && group.id != previous) {
+      let header = document.createElement("li");
+      header.className = "group";
+      header.dataset.group = group.id;
+      header.style.setProperty("--group-color", `var(--group-${group.color})`);
+      header.classList.toggle("collapsed", group.collapsed);
+      let name = document.createElement("span");
+      name.className = "title";
+      name.textContent = group.name || "Unnamed group";
+      let ungroup = document.createElement("button");
+      ungroup.className = "ungroup";
+      ungroup.title = "Ungroup";
+      ungroup.textContent = "×";
+      header.append(name, ungroup);
+      tabList.insertBefore(header, row);
+    }
+    previous = group?.id ?? null;
+  }
+}
+
+neeko.groups.on("create", ({ group }) => {
+  groups.set(group.id, group);
+  showGroups();
+});
+neeko.groups.on("update", ({ group }) => {
+  groups.set(group.id, group);
+  showGroups();
+});
+neeko.groups.on("remove", ({ id }) => {
+  groups.delete(id);
+  showGroups();
+});
 
 function moveTab(id, index) {
   let item = items.get(id);
   if (item) {
-    item.remove();
-    tabList.insertBefore(item, tabList.children[index] ?? null);
+    placeTabRow(item, index);
+    showGroups();
   }
 }
 
 function selectTab(id) {
   currentId = id;
+  showGroups();
   for (let [itemId, item] of items) {
     item.classList.toggle("selected", itemId == id);
   }
@@ -318,6 +382,15 @@ tabList.addEventListener("click", event => {
   if (!item) {
     return;
   }
+  if (item.classList.contains("group")) {
+    let group = groups.get(item.dataset.group);
+    if (event.target.closest(".ungroup")) {
+      neeko.groups.ungroup(group.id).catch(reportError);
+    } else {
+      neeko.groups.update(group.id, { collapsed: !group.collapsed }).catch(reportError);
+    }
+    return;
+  }
   let id = Number(item.dataset.id);
   let button = event.target.closest("button")?.className;
   if (button == "close") {
@@ -344,10 +417,10 @@ tabList.addEventListener("dragover", event => {
   }
 });
 tabList.addEventListener("drop", event => {
-  let target = event.target.closest("li");
+  let target = event.target.closest("li.tab");
   if (dragged && target) {
     event.preventDefault();
-    neeko.tabs.move([...tabList.children].indexOf(target), dragged);
+    neeko.tabs.move(tabRows().indexOf(target), dragged);
   }
 });
 tabList.addEventListener("dragend", () => (dragged = null));
@@ -515,6 +588,12 @@ const menuCommands = {
   duplicate: () => neeko.tabs.duplicate(),
   mute: () => neeko.tabs.setMuted(!tabs.get(currentId)?.muted),
   moveToStart: () => neeko.tabs.move(0),
+  group: () => {
+    let tab = tabs.get(currentId);
+    return tab?.groupId
+      ? neeko.tabs.setGroup(null)
+      : neeko.groups.create([currentId], { name: `Group ${groups.size + 1}` });
+  },
   // A setting of this UI's own, saved for every window (early.js applies it
   // at startup, and every window follows the change event below).
   tabsSide: () =>
@@ -539,6 +618,10 @@ function showMenu(show) {
     menu.querySelector("[data-command=mute]").textContent = muted
       ? "Unmute tab"
       : "Mute tab";
+    menu.querySelector("[data-command=group]").textContent = tabs.get(currentId)
+      ?.groupId
+      ? "Remove tab from group"
+      : "Add tab to a new group";
     menu.querySelector("[data-command=tabsSide]").textContent =
       tabsSide() == "right" ? "Tabs on the left" : "Tabs on the right";
     menu.querySelector("[data-command=hideTabs]").textContent =
@@ -619,7 +702,7 @@ address.addEventListener("keydown", event => {
     editing = false;
     if (event.altKey) {
       // Alt+Enter: in a new tab next to this one (with Shift, behind it).
-      let index = [...tabList.children].indexOf(items.get(currentId)) + 1;
+      let index = tabRows().indexOf(items.get(currentId)) + 1;
       neeko.tabs
         .open(address.value, { index, background: event.shiftKey })
         .catch(reportError);
@@ -654,6 +737,9 @@ let fullscreen = await neeko.fullscreen.state();
 document.body.classList.toggle("page-fullscreen", fullscreen.page);
 document.body.classList.toggle("window-fullscreen", fullscreen.window);
 showBookmarks().catch(reportError);
+for (let group of await neeko.groups.list()) {
+  groups.set(group.id, group);
+}
 let list = await neeko.tabs.list();
 tabList.replaceChildren();
 items.clear();

@@ -93,6 +93,7 @@ check(
     "muted",
     "crashed",
     "error",
+    "groupId",
   ].every(k => k in first),
   "tabs have every field"
 );
@@ -883,6 +884,68 @@ otherWindow.close();
 await waitFor(() => otherWindow.closed, "the second window to close");
 window.focus();
 await waitFor(() => Services.focus.activeWindow == window, "this window to be active again", 30000);
+
+// Tab groups: Firefox's own.
+let groupEvents = [];
+for (let type of ["create", "remove", "update"]) {
+  neeko.groups.on(type, data => groupEvents.push({ type, ...data }));
+}
+let groupTabs = [];
+for (let page of ["one", "two", "one"]) {
+  groupTabs.push(await neeko.tabs.open(`${BASE}/${page}`, { background: true }));
+}
+check(groupTabs.every(t => t.groupId === null), "tabs start in no group");
+let group = await neeko.groups.create([groupTabs[1].id, groupTabs[0].id], { name: "Work", color: "blue" });
+check(
+  group.name == "Work" && group.color == "blue" && group.collapsed === false && typeof group.id == "string",
+  `create() makes a group (${JSON.stringify(group)})`
+);
+check(groupEvents.some(e => e.type == "create" && e.group.id == group.id), "with a create event");
+check(
+  [groupTabs[0], groupTabs[1]].every(t => updated(t.id, u => u.groupId == group.id)),
+  "and an update for each tab that joined, with its groupId"
+);
+check((await neeko.groups.list()).some(g => g.id == group.id), "list() has it");
+let order = (await neeko.tabs.list()).map(t => t.id);
+check(
+  order.indexOf(groupTabs[1].id) == order.indexOf(groupTabs[0].id) + 1,
+  "its tabs stay together, where the first of them was"
+);
+let recolored = await neeko.groups.update(group.id, { name: "Play", color: "red" });
+check(recolored.name == "Play" && recolored.color == "red", "update() renames and recolors");
+await waitFor(
+  () => groupEvents.some(e => e.type == "update" && e.group.color == "red" && e.changed.includes("color")),
+  "with update events"
+);
+await neeko.groups.update(group.id, { collapsed: true });
+await waitFor(
+  () => groupEvents.some(e => e.type == "update" && e.group.collapsed && e.changed.join() == "collapsed"),
+  "update() collapses it"
+);
+await neeko.groups.update(group.id, { collapsed: false });
+await neeko.tabs.setGroup(group.id, groupTabs[2].id);
+await waitFor(() => updated(groupTabs[2].id, t => t.groupId == group.id), "setGroup() puts a tab in a group");
+await neeko.tabs.setGroup(null, groupTabs[2].id);
+await waitFor(() => updated(groupTabs[2].id, t => t.groupId === null), "setGroup(null) takes it out");
+let defaultColored = await neeko.groups.create([groupTabs[2].id]);
+check(defaultColored.color && defaultColored.color != "red", `a new group gets an unused color (${defaultColored.color})`);
+await rejects(neeko.groups.create([]), /tabs to group/, "create() with no tabs");
+await rejects(neeko.groups.update(group.id, { color: "plaid" }), /color is one of/, "update() with an unknown color");
+await rejects(neeko.groups.ungroup("nope"), /No tab group/, "ungroup() of an unknown group");
+await neeko.groups.ungroup(group.id);
+await waitFor(() => groupEvents.some(e => e.type == "remove" && e.id == group.id), "ungroup() ends the group");
+check(
+  (await neeko.tabs.list()).filter(t => [groupTabs[0].id, groupTabs[1].id].includes(t.id)).every(t => t.groupId === null),
+  "its tabs stay, in no group"
+);
+await neeko.tabs.close(groupTabs[2].id);
+await waitFor(
+  () => groupEvents.some(e => e.type == "remove" && e.id == defaultColored.id),
+  "a group goes when its last tab closes"
+);
+for (let t of groupTabs.slice(0, 2)) {
+  await neeko.tabs.close(t.id);
+}
 
 // Bookmarks: Firefox's own, identified by ids that last across sessions.
 let folders = neeko.bookmarks.folders;

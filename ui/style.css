@@ -3,6 +3,16 @@
    window never flashes the wrong one. */
 :root {
   color-scheme: light dark;
+  /* Firefox's tab group colors (neeko.groups). */
+  --group-blue: #3a86ff;
+  --group-purple: #9b5de5;
+  --group-cyan: #00b4d8;
+  --group-orange: #fb8500;
+  --group-yellow: #ffbe0b;
+  --group-pink: #f15bb5;
+  --group-green: #2dc653;
+  --group-gray: #8d99ae;
+  --group-red: #ef233c;
   --background: #16161a;
   --text: #ddd;
   --text-strong: #fff;
@@ -125,6 +135,41 @@ aside {
 #tabs li.selected {
   background: var(--selected);
   color: var(--text-strong);
+}
+
+/* A tab group's header, and its color along its tabs. */
+#tabs li.group {
+  gap: 6px;
+  padding: 6px 4px 2px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--group-color);
+  cursor: pointer;
+}
+
+#tabs li.group::before {
+  content: "\25BE";
+}
+
+#tabs li.group.collapsed::before {
+  content: "\25B8";
+}
+
+#tabs li.group .ungroup {
+  visibility: hidden;
+}
+
+#tabs li.group:hover .ungroup {
+  visibility: visible;
+}
+
+#tabs li.grouped {
+  margin-left: 6px;
+  box-shadow: inset 2px 0 var(--group-color);
+}
+
+#tabs li[hidden] {
+  display: none;
 }
 
 /* The tab's icon, or room for one. */
