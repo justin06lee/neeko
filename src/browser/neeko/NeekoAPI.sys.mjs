@@ -26,6 +26,7 @@ import { NeekoSettings } from "moz-src:///browser/neeko/NeekoSettings.sys.mjs";
 const lazy = {};
 ChromeUtils.defineESModuleGetters(lazy, {
   AboutNewTab: "resource:///modules/AboutNewTab.sys.mjs",
+  NetUtil: "resource://gre/modules/NetUtil.sys.mjs",
   SessionStore:
     "moz-src:///browser/components/sessionstore/SessionStore.sys.mjs",
 });
@@ -139,6 +140,35 @@ function blobURL(ui, dataURL) {
     console.error("Neeko: couldn't read a tab's icon.", e);
     return null;
   }
+}
+
+/**
+ * Loads a moz-remote-image: URL, which Firefox renders in a page's own
+ * content process (untrusted SVG never decoded here), as the PNG bytes it
+ * comes back as.
+ */
+function fetchRemoteImage(url) {
+  return new Promise((resolve, reject) => {
+    let channel = lazy.NetUtil.newChannel({
+      uri: url,
+      loadUsingSystemPrincipal: true,
+      contentPolicyType: Ci.nsIContentPolicy.TYPE_INTERNAL_IMAGE,
+    });
+    lazy.NetUtil.asyncFetch(channel, (stream, status) => {
+      if (!Components.isSuccessCode(status)) {
+        reject(new Error(`Couldn't load a tab's icon (${status}).`));
+        return;
+      }
+      try {
+        let bytes = lazy.NetUtil.readInputStream(stream, stream.available());
+        resolve(new Uint8Array(bytes));
+      } catch (e) {
+        reject(e);
+      } finally {
+        stream.close();
+      }
+    });
+  });
 }
 
 /**
@@ -1019,8 +1049,13 @@ export class NeekoAPI {
    * most icons as data: URLs, the image itself, often many kilobytes. The UI
    * gets a short blob: URL for it instead, made in the UI page and shared by
    * every tab with the same icon, so image data never goes through the API
-   * and each icon is decoded once. Other icons (chrome:, about:) are URLs
-   * already.
+   * and each icon is decoded once.
+   *
+   * SVG icons Firefox wraps in a moz-remote-image: URL (with the whole SVG
+   * inside), so the page's own content process draws them, never this one.
+   * Neeko loads that URL the way Firefox's tab strip would, and the UI gets a
+   * blob: URL of the PNG that comes back: null until it's ready, then an
+   * update. Other icons (chrome:, about:) are URLs already.
    */
   #icon(tab) {
     let image = tab.getAttribute("image") || null;
@@ -1028,16 +1063,21 @@ export class NeekoAPI {
     if (before !== image) {
       this.#releaseIcon(tab);
     }
-    if (!image?.startsWith("data:")) {
+    let remote = image?.startsWith("moz-remote-image:");
+    if (!image?.startsWith("data:") && !remote) {
       return image;
     }
     let icon = this.#icons.get(image);
     if (!icon) {
-      let url = blobURL(this.#ui, image);
-      if (!url) {
-        return null;
+      icon = { url: null, tabs: 0 };
+      if (remote) {
+        this.#loadRemoteIcon(image, icon);
+      } else {
+        icon.url = blobURL(this.#ui, image);
+        if (!icon.url) {
+          return null;
+        }
       }
-      icon = { url, tabs: 0 };
       this.#icons.set(image, icon);
     }
     if (before !== image) {
@@ -1045,6 +1085,31 @@ export class NeekoAPI {
       this.#tabIcons.set(tab, image);
     }
     return icon.url;
+  }
+
+  /**
+   * Turns a moz-remote-image: icon into a blob: URL in the UI page, then
+   * tells the UI about the tabs that show it.
+   */
+  async #loadRemoteIcon(image, icon) {
+    let bytes;
+    try {
+      bytes = await fetchRemoteImage(image);
+    } catch (e) {
+      console.error("Neeko: couldn't load a tab's icon.", e);
+      return;
+    }
+    if (this.#destroyed || this.#icons.get(image) != icon) {
+      return;
+    }
+    icon.url = this.#ui.URL.createObjectURL(
+      new this.#ui.Blob([bytes], { type: "image/png" })
+    );
+    for (let tab of this.gBrowser.tabs) {
+      if (this.#tabIcons.get(tab) === image) {
+        this.#update(tab);
+      }
+    }
   }
 
   /**
@@ -1057,7 +1122,9 @@ export class NeekoAPI {
     let icon = image && this.#icons.get(image);
     if (icon && --icon.tabs == 0) {
       this.#icons.delete(image);
-      this.#ui.URL.revokeObjectURL(icon.url);
+      if (icon.url) {
+        this.#ui.URL.revokeObjectURL(icon.url);
+      }
     }
   }
 

@@ -298,6 +298,21 @@ check(
   "and goes when no tab does"
 );
 
+// SVG icons, which Firefox has the page's own process draw
+// (moz-remote-image:), come as a blob: URL too, of the picture it draws.
+let svgTab = await neeko.tabs.open(`${BASE}/svg-icon`);
+let svgIcon = (
+  await waitFor(() => updated(svgTab.id, t => t.icon?.startsWith("blob:")), "an SVG icon, as a blob: URL")
+)?.tab.icon;
+check(
+  gBrowser.selectedTab.getAttribute("image")?.startsWith("moz-remote-image:"),
+  "which Firefox had drawn elsewhere (moz-remote-image:)"
+);
+let svgImage = new frame.contentWindow.Image();
+svgImage.src = svgIcon;
+check(await svgImage.decode().then(() => svgImage.naturalWidth > 0, () => false), "and the UI can show it");
+await neeko.tabs.close(svgTab.id);
+
 // Sound.
 let audioTab = await neeko.tabs.open(`${BASE}/audio`);
 await waitFor(() => updated(audioTab.id, t => t.audible), "a tab playing sound is audible", 15000);
