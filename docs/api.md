@@ -534,7 +534,11 @@ from one of these pages, as a tab's page.
   outside your pages, and the files silently don't load. Bundlers also
   inline small images as `data:` URLs, which a Content Security Policy
   like the demo page's (`default-src chrome:`) refuses: add `data:` to
-  `img-src`, or turn the inlining off.
+  `img-src`, or turn the inlining off. And take `crossorigin` off
+  stylesheet links (`<link rel="stylesheet" crossorigin>`, which Vite
+  writes): such a stylesheet loads but none of its rules apply, with no
+  error, unless the same file was already loaded without it. Module
+  scripts with `crossorigin` are fine.
 - **They can't link to each other** (since websites can't either): use
   `neekoPage.go()` or `neekoPage.open()`, or have your UI open them with
   `neeko.tabs.open("about:settings")`.

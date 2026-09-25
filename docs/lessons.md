@@ -430,6 +430,13 @@ Add to it whenever something costs you time.
     content processes (`nsChromeRegistryChrome` sends them), **but only as
     long as the returned handle lives**: an unkept handle is collected and
     the package vanishes, and later loads fail as "file not found".
+- **A `crossorigin` stylesheet from `chrome://neeko-pages/` doesn't apply**
+  in an app page (found by Toji, 2026-09-25): `link.sheet` exists, but none
+  of its rules apply, and the console says nothing. It only works if the
+  same file was loaded without `crossorigin` earlier in the session (the
+  shared stylesheet cache), which is why a test that loaded the plain page
+  first passed. Module scripts with `crossorigin` load fine. Reproduced in
+  headless and windowed dev builds with Toji's Vite-built start page.
 - **The content sandbox can't read Neeko's files in dev builds.** The app
   bundle's files are symlinks into `engine/`, and Neeko's there are Surfer's
   symlinks to `src/`, outside the repo dir (`engine/`) that non-packaged
