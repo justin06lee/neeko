@@ -83,6 +83,10 @@ official startup hooks (`Neeko.manifest`):
   answers calls and turns Firefox's tab and navigation signals into events.
 - **`NeekoDownloads.sys.mjs`** follows the window's downloads for the API,
   once the UI asks about them.
+- **`NeekoSettings.sys.mjs`** keeps the UI's settings (prefs named
+  `neeko.settings.*`, shared by every window) and the color scheme
+  (Firefox's `ui.systemUsesDarkTheme`). The UI gets both with `neeko`,
+  before its first paint, and change events keep them current.
 - **`neeko-api.js`** is the UI's side: the `neeko` object.
 - **`NeekoPrivacy.sys.mjs`** and the pref files (`firefox-neeko.js`,
   `firefox-neeko-privacy.js`) set Neeko's defaults, privacy first.

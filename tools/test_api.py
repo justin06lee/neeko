@@ -82,6 +82,11 @@ PAGES = {
     # A page to scroll, which titles itself with how far it's scrolled.
     "/tall": "<title>0</title><body style='height: 5000px'><script>"
     "onscroll = () => document.title = Math.round(scrollY)</script>",
+    # Titles itself with the color scheme it's asked to use, and follows it.
+    "/scheme": "<title>scheme</title><script>"
+    "let dark = matchMedia('(prefers-color-scheme: dark)');"
+    "let show = () => document.title = dark.matches ? 'dark' : 'light';"
+    "show(); dark.onchange = show</script>",
     # A page with an icon.
     "/icon": f"<title>icon</title><link rel='icon' href='{FAVICON}'>",
     # Plays a tone, too quietly to hear but not silent, which makes its tab

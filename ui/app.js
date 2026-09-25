@@ -390,26 +390,52 @@ const menuCommands = {
   duplicate: () => neeko.tabs.duplicate(),
   mute: () => neeko.tabs.setMuted(!tabs.get(currentId)?.muted),
   moveToStart: () => neeko.tabs.move(0),
+  // A setting of this UI's own, saved for every window (early.js applies it
+  // at startup, and every window follows the change event below).
+  tabsSide: () =>
+    neeko.settings.set("tabs", tabsSide() == "right" ? "left" : "right"),
+  // Web pages, Firefox's own pages and this UI (style.css) follow it.
+  colorScheme: button => neeko.colorScheme.set(button.dataset.scheme),
   fullscreen: toggleWindowFullscreen,
 };
+
+const tabsSide = () => neeko.settings.get("tabs") ?? "left";
 
 function showMenu(show) {
   menu.hidden = !show;
   menuButton.classList.toggle("open", show);
   if (show) {
+    // Below the ⋯ button, lined up with its right edge.
+    let button = menuButton.getBoundingClientRect();
+    menu.style.top = `${button.bottom + 4}px`;
+    menu.style.right = `${document.documentElement.clientWidth - button.right}px`;
     let muted = tabs.get(currentId)?.muted;
     menu.querySelector("[data-command=mute]").textContent = muted
       ? "Unmute tab"
       : "Mute tab";
+    menu.querySelector("[data-command=tabsSide]").textContent =
+      tabsSide() == "right" ? "Tabs on the left" : "Tabs on the right";
+    for (let item of menu.querySelectorAll("[data-scheme]")) {
+      item.classList.toggle(
+        "checked",
+        item.dataset.scheme == neeko.colorScheme.get()
+      );
+    }
   }
 }
 
 menuButton.addEventListener("click", () => showMenu(menu.hidden));
 menu.addEventListener("click", event => {
-  let command = event.target.closest("button")?.dataset.command;
+  let button = event.target.closest("button");
+  let command = button?.dataset.command;
   if (command) {
     showMenu(false);
-    Promise.resolve(menuCommands[command]()).catch(reportError);
+    Promise.resolve(menuCommands[command](button)).catch(reportError);
+  }
+});
+neeko.settings.on("change", ({ key, value }) => {
+  if (key == "tabs") {
+    document.documentElement.dataset.tabs = value ?? "left";
   }
 });
 document.addEventListener("pointerdown", event => {
@@ -456,9 +482,6 @@ address.addEventListener("blur", () => {
     showToolbar();
   }
 });
-
-// style.css leaves room for the window buttons only on macOS.
-document.documentElement.dataset.platform = neeko.platform;
 
 // The listeners above are in place, so from here on the events keep these
 // lists up to date.

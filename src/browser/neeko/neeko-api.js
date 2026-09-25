@@ -8,14 +8,19 @@
  * API and the messages.
  *
  * The file's value is a function Neeko calls with the MessagePort that
- * carries the messages, and a few facts that never change while the UI runs
- * ({ platform }), so nothing else leaks into the page's globals.
+ * carries the messages, and what the UI can read without waiting
+ * ({ platform, settings, colorScheme }), so nothing else leaks into the
+ * page's globals.
  */
 
 (port, facts) => {
   "use strict";
 
   let { platform } = facts;
+  // Kept current by the settings and color scheme change events, which
+  // Neeko always sends, so reading them never waits.
+  let settings = new Map(Object.entries(facts.settings));
+  let colorScheme = facts.colorScheme;
 
   let nextId = 1;
   let pending = new Map();
@@ -23,6 +28,16 @@
   let listeners = new Map();
 
   port.onmessage = ({ data }) => {
+    if (data.event == "settings.change") {
+      let { key, value } = data.data;
+      if (value === null) {
+        settings.delete(key);
+      } else {
+        settings.set(key, value);
+      }
+    } else if (data.event == "colorScheme.change") {
+      colorScheme = data.data.colorScheme;
+    }
     if (data.event) {
       for (let listener of listeners.get(data.event) ?? []) {
         try {
@@ -130,6 +145,17 @@
       retry: downloadId => call("downloads.retry", downloadId),
       remove: downloadId => call("downloads.remove", downloadId),
       on: events("downloads", ["start", "update", "remove"]),
+    }),
+    settings: Object.freeze({
+      get: key => settings.get(key),
+      all: () => Object.fromEntries(settings),
+      set: (key, value) => call("settings.set", key, value),
+      on: events("settings", ["change"]),
+    }),
+    colorScheme: Object.freeze({
+      get: () => colorScheme,
+      set: scheme => call("colorScheme.set", scheme),
+      on: events("colorScheme", ["change"]),
     }),
   });
 
