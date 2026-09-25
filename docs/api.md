@@ -528,6 +528,13 @@ from one of these pages, as a tab's page.
   relative URLs don't resolve. Put
   `<base href="chrome://neeko-pages/content/">` in the page's `<head>` and
   relative paths work, as in the demo app's `pages/start.html`.
+- **With a bundler (Vite and the like):** set its base to `./` or
+  `chrome://neeko-pages/content/`. Its default, root-relative paths
+  (`/assets/app.css`) resolve to `chrome://neeko-pages/assets/app.css`,
+  outside your pages, and the files silently don't load. Bundlers also
+  inline small images as `data:` URLs, which a Content Security Policy
+  like the demo page's (`default-src chrome:`) refuses: add `data:` to
+  `img-src`, or turn the inlining off.
 - **They can't link to each other** (since websites can't either): use
   `neekoPage.go()` or `neekoPage.open()`, or have your UI open them with
   `neeko.tabs.open("about:settings")`.

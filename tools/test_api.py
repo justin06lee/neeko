@@ -256,20 +256,31 @@ for (let i = 0; i < 100 && !(slot?.getBoundingClientRect().height > 100); i++) {
   await new Promise(r => setTimeout(r, 50));
 }
 let height = Math.round(slot?.getBoundingClientRect().height ?? 0);
-// And the app's pages bundled inside it: the demo app's about:start.
-let tab = gBrowser.addTrustedTab("about:start");
-gBrowser.selectedTab = tab;
-for (let i = 0; i < 100 && tab.label != "New Tab"; i++) {
-  await new Promise(r => setTimeout(r, 50));
-}
-let started = tab.label == "New Tab" && tab.linkedBrowser.remoteType == "privilegedabout";
 let ok = test => (test ? "ok  " : "FAIL");
-return [
+let results = [
   `${ok(frame?.contentWindow?.neeko)} without neeko.ui.path, the bundled UI loads with the API`,
   `${ok(served.includes("/chrome/browser/content/neeko-ui/"))} it comes from inside the app (${served})`,
   `${ok(height > 100)} its content slot has room for the page (${height}px high)`,
-  `${ok(started)} without neeko.pages.path, the bundled start page loads (${tab.label}, ${tab.linkedBrowser.remoteType})`,
 ];
+// And the app's own pages bundled inside it, if it has a start page (the
+// demo app does); without one, the New Tab page stays Firefox's.
+let { NeekoPages } = ChromeUtils.importESModule("moz-src:///browser/neeko/NeekoPages.sys.mjs");
+if (NeekoPages.names.includes("start")) {
+  let tab = gBrowser.addTrustedTab("about:start");
+  gBrowser.selectedTab = tab;
+  for (let i = 0; i < 100 && tab.linkedBrowser.currentURI.spec != "about:start"; i++) {
+    await new Promise(r => setTimeout(r, 50));
+  }
+  let remote = tab.linkedBrowser.remoteType;
+  results.push(
+    `${ok(tab.linkedBrowser.currentURI.spec == "about:start" && remote == "privilegedabout")} without neeko.pages.path, the bundled start page loads (${remote})`
+  );
+} else {
+  results.push(
+    `${ok(BROWSER_NEW_TAB_URL == "about:newtab")} without a start page, the New Tab page stays Firefox's (${BROWSER_NEW_TAB_URL})`
+  );
+}
+return results;
 """
 
 
