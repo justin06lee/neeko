@@ -21,6 +21,13 @@
 import { NeekoDownloads } from "moz-src:///browser/neeko/NeekoDownloads.sys.mjs";
 import { NeekoPanels } from "moz-src:///browser/neeko/NeekoPanels.sys.mjs";
 
+const lazy = {};
+ChromeUtils.defineESModuleGetters(lazy, {
+  AboutNewTab: "resource:///modules/AboutNewTab.sys.mjs",
+  SessionStore:
+    "moz-src:///browser/components/sessionstore/SessionStore.sys.mjs",
+});
+
 // Tab ids are small numbers, unique for the whole session, so they stay the
 // same when the UI reloads.
 let nextTabId = 1;
@@ -35,12 +42,34 @@ function tabId(tab) {
   return id;
 }
 
+// The error pages Firefox shows in place of a page that didn't load
+// (nsDocShell::DisplayLoadError), as about:<page>?e=<code>&u=<url>... The
+// tab crashed page isn't one of them: tabs report that as `crashed`.
+const ERROR_PAGE = /^about:(neterror|certerror|blocked|httpsonlyerror|restricted)\?/;
+
+/**
+ * The error page a tab's browser shows, if any: which one, and its error
+ * code (such as "connectionFailure").
+ */
+function errorPage(browser) {
+  let spec = browser.documentURI?.spec ?? "";
+  let match = ERROR_PAGE.exec(spec);
+  if (!match) {
+    return null;
+  }
+  let query = spec.slice(spec.indexOf("?") + 1).split("#")[0];
+  return { page: match[1], code: new URLSearchParams(query).get("e") ?? "" };
+}
+
 /**
  * What the UI knows about a tab. Tabs that are asleep (restored but never
  * shown, or unloaded to save memory) have no page yet, and asking about their
  * history would wake them, so they report no back or forward.
+ *
+ * @param {string|null} icon The tab's icon as the UI should get it (see
+ *   NeekoAPI's #icon).
  */
-function describeTab(tab) {
+function describeTab(tab, icon) {
   let browser = tab.linkedBrowser;
   let asleep = !tab.linkedPanel;
   let uri = browser.currentURI;
@@ -49,11 +78,66 @@ function describeTab(tab) {
     // Without any user:password@ part.
     url: uri ? Services.io.createExposableURI(uri).spec : "",
     title: tab.label,
+    icon,
     loading: tab.hasAttribute("busy"),
     canGoBack: !asleep && browser.canGoBack,
     canGoForward: !asleep && browser.canGoForward,
     selected: tab.selected,
+    audible: tab.hasAttribute("soundplaying"),
+    muted: tab.hasAttribute("muted"),
+    crashed: tab.hasAttribute("crashed"),
+    error: asleep ? null : errorPage(browser),
   };
+}
+
+/**
+ * Makes a blob: URL in the UI page for an icon Firefox keeps as a data: URL,
+ * or returns null if it can't be read.
+ */
+function blobURL(ui, dataURL) {
+  try {
+    let comma = dataURL.indexOf(",");
+    let meta = dataURL.slice("data:".length, comma);
+    let data = dataURL.slice(comma + 1);
+    let bytes = /;base64$/i.test(meta)
+      ? Uint8Array.fromBase64(data)
+      : new TextEncoder().encode(decodeURIComponent(data));
+    let type = meta.split(";")[0];
+    return ui.URL.createObjectURL(new ui.Blob([bytes], { type }));
+  } catch (e) {
+    console.error("Neeko: couldn't read a tab's icon.", e);
+    return null;
+  }
+}
+
+/**
+ * Checks the options object a method takes: every option has to be one the
+ * method knows, of the right kind ("boolean", or "index" for a whole number
+ * from 0).
+ */
+function checkOptions(options, kinds) {
+  if (options === undefined || options === null) {
+    return {};
+  }
+  if (typeof options != "object" || Array.isArray(options)) {
+    throw new TypeError("Expected an options object.");
+  }
+  for (let [name, value] of Object.entries(options)) {
+    let kind = kinds[name];
+    if (!kind) {
+      throw new TypeError(`Unknown option "${name}".`);
+    }
+    let ok =
+      value === undefined ||
+      (kind == "index"
+        ? Number.isInteger(value) && value >= 0
+        : typeof value == kind);
+    if (!ok) {
+      let expected = kind == "index" ? "a whole number from 0" : kind;
+      throw new TypeError(`Option "${name}" must be ${expected}.`);
+    }
+  }
+  return options;
 }
 
 // Every event the UI can listen for.
@@ -87,10 +171,36 @@ const FULLSCREEN_EVENTS = [
 
 // Fields whose changes arrive as "update" events. Selection has its own
 // "select" event instead.
-const UPDATE_FIELDS = ["url", "title", "loading", "canGoBack", "canGoForward"];
+const UPDATE_FIELDS = [
+  "url",
+  "title",
+  "icon",
+  "loading",
+  "canGoBack",
+  "canGoForward",
+  "audible",
+  "muted",
+  "crashed",
+  "error",
+];
 
-// Tab attributes Firefox reports changing that affect a tab's description.
-const WATCHED_ATTRIBUTES = ["label", "busy"];
+// Tab attributes Firefox reports changing (TabAttrModified) that affect a
+// tab's description. "crashed" changes without that event (see
+// ContentCrashHandlers.sys.mjs), so NeekoAPI watches it itself.
+const WATCHED_ATTRIBUTES = ["label", "busy", "image", "soundplaying", "muted"];
+
+/**
+ * Whether a field of a tab's description still has the same value. Most are
+ * strings, numbers or booleans; `error` is null or a small object.
+ */
+function sameValue(a, b) {
+  return (
+    a === b ||
+    (typeof a == "object" &&
+      typeof b == "object" &&
+      JSON.stringify(a) == JSON.stringify(b))
+  );
+}
 
 const TAB_EVENTS = [
   "TabOpen",
@@ -156,22 +266,89 @@ const METHODS = {
   },
 
   /**
-   * Opens a tab and selects it, the way the address bar or Cmd+T would. With
-   * no input it shows the New Tab page.
+   * Opens a tab, the way the address bar or Cmd+T would. With no input it
+   * shows the New Tab page. Options: `background` (don't select it), `index`
+   * (where it goes; the end by default) and `addressbar` (false: a New Tab
+   * page doesn't ask for the address bar).
    */
-  "tabs.open"(input) {
+  "tabs.open"(input, options) {
     let url =
-      input === undefined ? this.win.BROWSER_NEW_TAB_URL : addressInput(input);
-    let browser = null;
-    this.win.openTrustedLinkIn(url, "tab", {
-      allowThirdPartyFixup: true,
-      resolveOnNewTabCreated: b => (browser = b),
+      input === undefined || input === null
+        ? this.win.BROWSER_NEW_TAB_URL
+        : addressInput(input);
+    let {
+      background = false,
+      index,
+      addressbar = true,
+    } = checkOptions(options, {
+      background: "boolean",
+      index: "index",
+      addressbar: "boolean",
     });
-    let tab = browser && this.gBrowser.getTabForBrowser(browser);
-    if (!tab) {
-      throw new Error("The tab didn't open in this window.");
+    // What Firefox's openLinkIn() does for a new tab (URILoadingHelper), with
+    // a position, which openLinkIn() can't take.
+    let blank = this.win.isBlankPageURL(url);
+    let focusUrlBar =
+      !background && blank && addressbar && !lazy.AboutNewTab.willNotifyUser;
+    let tab = this.gBrowser.addTab(url, {
+      triggeringPrincipal: Services.scriptSecurityManager.getSystemPrincipal(),
+      allowThirdPartyFixup: true,
+      inBackground: background,
+      tabIndex: index,
+      focusUrlBar,
+    });
+    // The page gets the keys, unless a New Tab page asks for the address bar,
+    // or the UI keeps them (addressbar: false).
+    if (!background && !focusUrlBar && (addressbar || !blank)) {
+      tab.linkedBrowser.focus();
     }
     return this.describe(tab);
+  },
+
+  /**
+   * Opens a copy of a tab next to it, with its history, as Firefox's
+   * Duplicate Tab does, and selects it unless `background` is set.
+   */
+  "tabs.duplicate"(id, options) {
+    let { background = false } = checkOptions(options, {
+      background: "boolean",
+    });
+    let tab = this.findTab(id);
+    let copy = lazy.SessionStore.duplicateTab(this.win, tab, 0, true, {
+      tabIndex: tab.index + 1,
+    });
+    if (!background) {
+      this.gBrowser.selectedTab = copy;
+    }
+    return this.describe(copy);
+  },
+
+  /**
+   * Moves a tab to a position in the window's tabs. Firefox keeps pinned
+   * tabs before the others, and a position past the end means the end.
+   */
+  "tabs.move"(index, id) {
+    if (!Number.isInteger(index) || index < 0) {
+      throw new TypeError("Expected a position, a whole number from 0.");
+    }
+    this.gBrowser.moveTabTo(this.findTab(id), { tabIndex: index });
+  },
+
+  "tabs.setMuted"(muted, id) {
+    if (typeof muted != "boolean") {
+      throw new TypeError("Expected true or false.");
+    }
+    let tab = this.findTab(id);
+    if (tab.hasAttribute("muted") != muted) {
+      tab.toggleMuteAudio();
+    }
+  },
+
+  /**
+   * Puts keyboard focus in the selected tab's page, as clicking it would.
+   */
+  "tabs.focus"() {
+    this.gBrowser.selectedBrowser.focus();
   },
 
   "tabs.close"(id) {
@@ -209,8 +386,17 @@ const METHODS = {
     this.findTab(id).linkedBrowser.goForward();
   },
 
+  /**
+   * Reloads a tab's page. A crashed tab comes back the way the crashed tab
+   * page's "Restore This Tab" does it.
+   */
   "nav.reload"(id) {
-    this.gBrowser.reloadTab(this.findTab(id));
+    let tab = this.findTab(id);
+    if (tab.hasAttribute("crashed")) {
+      lazy.SessionStore.reviveCrashedTab(tab);
+    } else {
+      this.gBrowser.reloadTab(tab);
+    }
   },
 
   /**
@@ -291,6 +477,16 @@ export class NeekoAPI {
   #fullscreen;
   /** The window's downloads, once the UI asks about them. */
   #downloads = null;
+  /**
+   * The blob: URLs made for tab icons that are data: URLs (#icon), by data:
+   * URL, each with how many tabs show it.
+   */
+  #icons = new Map();
+  /** The data: URL icon each tab was last described with. */
+  #tabIcons = new WeakMap();
+  /** Follows the "crashed" attribute of the window's tabs. */
+  #crashes;
+  #ui;
   #send;
   #destroyed = false;
 
@@ -298,15 +494,28 @@ export class NeekoAPI {
    * @param {Window} win The browser window whose tabs the UI controls. Its
    *   gBrowser must already exist.
    * @param {Function} send Delivers a message to the UI.
+   * @param {Window} ui The UI page, where tab icon URLs are made.
    */
-  constructor(win, send) {
+  constructor(win, send, ui) {
     this.win = win;
     this.gBrowser = win.gBrowser;
     this.#send = send;
+    this.#ui = ui;
     for (let type of TAB_EVENTS) {
       this.gBrowser.tabContainer.addEventListener(type, this);
     }
     this.gBrowser.addTabsProgressListener(this);
+    this.#crashes = new win.MutationObserver(records => {
+      for (let { target } of records) {
+        if (this.gBrowser.isTab(target)) {
+          this.#update(target);
+        }
+      }
+    });
+    this.#crashes.observe(win.document, {
+      subtree: true,
+      attributeFilter: ["crashed"],
+    });
     this.#fullscreen = this.fullscreenState();
     for (let type of FULLSCREEN_EVENTS) {
       win.addEventListener(type, this, true);
@@ -334,6 +543,9 @@ export class NeekoAPI {
       this.gBrowser.tabContainer.removeEventListener(type, this);
     }
     this.gBrowser.removeTabsProgressListener(this);
+    this.#crashes.disconnect();
+    // The icons' blob: URLs go with the UI page.
+    this.#icons.clear();
   }
 
   /**
@@ -441,9 +653,56 @@ export class NeekoAPI {
    * Describes a tab for the UI and remembers what it was told.
    */
   describe(tab) {
-    let description = describeTab(tab);
+    let description = describeTab(tab, this.#icon(tab));
     this.#lastSent.set(tab, description);
     return description;
+  }
+
+  /**
+   * A tab's icon as a URL the UI can put in an <img>, or null. Firefox keeps
+   * most icons as data: URLs, the image itself, often many kilobytes. The UI
+   * gets a short blob: URL for it instead, made in the UI page and shared by
+   * every tab with the same icon, so image data never goes through the API
+   * and each icon is decoded once. Other icons (chrome:, about:) are URLs
+   * already.
+   */
+  #icon(tab) {
+    let image = tab.getAttribute("image") || null;
+    let before = this.#tabIcons.get(tab);
+    if (before !== image) {
+      this.#releaseIcon(tab);
+    }
+    if (!image?.startsWith("data:")) {
+      return image;
+    }
+    let icon = this.#icons.get(image);
+    if (!icon) {
+      let url = blobURL(this.#ui, image);
+      if (!url) {
+        return null;
+      }
+      icon = { url, tabs: 0 };
+      this.#icons.set(image, icon);
+    }
+    if (before !== image) {
+      icon.tabs++;
+      this.#tabIcons.set(tab, image);
+    }
+    return icon.url;
+  }
+
+  /**
+   * A tab no longer shows its data: URL icon; once no tab does, its blob: URL
+   * goes.
+   */
+  #releaseIcon(tab) {
+    let image = this.#tabIcons.get(tab);
+    this.#tabIcons.delete(tab);
+    let icon = image && this.#icons.get(image);
+    if (icon && --icon.tabs == 0) {
+      this.#icons.delete(image);
+      this.#ui.URL.revokeObjectURL(icon.url);
+    }
   }
 
   /**
@@ -469,7 +728,9 @@ export class NeekoAPI {
     }
     let before = this.#lastSent.get(tab);
     let now = this.describe(tab);
-    let changed = UPDATE_FIELDS.filter(field => now[field] !== before?.[field]);
+    let changed = UPDATE_FIELDS.filter(
+      field => !sameValue(now[field], before?.[field])
+    );
     if (changed.length) {
       this.#emit("tabs.update", { tab: now, changed });
     }
@@ -494,6 +755,7 @@ export class NeekoAPI {
         break;
       case "TabClose":
         this.#lastSent.delete(tab);
+        this.#releaseIcon(tab);
         this.#emit("tabs.close", { id: tabId(tab) });
         break;
       case "TabSelect": {
@@ -525,7 +787,8 @@ export class NeekoAPI {
 
   /**
    * Tabs progress listener: a tab's page changed its address, which can also
-   * change whether it can go back or forward.
+   * change whether it can go back or forward, and whether it's an error page
+   * (the browser's documentURI is up to date by now).
    */
   onLocationChange(browser, webProgress) {
     if (!webProgress.isTopLevel) {

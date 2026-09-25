@@ -1,6 +1,11 @@
 // The demo UI: a tab list, an address bar, a bar for permission prompts and
 // a downloads list, built only on the Neeko API (the global `neeko` object,
 // see docs/api.md).
+//
+// Tabs: click to select, drag to move, ⧉ to duplicate, the speaker to mute.
+// Address bar: Enter goes there, Alt+Enter opens it in a new tab next to
+// this one (Shift+Alt+Enter, behind it), Escape puts the address back and
+// the keys in the page.
 
 const tabList = document.getElementById("tabs");
 const address = document.getElementById("address");
@@ -40,13 +45,25 @@ function addTab(tab, index = tabList.children.length) {
   }
   let item = document.createElement("li");
   item.dataset.id = tab.id;
+  // Drag a tab up or down the list to move it.
+  item.draggable = true;
+  let icon = document.createElement("span");
+  icon.className = "icon";
+  icon.append(document.createElement("img"));
   let title = document.createElement("span");
   title.className = "title";
-  let close = document.createElement("button");
-  close.className = "close";
-  close.title = "Close tab (Cmd+W)";
-  close.textContent = "×";
-  item.append(title, close);
+  let buttons = [
+    ["sound", "Mute tab"],
+    ["duplicate", "Duplicate tab", "⧉"],
+    ["close", "Close tab (Cmd+W)", "×"],
+  ].map(([name, label, text = ""]) => {
+    let button = document.createElement("button");
+    button.className = name;
+    button.title = label;
+    button.textContent = text;
+    return button;
+  });
+  item.append(icon, title, ...buttons);
   items.set(tab.id, item);
   tabList.insertBefore(item, tabList.children[index] ?? null);
   updateTab(tab);
@@ -56,7 +73,25 @@ function updateTab(tab) {
   tabs.set(tab.id, tab);
   let item = items.get(tab.id);
   item.querySelector(".title").textContent = tab.title || tab.url;
-  item.title = tab.url;
+  // The icon is a URL (never the image itself), for as long as the tab has
+  // one. Crashed tabs and error pages show a mark instead.
+  let icon = item.querySelector(".icon img");
+  let showIcon = tab.icon && !tab.crashed && !tab.error;
+  icon.hidden = !showIcon;
+  if (showIcon && icon.getAttribute("src") != tab.icon) {
+    icon.src = tab.icon;
+  }
+  item.title = tab.error
+    ? `${tab.url}\nCouldn't load it (${tab.error.code})`
+    : tab.crashed
+      ? `${tab.url}\nThis tab crashed. Reload to bring it back.`
+      : tab.url;
+  item.classList.toggle("crashed", tab.crashed);
+  item.classList.toggle("failed", !!tab.error);
+  let sound = item.querySelector(".sound");
+  sound.hidden = !tab.audible && !tab.muted;
+  sound.textContent = tab.muted ? "🔇" : "🔊";
+  sound.title = tab.muted ? "Unmute tab" : "Mute tab";
   item.classList.toggle("loading", tab.loading);
   item.classList.toggle(
     "asking",
@@ -280,12 +315,38 @@ tabList.addEventListener("click", event => {
     return;
   }
   let id = Number(item.dataset.id);
-  if (event.target.closest(".close")) {
+  let button = event.target.closest("button")?.className;
+  if (button == "close") {
     neeko.tabs.close(id);
+  } else if (button == "duplicate") {
+    neeko.tabs.duplicate(id);
+  } else if (button == "sound") {
+    neeko.tabs.setMuted(!tabs.get(id).muted, id);
   } else {
     neeko.tabs.select(id);
   }
 });
+
+// Dragging a tab onto another moves it to that one's place. The list itself
+// only changes once Neeko's "move" event says the tab moved.
+let dragged = null;
+tabList.addEventListener("dragstart", event => {
+  dragged = Number(event.target.closest("li")?.dataset.id);
+  event.dataTransfer.effectAllowed = "move";
+});
+tabList.addEventListener("dragover", event => {
+  if (dragged) {
+    event.preventDefault();
+  }
+});
+tabList.addEventListener("drop", event => {
+  let target = event.target.closest("li");
+  if (dragged && target) {
+    event.preventDefault();
+    neeko.tabs.move([...tabList.children].indexOf(target), dragged);
+  }
+});
+tabList.addEventListener("dragend", () => (dragged = null));
 
 // Middle-click closes a tab.
 tabList.addEventListener("auxclick", event => {
@@ -325,11 +386,21 @@ address.addEventListener("input", () => (editing = true));
 address.addEventListener("keydown", event => {
   if (event.key == "Enter" && address.value.trim()) {
     editing = false;
-    neeko.nav.go(address.value).catch(reportError);
+    if (event.altKey) {
+      // Alt+Enter: in a new tab next to this one (with Shift, behind it).
+      let index = [...tabList.children].indexOf(items.get(currentId)) + 1;
+      neeko.tabs
+        .open(address.value, { index, background: event.shiftKey })
+        .catch(reportError);
+      showToolbar();
+    } else {
+      neeko.nav.go(address.value).catch(reportError);
+    }
   } else if (event.key == "Escape") {
+    // Puts the address back, and the keys back in the page.
     editing = false;
     showToolbar();
-    address.select();
+    neeko.tabs.focus();
   }
 });
 // Leaving the address bar without pressing Enter puts the URL back.
@@ -339,6 +410,9 @@ address.addEventListener("blur", () => {
     showToolbar();
   }
 });
+
+// style.css leaves room for the window buttons only on macOS.
+document.documentElement.dataset.platform = neeko.platform;
 
 // The listeners above are in place, so from here on the events keep these
 // lists up to date.

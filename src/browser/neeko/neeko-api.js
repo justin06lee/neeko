@@ -8,11 +8,14 @@
  * API and the messages.
  *
  * The file's value is a function Neeko calls with the MessagePort that
- * carries the messages, so nothing else leaks into the page's globals.
+ * carries the messages, and a few facts that never change while the UI runs
+ * ({ platform }), so nothing else leaks into the page's globals.
  */
 
-port => {
+(port, facts) => {
   "use strict";
+
+  let { platform } = facts;
 
   let nextId = 1;
   let pending = new Map();
@@ -87,12 +90,17 @@ port => {
   }
 
   let neeko = Object.freeze({
+    platform,
     tabs: Object.freeze({
       list: () => call("tabs.list"),
       current: () => call("tabs.current"),
-      open: url => call("tabs.open", url),
+      open: (url, options) => call("tabs.open", url, options),
       close: tabId => call("tabs.close", tabId),
       select: tabId => call("tabs.select", tabId),
+      duplicate: (tabId, options) => call("tabs.duplicate", tabId, options),
+      move: (index, tabId) => call("tabs.move", index, tabId),
+      setMuted: (muted, tabId) => call("tabs.setMuted", muted, tabId),
+      focus: () => call("tabs.focus"),
       on: events("tabs", ["open", "close", "select", "move", "update"]),
     }),
     nav: Object.freeze({
