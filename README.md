@@ -101,7 +101,8 @@ browsers use.
   switch, move, duplicate and mute tabs (with their icons), navigate, answer
   sites' permission requests, lay out fullscreen, follow and manage
   downloads, read and edit bookmarks, keep your UI's settings for every
-  window, make pages light or dark, and hear about every change. It's documented in
+  window, make pages light or dark, hear when the pointer reaches the
+  page's edges, and hear about every change. It's documented in
   [docs/api.md](docs/api.md), and `ui/app.js` shows all of it in use.
 - Scripts must be separate files (the page's security policy blocks inline
   scripts). They load from `chrome://neeko-ui/content/`, which maps to `ui/`.

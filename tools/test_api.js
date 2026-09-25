@@ -393,6 +393,46 @@ await waitFor(uiOverPage, "back over the page");
 menu.hidden = true;
 await waitFor(() => !uiOverPage() && !frame.style.clipPath, "hidden, it leaves the page on top");
 check(hit(450, 150) == "page", "and the page takes the pointer again");
+
+// The pointer at the page's edges, which the UI never sees over the page.
+let edges = [];
+let stopEdges = neeko.pointer.on("edge", data => edges.push(data));
+await neeko.pointer.setEdges({ top: 10, left: 4 });
+let pageBox = document.getElementById("tabbrowser-tabbox").getBoundingClientRect();
+let moveTo = async (x, y) => {
+  synthesizeMouseEvent("mousemove", x, y, {});
+  await new Promise(r => setTimeout(r, 50));
+};
+let lastEdge = () => JSON.stringify(edges.at(-1) ?? null);
+await moveTo(pageBox.left + 300, pageBox.top + 300);
+let quietBefore = edges.length;
+await moveTo(pageBox.left + 310, pageBox.top + 310);
+check(edges.length == quietBefore, "no events while the pointer is away from the edges");
+await moveTo(pageBox.left + 300, pageBox.top + 5);
+check(lastEdge() == '{"edge":"top","outside":false}', `the pointer at the page's top edge (${lastEdge()})`);
+await moveTo(pageBox.left + 300, pageBox.top + 15);
+check(lastEdge() == '{"edge":null,"outside":false}', `and away from it (${lastEdge()})`);
+await moveTo(pageBox.left + 2, pageBox.top + 300);
+check(lastEdge() == '{"edge":"left","outside":false}', `at the left edge, 4px deep (${lastEdge()})`);
+await moveTo(pageBox.left + 6, pageBox.top + 300);
+check(lastEdge() == '{"edge":null,"outside":false}', "past it");
+await moveTo(pageBox.right - 2, pageBox.top + 300);
+check(lastEdge() == '{"edge":null,"outside":false}', "edges it doesn't watch stay quiet");
+await moveTo(pageBox.left - 20, pageBox.top + 300);
+check(lastEdge() == '{"edge":null,"outside":false}', "over the UI, the pointer isn't at the page's edge");
+// Leaving the window across the left edge.
+await moveTo(pageBox.left + 2, pageBox.top + 300);
+gBrowser.selectedBrowser.dispatchEvent(
+  new MouseEvent("mouseout", { bubbles: true, clientX: pageBox.left - 1, clientY: pageBox.top + 300, relatedTarget: null })
+);
+await waitFor(() => lastEdge() == '{"edge":"left","outside":true}', "leaving the window across it");
+await rejects(neeko.pointer.setEdges({ middle: 3 }), /Unknown edge/, "setEdges() with an unknown edge");
+await rejects(neeko.pointer.setEdges({ top: -1 }), /depth/, "setEdges() with a bad depth");
+await neeko.pointer.setEdges({});
+let afterStop = edges.length;
+await moveTo(pageBox.left + 300, pageBox.top + 5);
+check(edges.length <= afterStop + 1 && lastEdge().includes("null"), "setEdges({}) stops it");
+stopEdges();
 await neeko.tabs.close(overTab.id);
 
 // The address bar. Listening takes effect once Neeko has read the message,

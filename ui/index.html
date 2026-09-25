@@ -26,7 +26,8 @@
   </head>
   <body>
     <div data-neeko-window-buttons></div>
-    <aside>
+    <!-- With the tab list hidden, it slides out over the page: an overlay. -->
+    <aside data-neeko-overlay>
       <button id="new-tab" title="New tab (Cmd+T)">+ New tab</button>
       <ol id="tabs"></ol>
       <section id="bookmarks" hidden>
@@ -61,6 +62,7 @@
       <button data-command="moveToStart">Move tab to the top</button>
       <hr />
       <button data-command="tabsSide">Tabs on the right</button>
+      <button data-command="hideTabs">Hide the tab list</button>
       <p class="label">Appearance</p>
       <button data-command="colorScheme" data-scheme="system">System</button>
       <button data-command="colorScheme" data-scheme="light">Light</button>

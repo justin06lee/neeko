@@ -519,6 +519,7 @@ const menuCommands = {
   // at startup, and every window follows the change event below).
   tabsSide: () =>
     neeko.settings.set("tabs", tabsSide() == "right" ? "left" : "right"),
+  hideTabs: () => neeko.settings.set("hideTabs", !neeko.settings.get("hideTabs")),
   // Web pages, Firefox's own pages and this UI (style.css) follow it.
   colorScheme: button => neeko.colorScheme.set(button.dataset.scheme),
   fullscreen: toggleWindowFullscreen,
@@ -540,6 +541,8 @@ function showMenu(show) {
       : "Mute tab";
     menu.querySelector("[data-command=tabsSide]").textContent =
       tabsSide() == "right" ? "Tabs on the left" : "Tabs on the right";
+    menu.querySelector("[data-command=hideTabs]").textContent =
+      neeko.settings.get("hideTabs") ? "Show the tab list" : "Hide the tab list";
     for (let item of menu.querySelectorAll("[data-scheme]")) {
       item.classList.toggle(
         "checked",
@@ -562,7 +565,38 @@ neeko.settings.on("change", ({ key, value }) => {
   if (key == "tabs") {
     document.documentElement.dataset.tabs = value ?? "left";
   }
+  if (key == "tabs" || key == "hideTabs") {
+    followTabsEdge();
+  }
 });
+
+// With the tab list hidden, the page reaches the window's edge, where the
+// list slides out when the pointer gets there. The pointer over the page
+// never reaches this UI, so Neeko watches that edge of the page for it.
+const aside = document.querySelector("aside");
+function followTabsEdge() {
+  let hidden = !!neeko.settings.get("hideTabs");
+  document.documentElement.toggleAttribute("data-hide-tabs", hidden);
+  aside.classList.remove("peek");
+  neeko.pointer.setEdges(hidden ? { [tabsSide()]: 4 } : {}).catch(reportError);
+}
+neeko.pointer.on("edge", ({ edge }) => {
+  if (!document.documentElement.hasAttribute("data-hide-tabs")) {
+    return;
+  }
+  if (edge == tabsSide()) {
+    aside.classList.add("peek");
+  } else {
+    // Gone again, unless the pointer went onto the list.
+    setTimeout(() => {
+      if (!aside.matches(":hover")) {
+        aside.classList.remove("peek");
+      }
+    }, 400);
+  }
+});
+aside.addEventListener("mouseleave", () => aside.classList.remove("peek"));
+followTabsEdge();
 document.addEventListener("pointerdown", event => {
   if (!menu.hidden && !event.target.closest("#menu, #menu-button")) {
     showMenu(false);
