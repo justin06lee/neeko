@@ -82,9 +82,11 @@ keeps most icons as `data:` URLs (the whole image, often many kilobytes), so
 Neeko hands your UI a short `blob:` URL for the same image instead. Tabs with
 the same icon share one URL, so each icon loads once however many tabs show
 it. A URL stays valid while a tab shows its icon; once none does, it stops
-working, so don't keep old ones. Icons Firefox has as ordinary URLs
-(`chrome://`, for its own pages) come as they are. `null` means the page has
-no icon: show your own default.
+working, so don't keep old ones. SVG icons Firefox draws in the page's own
+process, never in your UI's, and hands over as a picture, so for a moment
+after one arrives a tab's `icon` can still be `null`: an `update` follows.
+Icons Firefox has as ordinary URLs (`chrome://`, for its own pages) come as
+they are. `null` means the page has no icon (yet): show your own default.
 
 **`audible`** follows Firefox's speaker icon: it goes on when the page plays
 sound, and off a moment after it stops. A muted tab can still be `audible`.

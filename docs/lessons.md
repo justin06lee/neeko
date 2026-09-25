@@ -305,6 +305,16 @@ Add to it whenever something costs you time.
   changes. Neeko turns each distinct `data:` icon into one `blob:` URL made
   in the UI page (`URL.createObjectURL` in the UI's window), counted per
   tab and revoked when no tab shows it.
+- **SVG tab icons arrive wrapped in `moz-remote-image:`** (with
+  `browser.tabs.remoteSVGIconDecoding`, on by default): `setIcon` sets the
+  tab's `image` to `moz-remote-image://?url=<the SVG data: URL>&width=…`,
+  and that protocol draws the SVG in the page's content process and returns
+  a PNG, so untrusted SVG is never decoded in the parent
+  (`RemoteImageProtocolHandler.cpp`; `FaviconUtils.sys.mjs` says never to
+  display the raw data: URL). Neeko must not make a blob: of the SVG
+  inside: it loads the moz-remote-image: URL itself (a system-principal
+  channel with an image content policy type, as the handler requires) and
+  gives the UI a blob: of the PNG. Toji found these as long URLs in v0.3.0.
 - **`crashed` changes without `TabAttrModified`.** `ContentCrashHandlers`
   sets the tab's `crashed` attribute once the dead process has shut down,
   and SessionStore and the tab progress listener remove it quietly, so

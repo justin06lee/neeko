@@ -63,6 +63,12 @@ def png(width, height):
 
 FAVICON = "/favicon.png"
 FAVICON_PNG = png(2, 2)
+# An SVG icon, which Firefox has the page's own process draw.
+SVG_FAVICON = "/favicon.svg"
+SVG_FAVICON_BODY = (
+    b"<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16'>"
+    b"<rect width='16' height='16' fill='green'/></svg>"
+)
 
 # The app's own pages (NeekoPages), in the throwaway profile's pages/ folder.
 # The start page does what its query says, with neekoPage, and titles itself
@@ -121,6 +127,7 @@ PAGES = {
     "show(); dark.onchange = show</script>",
     # A page with an icon.
     "/icon": f"<title>icon</title><link rel='icon' href='{FAVICON}'>",
+    "/svg-icon": f"<title>svg icon</title><link rel='icon' href='{SVG_FAVICON}'>",
     # Plays a tone, too quietly to hear but not silent, which makes its tab
     # audible. The test allows playing without a click.
     "/audio": "<title>audio</title><script>"
@@ -181,6 +188,13 @@ class Pages(http.server.BaseHTTPRequestHandler):
                 socket.SOL_SOCKET, socket.SO_LINGER, struct.pack("ii", 1, 0)
             )
             self.connection.close()
+            return
+        if self.path == SVG_FAVICON:
+            self.send_response(200)
+            self.send_header("Content-Type", "image/svg+xml")
+            self.send_header("Content-Length", str(len(SVG_FAVICON_BODY)))
+            self.end_headers()
+            self.wfile.write(SVG_FAVICON_BODY)
             return
         if self.path == FAVICON:
             self.send_response(200)
