@@ -164,7 +164,13 @@ const EVENTS = [
   "bookmarks.move",
   "bookmarks.update",
   "bookmarks.request",
+  "pointer.edge",
 ];
+
+// The page's edges, in the order a corner counts as one of them.
+const EDGES = ["top", "left", "right", "bottom"];
+// How deep an edge's band can be, in CSS pixels.
+const MAX_EDGE = 200;
 
 // Events sent whether or not the UI listens: neeko-api.js keeps its copy of
 // the settings and color scheme (read without waiting) up to date with them.
@@ -524,6 +530,30 @@ const METHODS = {
   "bookmarks.remove"(id) {
     return NeekoBookmarks.remove(id);
   },
+
+  /**
+   * Which of the page's edges to watch the pointer at, and how deep a band
+   * along each, in CSS pixels: { top: 10, left: 4 }. Edges left out aren't
+   * watched. Replaces what was set before.
+   */
+  "pointer.setEdges"(edges) {
+    if (!edges || typeof edges != "object" || Array.isArray(edges)) {
+      throw new TypeError("Expected the edges to watch, like { top: 10 }.");
+    }
+    let depths = {};
+    for (let [edge, depth] of Object.entries(edges)) {
+      if (!EDGES.includes(edge)) {
+        throw new TypeError(`Unknown edge "${edge}": top, right, bottom or left.`);
+      }
+      if (!Number.isInteger(depth) || depth < 0 || depth > MAX_EDGE) {
+        throw new TypeError(`An edge's depth is a whole number from 0 to ${MAX_EDGE}.`);
+      }
+      if (depth) {
+        depths[edge] = depth;
+      }
+    }
+    this.watchEdges(depths);
+  },
 };
 
 export class NeekoAPI {
@@ -548,6 +578,10 @@ export class NeekoAPI {
   #unwatch = [];
   /** Stops following the bookmarks, once the UI listens for their events. */
   #unwatchBookmarks = null;
+  /** The page edges watched for the pointer, by edge: their depth. */
+  #edges = {};
+  /** The edge the UI last heard the pointer is at, and whether outside. */
+  #edge = { edge: null, outside: false };
   #ui;
   #send;
   #destroyed = false;
@@ -631,6 +665,7 @@ export class NeekoAPI {
       unwatch();
     }
     this.#unwatchBookmarks?.();
+    this.watchEdges({});
     // The icons' blob: URLs go with the UI page.
     this.#icons.clear();
   }
@@ -691,6 +726,72 @@ export class NeekoAPI {
     this.#unwatchBookmarks ??= NeekoBookmarks.watch((name, data) =>
       this.#emit(name, data)
     );
+  }
+
+  /**
+   * Starts or stops following the pointer over the page for the edges the
+   * UI watches (pointer.setEdges). The pointer over a web page never reaches
+   * the UI, but the browser window hears its moves first (their target is
+   * the page's <browser>), so nothing runs in the page for this.
+   */
+  watchEdges(depths) {
+    let watching = Object.keys(this.#edges).length > 0;
+    this.#edges = depths;
+    let watch = Object.keys(depths).length > 0;
+    if (watch && !watching) {
+      this.win.addEventListener("mousemove", this, {
+        capture: true,
+        passive: true,
+      });
+      this.win.addEventListener("mouseout", this, {
+        capture: true,
+        passive: true,
+      });
+    } else if (!watch && watching) {
+      this.win.removeEventListener("mousemove", this, { capture: true });
+      this.win.removeEventListener("mouseout", this, { capture: true });
+      this.#pointerAt(null, false);
+    }
+  }
+
+  /**
+   * Works out which watched edge of the page the pointer is at, from a
+   * mouse event in the browser window.
+   */
+  #pointerMoved(event) {
+    let tabbox = this.gBrowser.tabbox;
+    let overPage = tabbox.contains(event.target);
+    let leftWindow = event.type == "mouseout" && !event.relatedTarget;
+    if (event.type == "mouseout" && !leftWindow) {
+      // Moving within the window: the next mousemove says where to.
+      return;
+    }
+    let edge = null;
+    if (overPage) {
+      let page = tabbox.getBoundingClientRect();
+      let { clientX: x, clientY: y } = event;
+      let distance = {
+        top: y - page.top,
+        left: x - page.left,
+        right: page.right - 1 - x,
+        bottom: page.bottom - 1 - y,
+      };
+      edge =
+        EDGES.find(e => this.#edges[e] && distance[e] < this.#edges[e]) ??
+        null;
+    }
+    this.#pointerAt(edge, leftWindow && !!edge);
+  }
+
+  /**
+   * Tells the UI which edge the pointer is at, if that changed.
+   */
+  #pointerAt(edge, outside) {
+    if (edge == this.#edge.edge && outside == this.#edge.outside) {
+      return;
+    }
+    this.#edge = { edge, outside };
+    this.#emit("pointer.edge", { edge, outside });
   }
 
   /**
@@ -855,6 +956,10 @@ export class NeekoAPI {
 
   handleEvent(event) {
     switch (event.type) {
+      case "mousemove":
+      case "mouseout":
+        this.#pointerMoved(event);
+        return;
       case "MozDOMFullscreen:Entered":
         this.#fullscreenChanged(true);
         return;

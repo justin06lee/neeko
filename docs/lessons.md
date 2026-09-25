@@ -379,6 +379,16 @@ Add to it whenever something costs you time.
   is outside the class, so `this.#field` there is a syntax error that stops
   NeekoAPI loading at all (and with it every window's UI). Give the class a
   method instead.
+- **The browser window hears the pointer over web pages.** Mouse events
+  are dispatched in the parent's document first, with the page's
+  `<browser>` as their target, before Firefox forwards them to the content
+  process, so a capturing `mousemove` listener on the window follows the
+  pointer over the page with nothing running in it (the old Toji used a
+  content actor for this). Leaving the window gives a `mouseout` with no
+  `relatedTarget`. `window.synthesizeMouseEvent` takes the same path, which
+  is how the API test moves the pointer.
+- **Don't use `windowUtils.sendNativeMouseEvent` in tests** on this
+  machine: it moves the user's real pointer.
 - **Firefox's names for platforms** (`AppConstants.platform`) are
   `macosx`, `win` and `linux`; `neeko.platform` says `macos`, `windows`,
   `linux`.

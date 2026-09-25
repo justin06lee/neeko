@@ -163,6 +163,10 @@
       remove: id => call("bookmarks.remove", id),
       on: events("bookmarks", ["add", "remove", "move", "update", "request"]),
     }),
+    pointer: Object.freeze({
+      setEdges: edges => call("pointer.setEdges", edges),
+      on: events("pointer", ["edge"]),
+    }),
     colorScheme: Object.freeze({
       get: () => colorScheme,
       set: scheme => call("colorScheme.set", scheme),

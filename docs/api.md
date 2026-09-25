@@ -5,8 +5,8 @@ before your first script runs, in your UI page (`ui/index.html`) and nowhere
 else. Web pages never get it.
 
 So far it covers tabs, navigation, permission prompts, fullscreen,
-downloads, bookmarks, your UI's settings and the color scheme, and drawing
-over the page. Features get
+downloads, bookmarks, your UI's settings and the color scheme, drawing over
+the page, and the pointer at the page's edges. Features get
 added one at a time as browsers built on Neeko need them. The demo UI in
 `ui/` uses every one of them.
 
@@ -480,6 +480,35 @@ follows along, frame by frame while things move.
   `blur`: a click in the page moves the keyboard focus there. For a modal
   overlay that should block the page, mark a transparent element covering
   the whole slot.
+
+## The pointer at the page's edges
+
+Over the web page, the pointer is the page's: your UI hears nothing of it.
+Where the page reaches the window's edge (your sidebar hidden, say), your UI
+can't tell when the pointer gets there to slide something out. Tell Neeko
+which of the page's edges to watch, and how deep a band along each, in CSS
+pixels:
+
+```js
+await neeko.pointer.setEdges({ left: 4, top: 10 });
+neeko.pointer.on("edge", ({ edge, outside }) => {
+  if (edge == "left") showSidebar();   // it slides out over the page
+});
+```
+
+| Method | What it does |
+| --- | --- |
+| `neeko.pointer.setEdges(edges)` | Watches the page's `top`, `right`, `bottom` and `left` edges you give a depth (1 to 200 pixels), and no others. Replaces what was set before; `{}` stops watching. |
+| `neeko.pointer.on(event, listener)` | Listens for an event, as `tabs.on` does. |
+
+| Event | Data | When |
+| --- | --- | --- |
+| `edge` | `{ edge, outside }` | The pointer, over the page, came into the band along a watched edge (`edge` is `"top"`, `"right"`, `"bottom"` or `"left"`), or left it (`edge` is `null`). Where two bands meet, `top` counts first, then `left`, `right`, `bottom`. `outside` is `true` when the pointer left the window across that edge, which is how a quick flick past the window's edge still counts. |
+
+The pointer going from the page onto your UI (onto the sidebar that slid
+out, say) counts as leaving the band: from there your UI hears it itself.
+Only the pointer's moves are watched, and only while you watch some edge;
+nothing runs in the web page for it.
 
 ## Fallbacks
 

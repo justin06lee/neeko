@@ -571,3 +571,65 @@ body.page-fullscreen :is(aside, header, #prompt) {
   grid-area: 3 / 1;
   margin: 0 0 12px 12px;
 }
+
+/* The tab list hidden (a setting, neeko.settings "hideTabs"): the website
+   fills the window's width, and the list waits off the window's edge. When
+   the pointer reaches that edge of the website (neeko.pointer), the list
+   slides out over it; it's marked data-neeko-overlay, so it's drawn over the
+   website and takes the pointer there. */
+:root[data-hide-tabs] body {
+  grid-template-columns: 0 1fr;
+}
+
+:root[data-hide-tabs][data-tabs="right"] body {
+  grid-template-columns: 1fr 0;
+}
+
+:root[data-hide-tabs] aside {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 230px;
+  box-sizing: border-box;
+  padding-top: 12px;
+  background: var(--background);
+  transform: translateX(-100%);
+  transition: transform 150ms ease;
+  /* Above the toolbar. */
+  z-index: 1;
+}
+
+:root[data-hide-tabs][data-platform="macos"]:not([data-tabs="right"]) body:not(.window-fullscreen) aside {
+  padding-top: 48px;
+}
+
+:root[data-hide-tabs][data-tabs="right"] aside {
+  left: auto;
+  right: 0;
+  transform: translateX(100%);
+}
+
+:root[data-hide-tabs] aside.peek {
+  transform: none;
+  box-shadow: 0 0 24px rgb(0 0 0 / 0.35);
+}
+
+/* The website reaches the window's edge there, square. */
+:root[data-hide-tabs]:not([data-tabs="right"]) main {
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+
+:root[data-hide-tabs][data-tabs="right"] main {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+:root[data-hide-tabs] header {
+  padding-inline: 12px;
+}
+
+:root[data-hide-tabs][data-platform="macos"] body:not(.window-fullscreen) header {
+  padding-left: 84px;
+}
