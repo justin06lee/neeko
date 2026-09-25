@@ -6,6 +6,11 @@
 const BASE = "__BASE__";
 const HOST = BASE.replace("http://", "");
 const SLOW_SIZE = Number("__SLOW_SIZE__");
+// The same test server as another site ("localhost"), so its pages get a
+// content process of their own.
+const OTHER_SITE = BASE.replace("127.0.0.1", "localhost");
+// Nothing listens there.
+const CLOSED = "__CLOSED__";
 
 let results = [];
 let check = (ok, what) => results.push(`${ok ? "ok  " : "FAIL"} ${what}`);
@@ -47,6 +52,8 @@ window.focus();
 await waitFor(() => Services.focus.activeWindow == window, "the window to be active", 30000);
 
 check(Object.isFrozen(neeko) && Object.isFrozen(neeko.tabs), "neeko is frozen");
+let platform = { Darwin: "macos", WINNT: "windows", Linux: "linux" }[Services.appinfo.OS];
+check(neeko.platform == platform, `neeko.platform (${neeko.platform})`);
 
 // The UI folder in neeko.ui.path (here the test UI) wins over the UI the build
 // bundles inside the app.
@@ -73,10 +80,25 @@ check(list.filter(t => t.selected).length == 1, "exactly one tab is selected");
 let first = await neeko.tabs.current();
 check(first.id == list.find(t => t.selected).id, "current() is the selected tab");
 check(
-  ["id", "url", "title", "loading", "canGoBack", "canGoForward", "selected"].every(
-    k => k in first
-  ),
+  [
+    "id",
+    "url",
+    "title",
+    "icon",
+    "loading",
+    "canGoBack",
+    "canGoForward",
+    "selected",
+    "audible",
+    "muted",
+    "crashed",
+    "error",
+  ].every(k => k in first),
   "tabs have every field"
+);
+check(
+  !first.audible && !first.muted && !first.crashed && first.error === null,
+  "a quiet, working tab says so"
 );
 
 // Opening
@@ -199,6 +221,124 @@ try {
 } catch (e) {
   check(e instanceof frame.contentWindow.TypeError, "on() with an unknown event throws");
 }
+await rejects(neeko.tabs.open(null, { nope: true }), /Unknown option/, "open() with an unknown option");
+await rejects(neeko.tabs.open(null, { index: -1 }), /whole number/, "open() at a negative index");
+await rejects(neeko.tabs.move("0"), /position/, "move() without a position");
+await rejects(neeko.tabs.setMuted("yes"), /true or false/, "setMuted() with a string");
+await rejects(neeko.tabs.duplicate(999999), /No tab/, "duplicate() of an unknown tab");
+
+// Opening with options: in the background, and at a position.
+let front = await neeko.tabs.current();
+let behind = await neeko.tabs.open(`${BASE}/one`, { background: true, index: 0 });
+check(!behind.selected, "open() in the background doesn't select the tab");
+check((await neeko.tabs.current()).id == front.id, "the selected tab stays selected");
+check(
+  events.find(e => e.type == "open" && e.tab.id == behind.id)?.index == 0 &&
+    (await neeko.tabs.list())[0].id == behind.id,
+  "open() at an index puts the tab there"
+);
+
+// Moving, by the API. A position past the end means the end.
+let tabCount = gBrowser.tabs.length;
+await neeko.tabs.move(1000, behind.id);
+check(
+  events.some(e => e.type == "move" && e.id == behind.id && e.index == tabCount - 1),
+  "move() moves a tab, with a move event"
+);
+check((await neeko.tabs.list()).at(-1).id == behind.id, "list follows move()");
+await neeko.tabs.move(0, behind.id);
+check((await neeko.tabs.list())[0].id == behind.id, "move() back to the start");
+
+// Duplicating: a copy next to the tab, with its page and history.
+await waitFor(() => updated(behind.id, t => t.title == "Page one" && !t.loading), "the tab to copy to load");
+let copy = await neeko.tabs.duplicate(behind.id);
+check(copy.selected && copy.id != behind.id, "duplicate() opens a copy and selects it");
+check(
+  events.find(e => e.type == "open" && e.tab.id == copy.id)?.index == 1,
+  "the copy opens next to the tab"
+);
+await waitFor(
+  () => updated(copy.id, t => t.url == `${BASE}/one` && t.title == "Page one"),
+  "the copy shows the same page"
+);
+let quietCopy = await neeko.tabs.duplicate(behind.id, { background: true });
+check(!quietCopy.selected && (await neeko.tabs.current()).id == copy.id, "duplicate() in the background");
+
+// Muting.
+await neeko.tabs.setMuted(true, behind.id);
+check(updated(behind.id, t => t.muted), "setMuted(true) mutes, with an update");
+check(gBrowser.tabs[0].linkedBrowser.audioMuted, "Firefox mutes the tab");
+await neeko.tabs.setMuted(false, behind.id);
+check(updated(behind.id, t => !t.muted), "setMuted(false) unmutes");
+for (let t of [behind, copy, quietCopy]) {
+  await neeko.tabs.close(t.id);
+}
+
+// Tabs report their icon as a short blob: URL the UI can show, shared by
+// tabs with the same icon, and gone once no tab has it.
+let iconTab = await neeko.tabs.open(`${BASE}/icon`);
+let iconURL = (
+  await waitFor(() => updated(iconTab.id, t => t.icon?.startsWith("blob:")), "a tab's icon, as a blob: URL")
+)?.tab.icon;
+let image = new frame.contentWindow.Image();
+image.src = iconURL;
+let decoded = await image.decode().then(() => image.naturalWidth, () => 0);
+check(decoded == 2, `the UI can show it (${decoded}px wide)`);
+let twin = await neeko.tabs.open(`${BASE}/icon`, { background: true });
+await waitFor(() => updated(twin.id, t => t.icon == iconURL), "tabs with the same icon share its URL");
+await neeko.tabs.close(iconTab.id);
+check(
+  await frame.contentWindow.fetch(iconURL).then(() => true, () => false),
+  "the icon stays while a tab shows it"
+);
+await neeko.tabs.close(twin.id);
+check(
+  !(await frame.contentWindow.fetch(iconURL).then(() => true, () => false)),
+  "and goes when no tab does"
+);
+
+// Sound.
+let audioTab = await neeko.tabs.open(`${BASE}/audio`);
+await waitFor(() => updated(audioTab.id, t => t.audible), "a tab playing sound is audible", 15000);
+await neeko.tabs.setMuted(true);
+await waitFor(() => updated(audioTab.id, t => t.muted), "a playing tab mutes");
+await neeko.tabs.close(audioTab.id);
+
+// Error pages: the page that failed, and why.
+let errorTab = await neeko.tabs.open(`${BASE}/one`);
+await neeko.nav.go(`${CLOSED}/`);
+let failed = await waitFor(
+  () => updated(errorTab.id, t => t.error?.page == "neterror"),
+  "a tab reports Firefox's error page"
+);
+check(
+  failed?.tab.error.code == "connectionFailure" && failed.tab.url == `${CLOSED}/`,
+  `with its error code and the address that failed (${JSON.stringify(failed?.tab.error)}, ${failed?.tab.url})`
+);
+await neeko.nav.go(`${BASE}/two`);
+await waitFor(() => updated(errorTab.id, t => t.title == "Page two" && t.error === null), "the error goes with the page");
+await neeko.tabs.close(errorTab.id);
+
+// A tab whose content process goes away is crashed, until reloaded.
+let crashTab = await neeko.tabs.open(`${OTHER_SITE}/one`);
+await waitFor(() => updated(crashTab.id, t => t.title == "Page one" && !t.loading), "a page in a process of its own");
+let pid = gBrowser.selectedBrowser.frameLoader?.remoteTab?.osPid;
+Cc["@mozilla.org/processtools-service;1"].getService(Ci.nsIProcessToolsService).kill(pid);
+await waitFor(() => updated(crashTab.id, t => t.crashed), "its tab is crashed once the process is gone", 20000);
+await neeko.nav.reload(crashTab.id);
+await waitFor(
+  () => updated(crashTab.id, t => !t.crashed && t.title == "Page one"),
+  "reload() brings it back",
+  20000
+);
+await neeko.tabs.close(crashTab.id);
+
+// Handing the keys to the page.
+let field = frame.contentDocument.getElementById("field");
+field.focus();
+check(document.activeElement == frame, "the UI has focus");
+await neeko.tabs.focus();
+check(document.activeElement == gBrowser.selectedBrowser, "focus() hands it to the page");
 
 // The address bar. Listening takes effect once Neeko has read the message,
 // which any later reply confirms.
@@ -225,6 +365,10 @@ check(!fallbackShowing() && !gURLBar.focused, "Firefox's address bar stays hidde
 let blank = await neeko.tabs.open();
 await waitFor(() => asked == 2, "a new tab on the New Tab page asks too");
 await neeko.tabs.close(blank.id);
+let unasked = await neeko.tabs.open(null, { addressbar: false });
+await neeko.tabs.current();
+check(unasked.selected && asked == 2, "one opened with addressbar: false doesn't");
+await neeko.tabs.close(unasked.id);
 
 stopAsking();
 await neeko.tabs.current();

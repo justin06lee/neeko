@@ -17,6 +17,7 @@
  * With no custom UI configured, it does nothing and Firefox looks as usual.
  */
 
+import { AppConstants } from "resource://gre/modules/AppConstants.sys.mjs";
 import { NeekoAPI } from "moz-src:///browser/neeko/NeekoAPI.sys.mjs";
 import { NeekoPanels } from "moz-src:///browser/neeko/NeekoPanels.sys.mjs";
 
@@ -26,6 +27,8 @@ const UI_URL = `${UI_ORIGIN}content/index.html`;
 const UI_FRAME_ID = "neeko-ui";
 const SLOT_SELECTOR = "[data-neeko-content]";
 const API_CLIENT_URL = "chrome://neeko/content/neeko-api.js";
+// `neeko.platform`, from Firefox's names for them.
+const PLATFORMS = { macosx: "macos", win: "windows", linux: "linux" };
 // Set on the window's root while Firefox's own address bar is showing.
 const ADDRESS_BAR_FALLBACK = "neeko-firefox-address-bar";
 
@@ -152,7 +155,9 @@ function connectAPI(win, uiWin) {
     target: uiWin,
     wantReturnValue: true,
   });
-  install(port2);
+  install(port2, {
+    platform: PLATFORMS[AppConstants.platform] ?? AppConstants.platform,
+  });
 
   let api = null;
   let unloaded = false;
@@ -178,7 +183,7 @@ function connectAPI(win, uiWin) {
     if (unloaded || api) {
       return;
     }
-    api = new NeekoAPI(win, message => port1.postMessage(message));
+    api = new NeekoAPI(win, message => port1.postMessage(message), uiWin);
     apis.set(win, api);
     port1.onmessage = event => api.receive(event.data);
   };

@@ -89,11 +89,40 @@ aside {
   color: #fff;
 }
 
+/* The tab's icon, or room for one. */
+#tabs .icon {
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+
+#tabs .icon img {
+  width: 16px;
+  height: 16px;
+}
+
+#tabs .icon img[hidden] {
+  display: none;
+}
+
 #tabs .title {
   flex: 1;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
+}
+
+/* A tab whose content process went away, or whose page couldn't load:
+   Firefox's own crashed tab page or error page shows in it. */
+#tabs li:is(.crashed, .failed) .icon::before {
+  content: "\26A0";
+  color: #f08080;
+}
+
+#tabs li.crashed .title {
+  color: #999;
 }
 
 /* A tab whose page is waiting for a permission answer. */
@@ -102,8 +131,13 @@ aside {
   color: #f0b44c;
 }
 
-#tabs li.loading .title::before {
-  content: "\25CF  ";
+/* Loading: a pulsing dot in place of the icon. */
+#tabs li.loading .icon img {
+  display: none;
+}
+
+#tabs li.loading .icon::before {
+  content: "\25CF";
   color: #6ab0ff;
   animation: pulse 700ms ease-in-out infinite alternate;
 }
@@ -114,16 +148,27 @@ aside {
   }
 }
 
-#tabs .close {
+#tabs button {
   border: none;
   background: none;
-  padding: 0 6px;
+  padding: 0 4px;
+}
+
+#tabs button[hidden] {
+  display: none;
+}
+
+#tabs :is(.close, .duplicate) {
   visibility: hidden;
 }
 
-#tabs li:hover .close,
+#tabs li:hover :is(.close, .duplicate),
 #tabs li.selected .close {
   visibility: visible;
+}
+
+#tabs .duplicate {
+  color: #999;
 }
 
 /* Downloads, newest first, at the bottom of the tab list. */
@@ -303,8 +348,10 @@ main {
   border-radius: 10px;
 }
 
-/* A fullscreen window has no window buttons, so the tab list moves up. */
-body.window-fullscreen aside {
+/* A fullscreen window has no window buttons, so the tab list moves up; and
+   only macOS puts them inside the window (neeko.platform). */
+body.window-fullscreen aside,
+:root:not([data-platform="macos"]) aside {
   padding-top: 12px;
 }
 

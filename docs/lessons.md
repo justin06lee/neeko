@@ -276,6 +276,46 @@ Add to it whenever something costs you time.
 - **Events caused by a call arrive before its reply**, because they share one
   ordered port. Events from anything else (links, shortcuts) arrive a moment
   after the fact, so tests must wait for them.
+- **Tab icons are mostly `data:` URLs.** The content process loads a page's
+  favicon (`FaviconLoader.sys.mjs`), and `LinkHandlerParent` redraws it on a
+  canvas at its own size and calls `gBrowser.setIcon()` with the canvas's
+  `data:` URL (or an ICO one for several sizes). Only `chrome:`, `about:` and
+  `resource:` icons stay ordinary URLs (`TRUSTED_FAVICON_SCHEMES`). The tab's
+  `image` attribute holds it, and `TabAttrModified` reports `image`
+  changes. Neeko turns each distinct `data:` icon into one `blob:` URL made
+  in the UI page (`URL.createObjectURL` in the UI's window), counted per
+  tab and revoked when no tab shows it.
+- **`crashed` changes without `TabAttrModified`.** `ContentCrashHandlers`
+  sets the tab's `crashed` attribute once the dead process has shut down,
+  and SessionStore and the tab progress listener remove it quietly, so
+  `NeekoAPI` watches that attribute with a MutationObserver.
+  `SessionStore.reviveCrashedTab(tab)` is what about:tabcrashed's Restore
+  This Tab does.
+- **Error pages show in `browser.documentURI`**, as
+  `about:neterror?e=<code>&u=<url>…` (also `certerror`, `blocked`,
+  `httpsonlyerror`, `restricted`; `nsDocShell::DisplayLoadError`), while
+  `currentURI` is the address that failed. For remote browsers,
+  `BrowserParent::RecvOnLocationChange` updates `documentURI` before the
+  tabs progress listeners hear `onLocationChange`.
+- **`openLinkIn()` can't place a tab.** Its "tab" branch calls
+  `gBrowser.addTab()` without a `tabIndex`. `tabs.open` calls `addTab()`
+  itself with what `openLinkIn()` would pass (system principal,
+  `allowThirdPartyFixup`, `focusUrlBar` for blank pages unless
+  `AboutNewTab.willNotifyUser`), plus the index, then focuses the page as
+  `openLinkIn()` does. Opening at the end and moving it after would send the
+  UI an `open` at the wrong place and a `move`.
+- **`addTab()` opens in the background unless told otherwise**
+  (`inBackground` defaults to true); `openTrustedLinkIn()` sets
+  `forceForeground`.
+- **`SessionStore.duplicateTab(win, tab, 0, true, { tabIndex })`** is
+  Firefox's Duplicate Tab (the context menu moves the copy next to the tab
+  afterwards). The copy starts on `about:blank` and gets its page and history
+  once the original's state is flushed; selecting it at once is fine.
+- **`"use strict"` is a syntax error in a function with destructured
+  parameters.** `neeko-api.js` takes its second argument whole.
+- **Firefox's names for platforms** (`AppConstants.platform`) are
+  `macosx`, `win` and `linux`; `neeko.platform` says `macos`, `windows`,
+  `linux`.
 - **Firefox's wish to focus its address bar is readable.** New tabs opened
   on the New Tab page get `gURLBar.getBrowserState(browser).urlbarFocused`
   set at `addTab`, and Firefox focuses the address bar when they're
@@ -318,6 +358,20 @@ Add to it whenever something costs you time.
   a prompt's buttons work (`security.notification_enable_delay` 0). They're
   only applied where the profile has no value of its own, so the API test
   puts Firefox's defaults back in `user.js` (`FIREFOX_PREFS`).
+- **Crashing a tab on purpose:** kill its content process with
+  `nsIProcessToolsService.kill(browser.frameLoader.remoteTab.osPid)` (what
+  about:processes does). A SIGKILL leaves no minidump, so there's no crash
+  report to offer. Load the page from a site of its own first (the API test
+  uses `localhost` next to `127.0.0.1`): Fission gives each site its own
+  process, and every tab in the killed process crashes.
+- **Making a tab audible in a test:** a page playing a generated tone at
+  volume 0.001 is `soundplaying` (Firefox only ignores silence and volume 0),
+  but nobody can hear it. It needs `media.autoplay.default` 0 to play
+  without a click, and background tabs don't start playing until selected
+  (`media.block-autoplay-until-in-foreground`).
+- **A connection error without the network:** load `http://127.0.0.1:<a free
+  port>/`, which fails as `connectionFailure` at once, instead of an
+  unresolvable host, which would still ask the DNS server.
 - **Synthesized clicks aren't user activation.** A page that asks for
   notifications on a `window.synthesizeMouseEvent` click gets Firefox's
   "asked without a click" treatment (a dismissed post-prompt).

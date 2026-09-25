@@ -181,9 +181,10 @@ work, with their panels hanging from the top of the page.
   compatibility fixes compare against it; a browser's own version is shown
   in its About window instead.
 - **Performance is a feature** ("a bajillion tabs"): the hidden Firefox UI
-  stays asleep, favicons and tab previews should reach the UI by reference,
-  tab sleeping belongs in the API, and a performance test with a budget is
-  on the roadmap.
+  stays asleep, big things reach the UI by reference (tab icons are `blob:`
+  URLs made in the UI page, one per distinct icon; tab previews will work
+  the same way), tab sleeping belongs in the API, and a performance test
+  with a budget is on the roadmap.
 
 ## Where things are
 

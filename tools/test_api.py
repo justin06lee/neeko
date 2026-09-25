@@ -24,18 +24,42 @@ import sys
 import tempfile
 import threading
 import time
+import zlib
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from builds import ROOT, LeaveNoTrace, dev_app, program  # noqa: E402
 from marionette import Marionette  # noqa: E402
 
 # A UI with nothing but a content slot, away from the window's corner so the
-# checks can tell the page's corner from the window's.
+# checks can tell the page's corner from the window's, and a field to take
+# keyboard focus.
 TEST_UI = (
     "<!doctype html><html><body style='margin: 0'>"
+    "<input id='field' style='position: fixed; top: 0; left: 0; width: 150px'>"
     "<main data-neeko-content style='position: fixed; inset: 40px 0 0 160px'>"
     "</main></body></html>"
 )
+
+
+def png(width, height):
+    """A red PNG image of this size."""
+    rows = b"".join(b"\x00" + b"\xff\x00\x00\xff" * width for _ in range(height))
+
+    def chunk(kind, data):
+        crc = zlib.crc32(kind + data) & 0xFFFFFFFF
+        return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", crc)
+
+    header = struct.pack(">IIBBBBB", width, height, 8, 6, 0, 0, 0)
+    return (
+        b"\x89PNG\r\n\x1a\n"
+        + chunk(b"IHDR", header)
+        + chunk(b"IDAT", zlib.compress(rows))
+        + chunk(b"IEND", b"")
+    )
+
+
+FAVICON = "/favicon.png"
+FAVICON_PNG = png(2, 2)
 
 PAGES = {
     "/one": "<title>Page one</title>",
@@ -52,6 +76,23 @@ PAGES = {
     # Goes fullscreen as soon as it loads (the test allows it without a click).
     "/fullscreen": "<title>fullscreen</title><script>"
     "onload = () => document.documentElement.requestFullscreen()</script>",
+    # A page with an icon.
+    "/icon": f"<title>icon</title><link rel='icon' href='{FAVICON}'>",
+    # Plays a tone, too quietly to hear but not silent, which makes its tab
+    # audible. The test allows playing without a click.
+    "/audio": "<title>audio</title><script>"
+    "let rate = 8000, v = new DataView(new ArrayBuffer(44 + rate));"
+    "let text = (at, s) => [...s].forEach((c, i) => v.setUint8(at + i, c.charCodeAt(0)));"
+    "text(0, 'RIFF'); v.setUint32(4, 36 + rate, true); text(8, 'WAVEfmt ');"
+    "v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);"
+    "v.setUint32(24, rate, true); v.setUint32(28, rate, true);"
+    "v.setUint16(32, 1, true); v.setUint16(34, 8, true);"
+    "text(36, 'data'); v.setUint32(40, rate, true);"
+    "for (let i = 0; i < rate; i++) v.setUint8(44 + i, 128 + 100 * Math.sin(i / 3));"
+    "let audio = new Audio(URL.createObjectURL(new Blob([v.buffer], { type: 'audio/wav' })));"
+    "audio.loop = true; audio.volume = 0.001;"
+    "audio.play().then(() => document.title = 'playing', e => document.title = e.name)"
+    "</script>",
 }
 
 # Served as files to download: one at once, one slowly (3 seconds), and one
@@ -97,6 +138,13 @@ class Pages(http.server.BaseHTTPRequestHandler):
                 socket.SOL_SOCKET, socket.SO_LINGER, struct.pack("ii", 1, 0)
             )
             self.connection.close()
+            return
+        if self.path == FAVICON:
+            self.send_response(200)
+            self.send_header("Content-Type", "image/png")
+            self.send_header("Content-Length", str(len(FAVICON_PNG)))
+            self.end_headers()
+            self.wfile.write(FAVICON_PNG)
             return
         if self.path == DOWNLOAD:
             body = b"A test download from tools/test_api.py\n"
@@ -171,6 +219,8 @@ FIREFOX_PREFS = {
     "full-screen-api.allow-trusted-requests-only": False,
     "full-screen-api.transition-duration.enter": "0 0",
     "full-screen-api.transition-duration.leave": "0 0",
+    # And play sound without a click.
+    "media.autoplay.default": 0,
 }
 
 
@@ -237,6 +287,7 @@ def main():
         with open(os.path.join(ROOT, "tools/test_api.js")) as f:
             script = f.read().replace("__BASE__", base)
             script = script.replace("__SLOW_SIZE__", str(SLOW_SIZE))
+            script = script.replace("__CLOSED__", f"http://127.0.0.1:{free_port()}")
         with LeaveNoTrace(app):
             prefs = {"neeko.ui.path": "TEST_UI", **FIREFOX_PREFS}
             results = run_in(binary, prefs, script)

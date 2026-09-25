@@ -36,6 +36,12 @@ await neeko.nav.back();
 - **Listening means "my UI handles this".** Neeko only sends the events your
   UI listens for. Where a feature has a fallback, Firefox's own version
   steps in only while nobody listens (see [Fallbacks](#fallbacks)).
+- **Options are checked.** Methods that take an options object reject
+  options they don't know, so a typo fails loudly instead of doing nothing.
+
+`neeko.platform` says which system the browser runs on: `"macos"`,
+`"windows"` or `"linux"`. It's there at once, not a promise, so your UI can
+lay itself out before it first draws (room for macOS's window buttons, say).
 
 ## Tabs
 
@@ -46,10 +52,15 @@ A tab looks like this:
   id: 3,
   url: "https://example.com/",  // without any user:password@ part
   title: "Example Domain",      // what Firefox would show on the tab
+  icon: "blob:chrome://neeko-ui/5f3c…",  // or null
   loading: false,
   canGoBack: true,
   canGoForward: false,
   selected: true,
+  audible: false,               // playing sound
+  muted: false,
+  crashed: false,               // its content process went away
+  error: null,                  // or { page: "neterror", code: "dnsNotFound" }
 }
 ```
 
@@ -62,16 +73,57 @@ would wake them.
 pages the user never clicked, typed or scrolled in, so a tab that went from
 one untouched page to another can't go back.
 
+**`icon`** is a URL to put in an `<img>`, never the image itself. Firefox
+keeps most icons as `data:` URLs (the whole image, often many kilobytes), so
+Neeko hands your UI a short `blob:` URL for the same image instead. Tabs with
+the same icon share one URL, so each icon loads once however many tabs show
+it. A URL stays valid while a tab shows its icon; once none does, it stops
+working, so don't keep old ones. Icons Firefox has as ordinary URLs
+(`chrome://`, for its own pages) come as they are. `null` means the page has
+no icon: show your own default.
+
+**`audible`** follows Firefox's speaker icon: it goes on when the page plays
+sound, and off a moment after it stops. A muted tab can still be `audible`.
+
+**`crashed`** means the tab's content process went away (it crashed, or ran
+out of memory). Firefox shows its "Gah. Your tab just crashed." page in the
+tab. `nav.reload()` brings the tab back, as that page's Restore This Tab
+button does.
+
+**`error`** is set while Firefox shows one of its error pages in place of the
+page, and `url` is the address that failed. `page` is which error page:
+`neterror` (the connection failed: `dnsNotFound`, `connectionFailure`,
+`netTimeout`, `netOffline` and so on), `certerror` (the site's certificate
+isn't trusted), `blocked` (Safe Browsing), `httpsonlyerror` or
+`restricted`; `code` is Firefox's own name for what went wrong. Your UI can
+draw its own error page from these. Firefox's page is there meanwhile,
+working, in the page area.
+
 ### Methods
 
 | Method | What it does |
 | --- | --- |
 | `neeko.tabs.list()` | All tabs in this window, in order. |
 | `neeko.tabs.current()` | The selected tab. |
-| `neeko.tabs.open(url?)` | Opens a tab at the end and selects it. `url` is anything a user could type in an address bar (see `nav.go`). With no `url`, it opens the New Tab page, like Cmd+T. Resolves to the new tab. |
+| `neeko.tabs.open(url?, options?)` | Opens a tab and selects it. `url` is anything a user could type in an address bar (see `nav.go`). With no `url` (or `null`), it opens the New Tab page, like Cmd+T. Resolves to the new tab. Options below. |
+| `neeko.tabs.duplicate(tabId?, options?)` | Opens a copy of a tab right after it, with its page and history, and selects it. Pass `{ background: true }` to leave the selection alone. Resolves to the copy. |
+| `neeko.tabs.move(index, tabId?)` | Moves a tab to position `index` (0 is the first). Firefox keeps pinned tabs first, and a position past the end means the end. |
+| `neeko.tabs.setMuted(muted, tabId?)` | Mutes (`true`) or unmutes (`false`) a tab. |
+| `neeko.tabs.focus()` | Puts keyboard focus in the selected tab's page, as clicking it would. Call it when your address bar is done: after Escape, say. |
 | `neeko.tabs.close(tabId?)` | Closes a tab. Closing the last one closes the window, as in Firefox. |
 | `neeko.tabs.select(tabId)` | Switches to a tab. |
 | `neeko.tabs.on(event, listener)` | Listens for an event. Returns a function that stops listening. Unknown event names throw. |
+
+`open`'s options:
+
+| Option | What it does |
+| --- | --- |
+| `background: true` | Opens the tab without selecting it. |
+| `index: n` | Opens it at position `n`, such as right after the selected tab. By default it goes at the end. |
+| `addressbar: false` | A New Tab page opened in front doesn't ask for the address bar (no `addressbar` event), and the keyboard focus stays where it is, for a UI that wants the keys itself. |
+
+A tab opened in front on a web address gets the keyboard focus, as in
+Firefox; one on the New Tab page asks for the address bar instead.
 
 ### Events
 
@@ -81,7 +133,7 @@ one untouched page to another can't go back.
 | `close` | `{ id }` | A tab closed. |
 | `select` | `{ id, previousId }` | The selected tab changed. |
 | `move` | `{ id, index }` | A tab moved to position `index`. |
-| `update` | `{ tab, changed }` | A tab's URL, title, loading state, or back/forward availability changed. `changed` lists which fields, such as `["title"]`. |
+| `update` | `{ tab, changed }` | Anything in a tab's description changed but `selected`: its URL, title, icon, loading state, back/forward availability, sound, crash or error page. `changed` lists which fields, such as `["title", "icon"]`. |
 
 ## Navigation
 
@@ -94,7 +146,7 @@ Each method acts on the tab you name, or on the selected tab if you don't.
 | `neeko.nav.go(input, tabId?)` | Loads what a user typed into an address bar. Firefox turns it into a URL the way its own address bar would: `example.com` becomes `https://example.com/` (or `http://` where needed), and anything that isn't a web address becomes a search with the default search engine. |
 | `neeko.nav.back(tabId?)` | Goes back, if the tab can. |
 | `neeko.nav.forward(tabId?)` | Goes forward, if the tab can. |
-| `neeko.nav.reload(tabId?)` | Reloads the page. |
+| `neeko.nav.reload(tabId?)` | Reloads the page. A crashed tab comes back, with its history. |
 | `neeko.nav.on(event, listener)` | Listens for an event, as `tabs.on` does. |
 
 The current URL, title and loading state are fields of each tab: read them
@@ -104,7 +156,7 @@ from `tabs.current()` and follow them with `update` events.
 
 | Event | Data | When |
 | --- | --- | --- |
-| `addressbar` | `{}` | The user wants the address bar: they pressed Cmd+L or chose File > Open Location, or a new tab opened on the New Tab page. Focus yours. |
+| `addressbar` | `{}` | The user wants the address bar: they pressed Cmd+L or chose File > Open Location, or a new tab opened on the New Tab page. Focus yours and select its text, as Firefox does. |
 
 Neeko never moves keyboard focus into your UI by itself; this event is your
 cue.
@@ -270,7 +322,11 @@ Firefox keeps running underneath your UI, so a browser built on Neeko works
 even where its UI has no controls yet.
 
 - **Keyboard shortcuts** work as usual: Cmd+T, Cmd+W, Ctrl+Tab, Cmd+[ and
-  Cmd+], Cmd+R.
+  Cmd+], Cmd+R, and Ctrl+M to mute a tab.
+- **Error pages and crashed tabs.** Firefox's own error pages ("Hmm. We're
+  having trouble finding that site.") and its crashed tab page show in the
+  page area, with their buttons working, whether or not your UI reads a
+  tab's `error` and `crashed`.
 - **The address bar.** If your UI doesn't listen for `addressbar`, Cmd+L
   shows Firefox's own navigation toolbar across the top of the window. It
   goes away again when it loses focus: after Enter, Escape, or a click
