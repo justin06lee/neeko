@@ -5,6 +5,7 @@
  * for them, in Firefox's privileged about: process), and NeekoPageParent
  * checks every call again.
  *
+ *   neekoPage.private                    whether it's in a private window
  *   neekoPage.go(input)                  this tab goes where the user typed
  *   neekoPage.open(input, { background })  a new tab next to this one
  *   neekoPage.settings.get(key) / all() / set(key, value) / on("change", fn)
@@ -54,6 +55,8 @@ export class NeekoPageChild extends JSWindowActorChild {
       Cu.exportFunction(fn, target, { defineAs: name });
 
     let api = Cu.createObjectIn(win, { defineAs: "neekoPage" });
+    // A tab never moves between private and other windows.
+    Cu.waiveXrays(api).private = this.browsingContext.usePrivateBrowsing;
     define(api, "go", input => ask("go", { input }));
     define(api, "open", (input, options) =>
       ask("open", { input, background: !!options?.background })

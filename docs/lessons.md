@@ -446,6 +446,16 @@ Add to it whenever something costs you time.
   `src/`) and `_path2` (the app's `pages/`), real paths (`/var` is
   `/private/var`). Packaged builds carry everything inside the app. Never
   set these in shipped prefs: they widen every content process's sandbox.
+- **A private window's first page is named, not looked up.**
+  `BrowserWindowTracker.openWindow` (File > New Private Window) and the
+  `-private-window` flag pass `about:privatebrowsing` as the window's first
+  argument, whatever the New Tab page is, while `BROWSER_NEW_TAB_URL`
+  (Cmd+T) already follows `AboutNewTab.newTabURL` once it's overridden.
+  `gBrowserInit.uriToLoadPromise` reads that argument once and keeps the
+  value; the bookmarks toolbar asks for it in `onBeforeInitialXULLayout`,
+  before the per-window hook runs, so `NeekoPages.initWindow` replaces the
+  kept value (or the argument, if nobody read it yet). Nothing has loaded
+  by then.
 - **The browser window hears the pointer over web pages.** Mouse events
   are dispatched in the parent's document first, with the page's
   `<browser>` as their target, before Firefox forwards them to the content

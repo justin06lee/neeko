@@ -1,3 +1,4 @@
 category browser-window-before-initial-xul-layout moz-src:///browser/neeko/NeekoWindow.sys.mjs NeekoWindow.init
+category browser-window-before-initial-xul-layout moz-src:///browser/neeko/NeekoPages.sys.mjs NeekoPages.initWindow
 category browser-before-ui-startup moz-src:///browser/neeko/NeekoPrivacy.sys.mjs NeekoPrivacy.init
 category browser-before-ui-startup moz-src:///browser/neeko/NeekoPages.sys.mjs NeekoPages.init

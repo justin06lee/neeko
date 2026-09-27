@@ -91,7 +91,7 @@ official startup hooks (`Neeko.manifest`):
 - **`NeekoPages.sys.mjs`** serves the app's own pages (`pages/<name>.html`)
   as `about:<name>`, at startup: web content with no privileges, in
   Firefox's privileged about: process, not linkable by websites, with the
-  start page as the New Tab and home page. A process script registers them
+  start page as the New Tab and home page, and private windows' first page. A process script registers them
   in content processes too, and a window actor (`NeekoPageChild` and
   `NeekoPageParent`) gives them `neekoPage`, checking every call. This is
   the one place web content gets an API (the user's decision, with those
