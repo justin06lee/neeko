@@ -463,6 +463,27 @@ Add to it whenever something costs you time.
     the current tab if it's a New Tab page.
   - With no window open, macOS shows the hidden window's menu bar
     (`hiddenWindowMac.xhtml`), which `NeekoMenus` trims too.
+- **Find in page is `browser.finder`** (`FinderParent`, or `Finder` for a
+  page in the parent process), per tab: `fastFind`, `findAgain`,
+  `highlight`, setters for case, whole word and diacritics. It reports
+  through result listeners, which must have every callback
+  (`onFindResult`, `onMatchesCountResult`, `onHighlightFinished`,
+  `onCurrentSelection`) or it logs an error: the result first, the match
+  count after, from every frame. A count at the limit (1000) comes as -1.
+  Firefox's find bar also counts in Glean, which Neeko's calls don't.
+  - Cmd+F, Cmd+G, Cmd+Shift+G and Cmd+E are commands (`cmd_find`...)
+    handled by a listener on the command set further up, like Cmd+L.
+  - Cmd+F pressed in a page can also put the page's `FindBarChild` into
+    passing its keys on to the parent's find bar (`inPassThrough`), until
+    the find bar says it has the focus (`Findbar:UpdateState` with
+    `isOpenAndFocused`). `requestFind` sends that state when the UI takes
+    find, as Firefox's find bar would. Typing into a page after Cmd+F and
+    Escape worked with and without it in a test with synthesized keys
+    (2026-09-26), so it's a safeguard, not a proven fix.
+  - / and ' typed in a page open Firefox's find bar through
+    `FindBarParent`, which calls the tab's find bar's `_onBrowserKeypress`
+    (making the find bar if needed; `TabFindInitialized` fires on the tab).
+    `NeekoWindow` wraps that method on each new find bar.
 - **`ownerGlobal` is undefined on nodes in module code, documents
   included** (see Hide and plug): `doc.defaultView`. It cost the context
   menu a debugging round (the watcher threw before it was set up).

@@ -8,7 +8,8 @@
   data-neeko-window-buttons is.
 
   This is the demo UI: a tab list, an address bar with a bookmark star, a
-  menu, a bar for permission prompts, and bookmarks and downloads lists,
+  menu, a find bar, a bar for permission prompts, and bookmarks and
+  downloads lists,
   built only on the Neeko API (the global
   `neeko` object, see docs/api.md). It's plain on purpose, just enough to show every API feature
   working. Replace it with your own.
@@ -70,6 +71,23 @@
       <button data-command="colorScheme" data-scheme="dark">Dark</button>
       <hr />
       <button data-command="fullscreen">Full screen</button>
+    </div>
+    <!-- Find in page (Cmd+F): drawn over the top right of the page, an
+         overlay like the menu. Firefox's own find bar stays closed. -->
+    <div id="find" data-neeko-overlay hidden>
+      <input
+        id="find-text"
+        placeholder="Find in page"
+        spellcheck="false"
+        autocomplete="off"
+      />
+      <span id="find-count"></span>
+      <button id="find-previous" title="Previous (Shift+Enter)">&uarr;</button>
+      <button id="find-next" title="Next (Enter)">&darr;</button>
+      <label title="Highlight all"
+        ><input id="find-highlight" type="checkbox" /> All</label
+      >
+      <button id="find-close" title="Close (Escape)">&times;</button>
     </div>
     <!-- The prompt bar sits above the page and pushes it down. (It could
          overlap the page instead, marked data-neeko-overlay like the menu.) -->

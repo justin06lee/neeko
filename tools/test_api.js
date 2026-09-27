@@ -1333,6 +1333,56 @@ if (firefoxSettings) {
 }
 await neeko.tabs.close(settingsFrom.id);
 
+// Find in page: Cmd+F, Cmd+G and Cmd+Shift+G go to a UI that listens, and
+// Firefox's find does the finding.
+let findTab = await neeko.tabs.open(`${BASE}/find`);
+await waitFor(() => updated(findTab.id, t => t.title == "find" && !t.loading), "a page to find in");
+let findRequests = [];
+let stopFind = neeko.find.on("request", data => findRequests.push(data));
+await neeko.tabs.current();
+for (let id of ["cmd_find", "cmd_findAgain", "cmd_findPrevious"]) {
+  document.getElementById(id).doCommand();
+}
+await waitFor(() => findRequests.length == 3, "Cmd+F, Cmd+G and Cmd+Shift+G reach a UI that listens");
+check(
+  findRequests.map(r => r.command).join() == "find,next,previous" &&
+    typeof findRequests[0].selection == "string",
+  `as find, next and previous, with the page's selection (${JSON.stringify(findRequests)})`
+);
+check(
+  !gBrowser.isFindBarInitialized(gBrowser.selectedTab) || gBrowser.getCachedFindBar().hidden,
+  "and Firefox's find bar stays closed"
+);
+let found = await neeko.find.find("fox");
+check(
+  found.result == "found" && found.current == 1 && found.total == 3,
+  `find() finds the first of every match (${JSON.stringify(found)})`
+);
+found = await neeko.find.next();
+check(found.result == "found" && found.current == 2, `next() goes to the next one (${JSON.stringify(found)})`);
+await neeko.find.next();
+found = await neeko.find.next();
+check(found.result == "wrapped" && found.current == 1, `and wraps around at the end (${JSON.stringify(found)})`);
+found = await neeko.find.previous();
+check(found.result == "wrapped" && found.current == 3, `previous() goes back, around the start (${JSON.stringify(found)})`);
+found = await neeko.find.find("Fox", { caseSensitive: true });
+check(found.result == "found" && found.total == 1, `caseSensitive finds only "Fox" (${JSON.stringify(found)})`);
+found = await neeko.find.find("zebra");
+check(found.result == "notFound" && found.total == 0, `and what isn't there isn't found (${JSON.stringify(found)})`);
+await neeko.find.highlight(true);
+await neeko.find.close();
+await rejects(neeko.find.find(3), /text to find/, "find() without text");
+await rejects(neeko.find.find("x", { wholeWords: true }), /Unknown option/, "find() with an unknown option");
+stopFind();
+await neeko.tabs.current();
+document.getElementById("cmd_find").doCommand();
+await waitFor(
+  () => gBrowser.isFindBarInitialized(gBrowser.selectedTab) && !gBrowser.getCachedFindBar().hidden,
+  "without a listener, Firefox's find bar opens"
+);
+gBrowser.getCachedFindBar().close(true);
+await neeko.tabs.close(findTab.id);
+
 // Neeko sends only the events the UI listens for.
 let heardSelect = 0;
 let stopSelect = neeko.tabs.on("select", () => heardSelect++);

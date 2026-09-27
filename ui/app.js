@@ -658,6 +658,104 @@ neeko.settings.on("change", ({ key, value }) => {
   }
 });
 
+// Find in page. Cmd+F, Cmd+G, Cmd+Shift+G and / in a page come here: listening
+// for "request" tells Neeko not to open Firefox's own find bar. What's found
+// is the selected tab's, so the bar closes when another tab is selected.
+const findBar = document.getElementById("find");
+const findText = document.getElementById("find-text");
+const findCount = document.getElementById("find-count");
+const findHighlight = document.getElementById("find-highlight");
+
+function showFound(text, { result, current, total }) {
+  if (text != findText.value) {
+    return; // An older search, answered after a newer one started.
+  }
+  let none = text && result == "notFound";
+  findText.classList.toggle("not-found", none);
+  findCount.textContent = !text
+    ? ""
+    : none
+      ? "No matches"
+      : total == -1
+        ? `${current} of many`
+        : `${current} of ${total}`;
+}
+
+function find() {
+  let text = findText.value;
+  neeko.find.find(text).then(found => showFound(text, found), reportError);
+}
+
+function findAgain(previous) {
+  if (!findText.value) {
+    return;
+  }
+  let text = findText.value;
+  (previous ? neeko.find.previous() : neeko.find.next()).then(
+    found => showFound(text, found),
+    reportError
+  );
+}
+
+function openFind(selection) {
+  // Just inside the top of the page.
+  let page = document.querySelector("[data-neeko-content]").getBoundingClientRect();
+  findBar.style.top = `${page.top + 8}px`;
+  findBar.hidden = false;
+  if (selection) {
+    findText.value = selection;
+  }
+  findText.focus();
+  findText.select();
+  if (findText.value) {
+    find();
+    neeko.find.highlight(findHighlight.checked).catch(reportError);
+  }
+}
+
+// Escape or ×: done, and the page gets the keys back, as in Firefox.
+function closeFind() {
+  if (!findBar.hidden) {
+    findBar.hidden = true;
+    neeko.find.close().catch(reportError);
+    neeko.tabs.focus();
+  }
+}
+
+neeko.find.on("request", ({ command, selection }) => {
+  if (command == "next" || command == "previous") {
+    if (findBar.hidden || !findText.value) {
+      openFind();
+    } else {
+      findAgain(command == "previous");
+    }
+    return;
+  }
+  // "find", or "selection" (Cmd+E: find what's selected).
+  openFind(selection);
+});
+findText.addEventListener("input", find);
+findText.addEventListener("keydown", event => {
+  if (event.key == "Enter") {
+    findAgain(event.shiftKey);
+  } else if (event.key == "Escape") {
+    closeFind();
+  }
+});
+document.getElementById("find-next").addEventListener("click", () => findAgain(false));
+document.getElementById("find-previous").addEventListener("click", () => findAgain(true));
+document.getElementById("find-close").addEventListener("click", () => closeFind());
+findHighlight.addEventListener("change", () =>
+  neeko.find.highlight(findHighlight.checked).catch(reportError)
+);
+neeko.tabs.on("select", ({ previousId }) => {
+  if (!findBar.hidden) {
+    findBar.hidden = true;
+    // Unless that tab just closed.
+    neeko.find.close(previousId).catch(() => {});
+  }
+});
+
 // With the tab list hidden, the page reaches the window's edge, where the
 // list slides out when the pointer gets there. The pointer over the page
 // never reaches this UI, so Neeko watches that edge of the page for it.

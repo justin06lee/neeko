@@ -271,6 +271,51 @@ function handleSettings(win) {
   );
 }
 
+// Firefox's find commands, and what the API calls them.
+const FIND_COMMANDS = [
+  ["cmd_find", "find"],
+  ["cmd_findAgain", "next"],
+  ["cmd_findPrevious", "previous"],
+  ["cmd_findSelection", "selection"],
+];
+
+/**
+ * Cmd+F, Cmd+G, Cmd+Shift+G and Cmd+E (and Edit > Find) ask to find in the
+ * page. A UI that listens for the "find.request" event gets them instead of
+ * Firefox, whose own find bar otherwise opens at the bottom of the page.
+ * So does / (or ') typed in a page, which opens Firefox's find bar through
+ * its own path: the page hands the key to the find bar (FindBarParent),
+ * which only exists once Firefox made one for the tab.
+ */
+function handleFind(win) {
+  for (let [id, command] of FIND_COMMANDS) {
+    win.document.getElementById(id)?.addEventListener("command", event => {
+      if (apis.get(win)?.requestFind(command)) {
+        // Firefox's own handler listens further up; it never hears this one.
+        event.stopPropagation();
+      }
+    });
+  }
+  win.addEventListener("TabFindInitialized", event => {
+    let findbar = event.target._findBar;
+    let onBrowserKeypress = findbar?._onBrowserKeypress;
+    if (!onBrowserKeypress) {
+      return;
+    }
+    findbar._onBrowserKeypress = function (fakeEvent) {
+      let api = apis.get(win);
+      if (this.hidden && api?.listening.has("find.request")) {
+        let key = String.fromCharCode(fakeEvent.charCode || 0);
+        if (key == "/" || key == "'") {
+          api.requestFind("find");
+        }
+        return undefined;
+      }
+      return onBrowserKeypress.call(this, fakeEvent);
+    };
+  });
+}
+
 /**
  * The fallback for UIs without an address bar: shows Firefox's navigation
  * toolbar across the top of the window (neeko.css) until it loses focus.
@@ -609,6 +654,7 @@ export const NeekoWindow = {
     handleOpenLocation(win);
     handleBookmarkPage(win);
     handleSettings(win);
+    handleFind(win);
     NeekoPanels.init(win, () => apis.get(win));
     followNotificationBars(win);
   },
