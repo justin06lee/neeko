@@ -1,6 +1,7 @@
 /**
  * The browser's own pages: pages/<name>.html in the app folder, shown in
- * tabs as about:<name>. pages/start.html becomes the New Tab and home page.
+ * tabs as about:<name>. pages/start.html becomes the New Tab and home page,
+ * in private windows too.
  *
  * They're web content, and locked down as such (the user's decision,
  * 2026-09-25, for Toji's start and settings pages):
@@ -23,6 +24,7 @@
 const lazy = {};
 ChromeUtils.defineESModuleGetters(lazy, {
   AboutNewTab: "resource:///modules/AboutNewTab.sys.mjs",
+  PrivateBrowsingUtils: "resource://gre/modules/PrivateBrowsingUtils.sys.mjs",
 });
 
 const PAGES_URL = "chrome://neeko-pages/content/";
@@ -32,6 +34,8 @@ const SHARED_DATA_KEY = "neeko-pages";
 const NAME = /^[a-z0-9-]{1,64}$/;
 // The page that stands in for the New Tab page and the home page.
 const START_PAGE = "start";
+// What Firefox asks a new private window to show first.
+const PRIVATE_PAGE = "about:privatebrowsing";
 
 const FLAGS =
   Ci.nsIAboutModule.URI_SAFE_FOR_UNTRUSTED_CONTENT |
@@ -204,11 +208,47 @@ export const NeekoPages = {
 
     if (names.includes(START_PAGE)) {
       // The New Tab page (Cmd+T, new windows), and the home page unless the
-      // user or the browser chose another.
+      // user or the browser chose another. Private windows' new tabs follow
+      // it too, since it's no longer Firefox's own (BROWSER_NEW_TAB_URL).
       lazy.AboutNewTab.newTabURL = `about:${START_PAGE}`;
       Services.prefs
         .getDefaultBranch("")
         .setStringPref("browser.startup.homepage", `about:${START_PAGE}`);
+    }
+  },
+
+  /**
+   * Called by Firefox for each browser window, before its first layout. A
+   * new private window's first tab shows the start page too, instead of
+   * Firefox's about:privatebrowsing, which Firefox names as the window's
+   * page to load (BrowserWindowTracker.openWindow, the -private-window
+   * flag). Firefox has usually read that already, for the bookmarks
+   * toolbar (gBrowserInit.uriToLoadPromise, a getter that keeps its
+   * value), but loads nothing until later.
+   *
+   * @param {Window} win
+   */
+  initWindow(win) {
+    if (
+      !registered.includes(START_PAGE) ||
+      !lazy.PrivateBrowsingUtils.isWindowPrivate(win)
+    ) {
+      return;
+    }
+    let start = `about:${START_PAGE}`;
+    let init = win.gBrowserInit;
+    let read = Object.getOwnPropertyDescriptor(init, "uriToLoadPromise");
+    if (read && !read.get) {
+      if (read.value == PRIVATE_PAGE) {
+        init.uriToLoadPromise = start;
+      }
+      return;
+    }
+    let page = win.arguments?.[0];
+    if (page instanceof Ci.nsISupportsString && page.data == PRIVATE_PAGE) {
+      page.data = start;
+    } else if (page == PRIVATE_PAGE) {
+      win.arguments[0] = start;
     }
   },
 

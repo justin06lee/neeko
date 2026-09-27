@@ -105,7 +105,8 @@ browsers use.
   window, make pages light or dark, hear when the pointer reaches the
   page's edges, and hear about every change.
 - Your browser's own pages (a start page, settings) go in `pages/`:
-  `pages/start.html` is `about:start`, the New Tab page. They're locked-down
+  `pages/start.html` is `about:start`, the New Tab page (private windows'
+  too). They're locked-down
   web pages with a small API of their own, `neekoPage`. It's documented in
   [docs/api.md](docs/api.md), and `ui/app.js` shows all of it in use.
 - Scripts must be separate files (the page's security policy blocks inline

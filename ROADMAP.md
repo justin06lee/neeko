@@ -63,6 +63,10 @@ get added as it needs them.
   search engines). Locked down with the user's approval: no privileges,
   Firefox's privileged about: process, not linkable, every call checked.
   Fallback: Firefox's own New Tab and home pages.
+- [x] **Private windows show the start page** (v0.10.0): first and in new
+  tabs, instead of Firefox's about:privatebrowsing, and `neekoPage.private`
+  tells the page. Fallback: Firefox's private browsing page, for apps
+  without a start page.
 
 ## API features, in order
 

@@ -79,7 +79,7 @@ TEST_PAGES = {
     "let show = t => document.title = t;"
     "let fail = e => show('refused ' + e.message);"
     "switch (q.get('test')) {"
-    "case null: show([typeof neekoPage, typeof ChromeUtils, typeof neeko].join()); break;"
+    "case null: show([typeof neekoPage, typeof ChromeUtils, typeof neeko, neekoPage.private].join()); break;"
     "case 'go': neekoPage.go(q.get('to')).catch(fail); break;"
     "case 'js': neekoPage.go('javascript:document.title=1').catch(fail); break;"
     "case 'open': neekoPage.open(q.get('to'), { background: true })"
@@ -278,6 +278,15 @@ if (NeekoPages.names.includes("start")) {
 } else {
   results.push(
     `${ok(BROWSER_NEW_TAB_URL == "about:newtab")} without a start page, the New Tab page stays Firefox's (${BROWSER_NEW_TAB_URL})`
+  );
+  let win = OpenBrowserWindow({ private: true });
+  for (let i = 0; i < 200 && !win.gBrowserInit?.delayedStartupFinished; i++) {
+    await new Promise(r => setTimeout(r, 50));
+  }
+  let first = win.gBrowser?.selectedBrowser.currentURI.spec;
+  win.close();
+  results.push(
+    `${ok(first == "about:privatebrowsing")} and so is a private window's first page (${first})`
   );
 }
 return results;

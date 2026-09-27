@@ -971,7 +971,7 @@ check(
 );
 let startTab = await neeko.tabs.open("about:start");
 let startPage = await waitFor(() => updated(startTab.id, t => t.title.includes(",")), "about:start");
-check(startPage?.tab.title == "object,undefined,undefined", `it has neekoPage, no privileges and no neeko (${startPage?.tab.title})`);
+check(startPage?.tab.title == "object,undefined,undefined,false", `it has neekoPage, no privileges and no neeko, and isn't private (${startPage?.tab.title})`);
 check(gBrowser.selectedBrowser.remoteType == "privilegedabout", `in the privileged about: process (${gBrowser.selectedBrowser.remoteType})`);
 check(
   gBrowser.selectedBrowser.contentPrincipal.isContentPrincipal &&
@@ -1045,6 +1045,25 @@ if (otherEngine) {
   await neeko.tabs.close(defaultTest.tab.id);
 }
 await neeko.tabs.close(startTab.id);
+
+// Private windows show the start page too, first and in new tabs, instead of
+// Firefox's about:privatebrowsing, and it knows it's private.
+let privateWin = OpenBrowserWindow({ private: true });
+await waitFor(() => privateWin.gBrowserInit?.delayedStartupFinished, "a private window");
+let privateTab = privateWin.gBrowser.selectedTab;
+await waitFor(
+  () => privateTab.linkedBrowser.currentURI.spec == "about:start" && privateTab.label.includes(","),
+  `its first tab shows the start page (${privateTab.linkedBrowser.currentURI.spec})`
+);
+check(privateTab.label == "object,undefined,undefined,true", `and neekoPage.private is true there (${privateTab.label})`);
+privateWin.BrowserCommands.openTab();
+await waitFor(
+  () => privateWin.gBrowser.selectedTab != privateTab && privateWin.gBrowser.selectedBrowser.currentURI.spec == "about:start",
+  "a new tab in it shows the start page"
+);
+privateWin.close();
+window.focus();
+await waitFor(() => Services.focus.activeWindow == window, "this window to be active again", 30000);
 
 // Bookmarks: Firefox's own, identified by ids that last across sessions.
 let folders = neeko.bookmarks.folders;

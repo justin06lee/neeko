@@ -504,7 +504,10 @@ Firefox's Library window.
 Pages of your browser's own, shown in tabs like web pages: a start page,
 settings, a welcome page. Put them in your app's `pages/` folder:
 `pages/<name>.html` is `about:<name>`. `pages/start.html` is also the New
-Tab page and the home page (unless the user picks another).
+Tab page and the home page (unless the user picks another), in private
+windows too: there it's their first page and their New Tab page, instead of
+Firefox's purple private browsing page. `neekoPage.private` tells it which
+kind of window it's in, so it can say so, or look different.
 
 ```
 pages/
@@ -543,7 +546,7 @@ from one of these pages, as a tab's page.
   `neekoPage.go()` or `neekoPage.open()`, or have your UI open them with
   `neeko.tabs.open("about:settings")`.
 - **Everything is a promise**, even reading a setting: `neekoPage` isn't in
-  your UI's process.
+  your UI's process. Only `neekoPage.private` is there at once.
 
 ```js
 document.querySelector("form").onsubmit = event => {
@@ -555,6 +558,7 @@ let theme = await neekoPage.settings.get("theme");
 
 | Method | What it does |
 | --- | --- |
+| `neekoPage.private` | `true` in a private window, `false` otherwise. At once, not a promise: a tab never moves between the two. |
 | `neekoPage.go(input)` | This tab goes where the user typed, as `neeko.nav.go` does: an address, or a search with the default search engine. `javascript:` and `data:` addresses are refused. |
 | `neekoPage.open(input, options?)` | Opens what the user typed in a new tab next to this one, selected unless `{ background: true }`. |
 | `neekoPage.settings.get(key)` | One of your UI's settings (see Settings), or `undefined`. |
@@ -641,8 +645,9 @@ even where its UI has no controls yet.
 
 - **Keyboard shortcuts** work as usual: Cmd+T, Cmd+W, Ctrl+Tab, Cmd+[ and
   Cmd+], Cmd+R, and Ctrl+M to mute a tab.
-- **Your browser's own pages.** Without a `pages/` folder, the New Tab page
-  and the home page are Firefox's own.
+- **Your browser's own pages.** Without a `pages/start.html`, the New Tab
+  page and the home page are Firefox's own, and private windows show
+  Firefox's private browsing page.
 - **Tab groups.** Groups made before your UI showed them (restored with
   the session) keep working: their tabs are listed like any others, with a
   `groupId`.

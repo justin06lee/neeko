@@ -1,10 +1,12 @@
 // The demo app's start page, built on `neekoPage`, the API of the browser's
 // own pages: search or go somewhere, pick the search engine, and share a
-// setting with the UI.
+// setting with the UI. Private windows show it too, with a note.
 
 const query = document.getElementById("query");
 const engineMenu = document.getElementById("engine");
 const tabsRight = document.getElementById("tabs-right");
+
+document.getElementById("private").hidden = !neekoPage.private;
 
 // Enter goes where the user typed, in this tab, as the address bar would.
 document.getElementById("search").addEventListener("submit", event => {
