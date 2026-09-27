@@ -117,6 +117,9 @@ PAGES = {
     # Text to find: "fox" three times, once as "Fox".
     "/find": "<title>find</title><p>The quick brown fox jumps. A fox again."
     " And a third Fox.</p>",
+    # The same, at another address.
+    "/find-again": "<title>find again</title><p>The quick brown fox jumps."
+    " A fox again. And a third Fox.</p>",
     # A link, for the context menu.
     "/link": "<title>link</title><a href='/one' style='font-size: 40px'>A link</a>",
     # A page's dialog, which the app's theme styles.
@@ -333,6 +336,9 @@ FIREFOX_PREFS = {
     "full-screen-api.transition-duration.leave": "0 0",
     # And play sound without a click.
     "media.autoplay.default": 0,
+    # Find in page paints every match it highlights in this color, which the
+    # checks look for.
+    "ui.textHighlightBackground": "#ff0000",
 }
 
 

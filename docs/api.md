@@ -543,12 +543,18 @@ A search looks like this:
 | `neeko.find.find(text, options?, tabId?)` | Finds `text` in the page, as typing in Firefox's find bar does: the first match from where the page's selection is, selected and scrolled to. Options: `caseSensitive`, `wholeWord` and `matchDiacritics`, all `false` unless given. `""` clears the search. Resolves to the search. |
 | `neeko.find.next(tabId?)` | The next match of what was last found, going around at the end, as Cmd+G does. |
 | `neeko.find.previous(tabId?)` | The one before, as Cmd+Shift+G does. |
-| `neeko.find.highlight(highlight, tabId?)` | Highlights every match (`true`), or stops. Later searches in the tab keep highlighting until `close()`. |
+| `neeko.find.highlight(highlight, tabId?)` | Highlights every match (`true`), or stops. Later searches in the tab keep highlighting until `close()`, even if you call it before the tab's first search, or its page changes in between. |
 | `neeko.find.close(tabId?)` | Done finding: the highlights go and the match stays selected, as when Firefox's find bar closes. Call `neeko.tabs.focus()` too, to give the page its keys back, as Firefox does. |
 | `neeko.find.on(event, listener)` | Listens for an event, as `tabs.on` does. |
 
 Each tab has its own search, like Firefox's find bars: `next()` goes on
 from what that tab last found. A tab that's asleep can't be searched.
+
+The colors are Firefox's: highlighted matches use the
+`ui.textHighlightBackground` and `ui.textHighlightForeground` prefs, the
+selected match `ui.textSelectAttentionBackground` and
+`ui.textSelectAttentionForeground`. Set them in your `branding/prefs.js`,
+such as `pref("ui.textHighlightBackground", "#fbbf24");`.
 
 | Event | Data | When |
 | --- | --- | --- |

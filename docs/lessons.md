@@ -471,6 +471,18 @@ Add to it whenever something costs you time.
   `onCurrentSelection`) or it logs an error: the result first, the match
   count after, from every frame. A count at the limit (1000) comes as -1.
   Firefox's find bar also counts in Glean, which Neeko's calls don't.
+  - **Highlight all lives in each page's finder** (`FinderChild` makes a
+    `Finder` per document), whose highlighter is made on its first search
+    or highlight, off (as the `findbar.highlightAll` pref says). A
+    `Finder:HighlightAllChange` sent before then is dropped (`Finder`
+    only passes it to a highlighter that exists), so highlighting asked
+    for before a tab's first search, or before its page changed, did
+    nothing (found by Toji). `NeekoAPI.keepHighlighting` has each page's
+    finder make its highlighter (highlighting nothing) and turns it on,
+    once per page (`currentWindowGlobal`), before the search.
+  - The match colors are look-and-feel prefs: `ui.textHighlightBackground`
+    (every match) and `ui.textSelectAttentionBackground` (the selected
+    one). The API test paints matches red to count them in a snapshot.
   - Cmd+F, Cmd+G, Cmd+Shift+G and Cmd+E are commands (`cmd_find`...)
     handled by a listener on the command set further up, like Cmd+L.
   - Cmd+F pressed in a page can also put the page's `FindBarChild` into
@@ -626,6 +638,8 @@ Add to it whenever something costs you time.
   "asked without a click" treatment (a dismissed post-prompt).
   `dom.webnotifications.requireuserinteraction` false lifts that for
   testing.
+- **`test_api.py`'s test server matches paths exactly,** query string
+  included: `/find?again` is a 404. Give each test page its own path.
 - **`test_api.js` is one script**, so a `let` it declares twice is a
   syntax error that stops every check; name new variables distinctly.
 - **Marionette's `WebDriver:NewSession` takes the capabilities as its bare

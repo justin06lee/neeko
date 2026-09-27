@@ -748,6 +748,7 @@ const METHODS = {
     finder.caseSensitive = caseSensitive;
     finder.entireWord = wholeWord;
     finder.matchDiacritics = matchDiacritics;
+    this.keepHighlighting(this.findTab(id));
     return this.runFind(finder, text, () => finder.fastFind(text, false, false));
   },
 
@@ -765,15 +766,14 @@ const METHODS = {
 
   /**
    * Highlights every match of what's being found in a tab's page, or stops.
-   * Later searches in the tab follow it until the tab's find is closed.
+   * Later searches in the tab follow it, before its first search too and
+   * after its page changes, until the tab's find is closed.
    */
   "find.highlight"(highlight, id) {
     if (typeof highlight != "boolean") {
       throw new TypeError("Expected true or false.");
     }
-    let finder = this.finder(id);
-    finder.onHighlightAllChange(highlight);
-    finder.highlight(highlight, finder.searchString ?? "", false);
+    this.setHighlighting(this.findTab(id), highlight);
   },
 
   /**
@@ -781,9 +781,9 @@ const METHODS = {
    * stays selected, as when Firefox's find bar closes.
    */
   "find.close"(id) {
-    let finder = this.finder(id);
-    finder.onHighlightAllChange(false);
-    finder.onFindbarClose();
+    let tab = this.findTab(id);
+    this.setHighlighting(tab, false);
+    this.finder(id).onFindbarClose();
   },
 
   /**
@@ -845,6 +845,10 @@ export class NeekoAPI {
   #link = "";
   /** Each tab's status message the UI last heard. */
   #messages = new WeakMap();
+  /** The tabs whose find highlights every match (find.highlight). */
+  #highlighting = new WeakSet();
+  /** The pages (window globals) where Firefox's finder does that now. */
+  #highlightingPages = new WeakSet();
   #ui;
   #send;
   #destroyed = false;
@@ -1261,6 +1265,50 @@ export class NeekoAPI {
   }
 
   /**
+   * Starts or stops highlighting every match in a tab's page, now and for
+   * its later searches (keepHighlighting).
+   */
+  setHighlighting(tab, highlight) {
+    let finder = this.finder(tabId(tab));
+    let page = tab.linkedBrowser.browsingContext?.currentWindowGlobal;
+    if (highlight) {
+      this.#highlighting.add(tab);
+      this.keepHighlighting(tab);
+      let text = finder.searchString;
+      // Firefox's find bar never highlights "" (bug 429723).
+      if (text) {
+        finder.highlight(true, text, false);
+      }
+    } else {
+      this.#highlighting.delete(tab);
+      if (page) {
+        this.#highlightingPages.delete(page);
+      }
+      finder.onHighlightAllChange(false);
+      finder.highlight(false, finder.searchString ?? "", false);
+    }
+  }
+
+  /**
+   * Makes sure Firefox's finder in a tab's current page highlights every
+   * match, if the UI asked for that. Each page has a finder of its own
+   * (FinderChild), which makes its highlighter on its first search or
+   * highlight, starting as the findbar.highlightAll pref says (off), and
+   * drops a highlight change sent before then: so once per page, Neeko
+   * has it make the highlighter (highlighting nothing), then turns it on.
+   */
+  keepHighlighting(tab) {
+    let page = tab.linkedBrowser.browsingContext?.currentWindowGlobal;
+    if (!this.#highlighting.has(tab) || !page || this.#highlightingPages.has(page)) {
+      return;
+    }
+    let finder = tab.linkedBrowser.finder;
+    finder.highlight(false, "", false);
+    finder.onHighlightAllChange(true);
+    this.#highlightingPages.add(page);
+  }
+
+  /**
    * Finds the next or previous match of what was last found.
    */
   findAgain(id, backwards) {
@@ -1269,6 +1317,7 @@ export class NeekoAPI {
     if (!text) {
       throw new Error("Nothing to find yet: call find.find() first.");
     }
+    this.keepHighlighting(this.findTab(id));
     return this.runFind(finder, text, () =>
       finder.findAgain(text, backwards, false, false)
     );
