@@ -643,8 +643,12 @@ let bar = await bars.appendNotification("neeko-test", {
   label: "A test bar",
   priority: bars.PRIORITY_INFO_MEDIUM,
 });
+// It slides into place (300ms), so the check waits for it to get there.
 await waitFor(
-  () => bar.checkVisibility() && pageTop() > topBefore,
+  () =>
+    bar.checkVisibility() &&
+    pageTop() > topBefore &&
+    bar.getBoundingClientRect().top >= gBrowser.tabbox.getBoundingClientRect().top,
   "a notification bar shows, and the page moves down for it"
 );
 let barRect = bar.getBoundingClientRect();
