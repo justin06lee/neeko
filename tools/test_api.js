@@ -1373,8 +1373,45 @@ found = await neeko.find.find("Fox", { caseSensitive: true });
 check(found.result == "found" && found.total == 1, `caseSensitive finds only "Fox" (${JSON.stringify(found)})`);
 found = await neeko.find.find("zebra");
 check(found.result == "notFound" && found.total == 0, `and what isn't there isn't found (${JSON.stringify(found)})`);
-await neeko.find.highlight(true);
+// Highlighting every match: asked for before a tab's first search, or
+// before its page changes, it still applies (Firefox's finder in a page
+// starts without it). The test paints highlighted matches red.
+let redPixels = async () => {
+  let page = gBrowser.selectedBrowser.getBoundingClientRect();
+  let area = new DOMRect(page.left, page.top, Math.min(page.width, 700), 80);
+  let bitmap = await browsingContext.currentWindowGlobal.drawSnapshot(area, 1, "white");
+  let canvas = document.createElementNS("http://www.w3.org/1999/xhtml", "canvas");
+  canvas.width = bitmap.width;
+  canvas.height = bitmap.height;
+  let context = canvas.getContext("2d");
+  context.drawImage(bitmap, 0, 0);
+  let data = context.getImageData(0, 0, canvas.width, canvas.height).data;
+  let red = 0;
+  for (let i = 0; i < data.length; i += 4) {
+    if (data[i] > 200 && data[i + 1] < 60 && data[i + 2] < 60) {
+      red++;
+    }
+  }
+  return red;
+};
 await neeko.find.close();
+let highlightTab = await neeko.tabs.open(`${BASE}/find`);
+await waitFor(() => updated(highlightTab.id, t => t.title == "find" && !t.loading), "a fresh page to highlight in");
+await neeko.find.highlight(true);
+await neeko.find.find("fox");
+await waitFor(async () => (await redPixels()) > 0, "highlight() before the first search highlights every match");
+await neeko.nav.go(`${BASE}/find-again`);
+await waitFor(
+  () => updated(highlightTab.id, t => t.title == "find again" && !t.loading),
+  "the tab going to another page"
+);
+check((await redPixels()) == 0, "which starts with nothing highlighted");
+await neeko.find.find("fox");
+await waitFor(async () => (await redPixels()) > 0, "and a search there highlights every match again");
+await neeko.find.close();
+await waitFor(async () => (await redPixels()) == 0, "close() takes the highlights away");
+await neeko.tabs.close(highlightTab.id);
+await neeko.tabs.select(findTab.id);
 await rejects(neeko.find.find(3), /text to find/, "find() without text");
 await rejects(neeko.find.find("x", { wholeWords: true }), /Unknown option/, "find() with an unknown option");
 stopFind();
