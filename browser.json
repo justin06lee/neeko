@@ -2,5 +2,27 @@
   "name": "Neeko",
   "vendor": "Neeko",
   "appId": "dev.neeko.demo",
-  "version": "0.10.0"
+  "version": "0.10.0",
+  "theme": {
+    "radius": 6,
+    "dialogRadius": 10,
+    "light": {
+      "text": "#222222",
+      "muted": "#666666",
+      "surface": "#ffffff",
+      "line": "#cfcfd8",
+      "field": "#f5f5f8",
+      "primary": "#4a7dff",
+      "onPrimary": "#ffffff"
+    },
+    "dark": {
+      "text": "#dddddd",
+      "muted": "#999999",
+      "surface": "#22222a",
+      "line": "#3a3a44",
+      "field": "#26262c",
+      "primary": "#4a7dff",
+      "onPrimary": "#ffffff"
+    }
+  }
 }

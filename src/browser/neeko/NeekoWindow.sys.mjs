@@ -12,7 +12,8 @@
  * 5. Sends Cmd+L to the UI's address bar, or shows Firefox's own address bar
  *    if the UI doesn't have one.
  * 6. Hangs Firefox's own panels (permission prompts and the like) from the
- *    top of the web page, since their toolbar icons are hidden (NeekoPanels).
+ *    top of the web page, since their toolbar icons are hidden (NeekoPanels),
+ *    and shows its notification bars across the top of the page.
  *
  * With no custom UI configured, it does nothing and Firefox looks as usual.
  */
@@ -279,6 +280,20 @@ function showFirefoxAddressBar(win) {
 }
 
 /**
+ * Firefox's notification bars (a blocked pop-up, a page slowing Firefox
+ * down) show over the top of the page (neeko.css), and push the page down
+ * by their height, as they do in Firefox, rather than cover it.
+ */
+function followNotificationBars(win) {
+  let root = win.document.documentElement;
+  let bars = win.document.getElementById("notifications-toolbar");
+  new win.ResizeObserver(() => {
+    let height = Math.ceil(bars.getBoundingClientRect().height);
+    root.style.setProperty("--neeko-notifications-height", `${height}px`);
+  }).observe(bars);
+}
+
+/**
  * How far an element's box-shadows reach outside its box, on each side.
  */
 function shadowReach(boxShadow) {
@@ -464,6 +479,12 @@ function trackContentSlot(win, frame) {
     } else {
       style.width = style.height = "0";
     }
+    // Where Firefox's notification bars go (neeko.css), which can't follow
+    // the page by CSS anchor positioning: they're before it in the document.
+    let rootStyle = win.document.documentElement.style;
+    rootStyle.setProperty("--neeko-page-left", style.left || "0");
+    rootStyle.setProperty("--neeko-page-top", style.top || "0");
+    rootStyle.setProperty("--neeko-page-width", style.width);
     overlayPage(frame, tabbox);
     // Overlays shown or hidden with `display` change size, which the resize
     // observer reports even when nothing else changed (a :hover rule, say).
@@ -562,5 +583,6 @@ export const NeekoWindow = {
     handleOpenLocation(win);
     handleBookmarkPage(win);
     NeekoPanels.init(win, () => apis.get(win));
+    followNotificationBars(win);
   },
 };

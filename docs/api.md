@@ -7,7 +7,9 @@ else. Web pages never get it.
 So far it covers tabs and tab groups, navigation, permission prompts, fullscreen,
 downloads, bookmarks, your UI's settings and the color scheme, drawing over
 the page, the pointer at the page's edges, and your browser's own pages
-(which get a small API of their own, `neekoPage`). Features get
+(which get a small API of their own, `neekoPage`). And Firefox's own UI,
+where it still shows, can take your browser's look (see
+[Firefox's own UI, in your look](#firefoxs-own-ui-in-your-look)). Features get
 added one at a time as browsers built on Neeko need them. The demo UI in
 `ui/` uses every one of them.
 
@@ -638,6 +640,59 @@ out, say) counts as leaving the band: from there your UI hears it itself.
 Only the pointer's moves are watched, and only while you watch some edge;
 nothing runs in the web page for it.
 
+## Firefox's own UI, in your look
+
+Some things Firefox still draws itself: a page's dialogs (`alert()`,
+`confirm()`, `prompt()`, "leave this page?" and sign-in prompts), the bars
+over the page (a blocked pop-up, a page slowing the browser down), the
+fallbacks your UI doesn't handle yet (Firefox's panels, such as its camera,
+password and add-on prompts and the downloads and bookmark panels; the find
+bar; the link status bubble) and form autocomplete. Give your browser's look
+as a `theme` in `browser.json`, and they wear it instead of Firefox's: your
+font, your colors in light and dark, your corner radii.
+
+```json
+"theme": {
+  "font": {
+    "family": "Poppins",
+    "files": [
+      { "file": "fonts/poppins-400.woff2", "weight": 400 },
+      { "file": "fonts/poppins-600.woff2", "weight": 600 }
+    ]
+  },
+  "radius": 12,
+  "dialogRadius": 16,
+  "buttonHeight": 36,
+  "light": {
+    "text": "#171717", "muted": "#737373",
+    "surface": "#ffffff", "line": "rgba(0, 0, 0, 0.07)", "field": "rgba(0, 0, 0, 0.03)",
+    "primary": "#171717", "onPrimary": "#ffffff"
+  },
+  "dark": {
+    "text": "#fafafa", "muted": "#a3a3a3",
+    "surface": "#171717", "line": "rgba(255, 255, 255, 0.08)", "field": "rgba(255, 255, 255, 0.04)",
+    "primary": "#ffffff", "onPrimary": "#171717"
+  }
+}
+```
+
+| Key | What it is |
+| --- | --- |
+| `font` | Optional. `family` is the font's name; `files` are its font files (`.woff2`, `.woff`, `.ttf` or `.otf`), paths in your app folder, each with its `weight` (400 by default), and optionally `style` (`"italic"`) and `unicodeRange`. Without `files`, the font must be installed. Without `font`, the system's font, as Firefox uses. |
+| `radius` | Corner radius of panels, bars, buttons and fields, in pixels. 8 by default. |
+| `dialogRadius` | Corner radius of a page's dialogs. `radius` + 4 by default. |
+| `buttonHeight` | Height of buttons and fields. 32 by default, Firefox's. |
+| `light`, `dark` | The colors for each scheme. `text`, `surface` (backgrounds), `primary` (the main button, such as Allow or OK) and `onPrimary` (its text) are required; `muted` (secondary text), `line` (borders), `field` (text fields, other buttons) and `backdrop` (the dimmed page behind a dialog) are made from them if you leave them out. |
+
+Colors are CSS colors: `#rrggbb`, `rgba(…)`, `hsl(…)` and the like. Which
+scheme shows follows `neeko.colorScheme`, live. `make` checks every value
+and says what's wrong, and nothing but these values reaches the CSS: your
+browser never styles Firefox's elements itself. Neeko maps the theme onto
+Firefox's own styles (its design tokens, where it has them), and keeps that
+working when Firefox changes. Change the theme and run `make` again.
+
+Without a `theme`, Firefox's own look stays: that's the fallback.
+
 ## Fallbacks
 
 Firefox keeps running underneath your UI, so a browser built on Neeko works
@@ -657,6 +712,10 @@ even where its UI has no controls yet.
   window, with every bookmark.
 - **Drawing over the page.** Without elements marked `data-neeko-overlay`,
   the page stays on top of your UI everywhere in its slot.
+- **Notification bars.** Firefox's bars about the page (it blocked a
+  pop-up, the page is slowing the browser down, and the like) show across
+  the top of the page, which moves down to make room, as in Firefox. They
+  go when the page does, or when closed.
 - **Error pages and crashed tabs.** Firefox's own error pages ("Hmm. We're
   having trouble finding that site.") and its crashed tab page show in the
   page area, with their buttons working, whether or not your UI reads a
@@ -729,6 +788,8 @@ The pieces:
   color scheme, in prefs.
 - `src/browser/neeko/NeekoBookmarks.sys.mjs` turns Firefox's bookmarks
   (Places) into plain data and events.
+- `src/browser/neeko/NeekoTheme.sys.mjs` puts your `theme` on Firefox's own
+  UI, with `neeko-theme.css` and `neeko-theme-dialog.css`.
 - `src/browser/neeko/NeekoPages.sys.mjs` serves the app's pages as `about:`
   pages, in every process; `NeekoPageChild.sys.mjs` gives them `neekoPage`,
   and `NeekoPageParent.sys.mjs` checks and carries out its calls.

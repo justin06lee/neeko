@@ -4,7 +4,7 @@
 /* Hide Firefox's own UI. The elements stay in the document so Firefox's logic
    keeps working; display: none means they're never laid out or painted. */
 :root[neeko] :is(
-  #navigator-toolbox,
+  #navigator-toolbox > :not(#notifications-toolbar),
   #sidebar-container,
   #sidebar-launcher-splitter,
   #sidebar-box,
@@ -14,6 +14,33 @@
   #fullscr-toggler
 ) {
   display: none !important;
+}
+
+/* Firefox's notification bars (a blocked pop-up, a page slowing Firefox
+   down) live in its toolbox, under the hidden toolbars: the toolbox shows
+   over the top of the page with just them, and nothing when there are none.
+   NeekoWindow keeps --neeko-page-* at the page's place, and the page moves
+   down by --neeko-notifications-height, their height, as in Firefox. */
+:root[neeko] #navigator-toolbox {
+  position: fixed;
+  top: var(--neeko-page-top, 0);
+  left: var(--neeko-page-left, 0);
+  width: var(--neeko-page-width, 0);
+  z-index: 3;
+  background: none;
+  border: none;
+  box-shadow: none;
+  pointer-events: none;
+  -moz-window-dragging: no-drag;
+}
+
+:root[neeko] #notifications-toolbar {
+  background: none;
+  border: none;
+
+  > * {
+    pointer-events: auto;
+  }
 }
 
 /* The custom UI fills the window, underneath the web page. It needs a
@@ -28,22 +55,33 @@
 }
 
 /* The web page sits on top of the UI. NeekoWindow sets its position and size
-   to match the UI's content slot; until then it has no size. */
+   to match the UI's content slot; until then it has no size. Firefox's
+   notification bars, if any, take the top of it. */
 :root[neeko] #tabbrowser-tabbox {
   position: fixed;
   z-index: 2;
   width: 0;
   height: 0;
+  box-sizing: border-box;
+  padding-top: var(--neeko-notifications-height, 0);
   overflow: clip;
   anchor-name: --neeko-page;
 }
 
 /* While an element the UI marks with data-neeko-overlay (a menu, say)
-   overlaps the page, the UI goes above it, clipped by NeekoWindow to
-   everything but the page plus those elements: they're drawn over the page,
-   which stays visible and live everywhere else. */
+   overlaps the page, the UI goes above it, and above Firefox's notification
+   bars, clipped by NeekoWindow to everything but the page plus those
+   elements: they're drawn over the page, which stays visible and live
+   everywhere else. */
 :root[neeko][neeko-ui-over-page] #neeko-ui {
-  z-index: 3;
+  z-index: 4;
+}
+
+/* Dialogs over a page (a sign-in prompt, say) that Firefox pulls up to
+   overlap its toolbar would be cut off at the top of the page instead:
+   they hang just inside it, as Firefox's panels do. */
+:root[neeko] :not(.content-prompt-dialog) > .dialogOverlay > .dialogBox:not(.spotlightBox) {
+  margin-top: 8px;
 }
 
 /* What Firefox's own panels (permission prompts and the like) hang from,
@@ -75,19 +113,28 @@
   visibility: hidden;
 }
 
+/* A fullscreen page has the whole of its area, as in Firefox. */
+:root[neeko][inDOMFullscreen] {
+  #navigator-toolbox {
+    visibility: hidden;
+  }
+
+  #tabbrowser-tabbox {
+    padding-top: 0 !important;
+  }
+}
+
 /* The fallback for UIs without an address bar: Cmd+L shows Firefox's own
    navigation toolbar across the top of the window, over the UI and the page,
    until it loses focus (NeekoWindow sets the attribute). */
 :root[neeko][neeko-firefox-address-bar] #navigator-toolbox {
-  display: flex !important;
-  flex-direction: column;
-  position: fixed;
   top: 0;
   left: 0;
-  right: 0;
-  z-index: 4;
-}
+  width: 100%;
+  z-index: 5;
+  pointer-events: auto;
 
-:root[neeko][neeko-firefox-address-bar] #navigator-toolbox > :not(#nav-bar) {
-  display: none !important;
+  > #nav-bar {
+    display: flex !important;
+  }
 }
