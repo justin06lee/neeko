@@ -484,6 +484,15 @@ Add to it whenever something costs you time.
     `FindBarParent`, which calls the tab's find bar's `_onBrowserKeypress`
     (making the find bar if needed; `TabFindInitialized` fires on the tab).
     `NeekoWindow` wraps that method on each new find bar.
+- **The link the pointer is over** reaches the browser window as an
+  `OverLink` event (`XULBrowserWindow.setOverLink` dispatches it first,
+  with the raw URL, then works out the text it shows: decoded, trimmed,
+  bidi controls escaped, in `XULBrowserWindow.overLink`), so Neeko reads
+  the text a microtask later. Loading messages come to tabs progress
+  listeners (`onStatusChange(browser, ...)`); Firefox only shows them while
+  the tab is busy, so Neeko clears them when it stops. The status bubble
+  (`#statuspanel`) says what it shows in its `type` attribute (`overLink`,
+  `status`), which `neeko.css` uses to hide the kinds the UI shows.
 - **`ownerGlobal` is undefined on nodes in module code, documents
   included** (see Hide and plug): `doc.defaultView`. It cost the context
   menu a debugging round (the watcher threw before it was set up).

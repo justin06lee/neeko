@@ -658,6 +658,33 @@ neeko.settings.on("change", ({ key, value }) => {
   }
 });
 
+// The link the pointer is over in the page, or else the selected tab's
+// loading status ("Waiting for example.com…"), at the bottom of the tab
+// list. Listening for them hides Firefox's own status bubble.
+const statusLine = document.getElementById("status");
+let hoveredLink = "";
+const loadingMessages = new Map();
+
+function showStatus() {
+  let text = hoveredLink || loadingMessages.get(currentId) || "";
+  statusLine.textContent = text;
+  statusLine.hidden = !text;
+}
+
+neeko.status.on("link", ({ text }) => {
+  hoveredLink = text;
+  showStatus();
+});
+neeko.status.on("message", ({ tabId, message }) => {
+  if (message) {
+    loadingMessages.set(tabId, message);
+  } else {
+    loadingMessages.delete(tabId);
+  }
+  showStatus();
+});
+neeko.tabs.on("select", showStatus);
+
 // Find in page. Cmd+F, Cmd+G, Cmd+Shift+G and / in a page come here: listening
 // for "request" tells Neeko not to open Firefox's own find bar. What's found
 // is the selected tab's, so the bar closes when another tab is selected.

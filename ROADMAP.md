@@ -73,6 +73,9 @@ get added as it needs them.
   autocomplete, through Firefox's own design tokens. And Firefox's
   notification bars (a blocked pop-up, a slow page) show over the top of the
   page again, which they didn't under Neeko before. Fallback: Firefox's look.
+- [x] **Links and loading status** (v0.14.0): the link the pointer is over
+  (as the page has it, and as Firefox shows it) and loading pages' status
+  messages, as events. Fallback: Firefox's status bubble.
 - [x] **Find in page** (v0.13.0): find, next, previous, match count,
   highlight all, close, with Firefox doing the finding; Cmd+F, Cmd+G,
   Cmd+Shift+G, Cmd+E and / in a page go to a UI that listens. Fallback:

@@ -179,6 +179,9 @@
       close: tabId => call("find.close", tabId),
       on: events("find", ["request"]),
     }),
+    status: Object.freeze({
+      on: events("status", ["link", "message"]),
+    }),
     pointer: Object.freeze({
       setEdges: edges => call("pointer.setEdges", edges),
       on: events("pointer", ["edge"]),

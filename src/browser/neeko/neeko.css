@@ -127,6 +127,14 @@
   }
 }
 
+/* Firefox's status bubble at the bottom of the page, for what the UI doesn't
+   show itself: the link the pointer is over (the API's "status.link"), or
+   a loading page's status message ("status.message"). */
+:root[neeko][neeko-ui-status-link] #statuspanel[type="overLink"],
+:root[neeko][neeko-ui-status-message] #statuspanel[type="status"] {
+  visibility: hidden !important;
+}
+
 /* The fallback for UIs without an address bar: Cmd+L shows Firefox's own
    navigation toolbar across the top of the window, over the UI and the page,
    until it loses focus (NeekoWindow sets the attribute). */

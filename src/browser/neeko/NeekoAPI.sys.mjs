@@ -229,6 +229,8 @@ const EVENTS = [
   "groups.remove",
   "groups.update",
   "find.request",
+  "status.link",
+  "status.message",
 ];
 
 // What Firefox's find reports (nsITypeAheadFind), as the API says it.
@@ -253,6 +255,14 @@ const ALWAYS_SENT = ["settings.change", "colorScheme.change"];
 // Set on the window's root while the UI lays out page fullscreen itself, which
 // turns off neeko.css's fallback (the page filling the window over the UI).
 const UI_FULLSCREEN = "neeko-ui-fullscreen";
+
+// Set on the window's root while the UI shows the link the pointer is over,
+// or the loading pages' status messages, itself: neeko.css hides Firefox's
+// status bubble for those.
+const UI_STATUS = {
+  "status.link": "neeko-ui-status-link",
+  "status.message": "neeko-ui-status-message",
+};
 
 // Window events for fullscreen: a web page entering or leaving it, and the
 // window itself ("fullscreen" fires once window.fullScreen has changed).
@@ -404,6 +414,9 @@ const METHODS = {
     } else if (event == "fullscreen.page") {
       let root = this.win.document.documentElement;
       root.toggleAttribute(UI_FULLSCREEN, listening);
+    } else if (UI_STATUS[event]) {
+      let root = this.win.document.documentElement;
+      root.toggleAttribute(UI_STATUS[event], listening);
     }
   },
 
@@ -828,6 +841,10 @@ export class NeekoAPI {
   #edge = { edge: null, outside: false };
   /** Find requests on their way to the UI, which arrive in order. */
   #findRequests = Promise.resolve();
+  /** The link the UI last heard the pointer is over. */
+  #link = "";
+  /** Each tab's status message the UI last heard. */
+  #messages = new WeakMap();
   #ui;
   #send;
   #destroyed = false;
@@ -862,6 +879,9 @@ export class NeekoAPI {
     for (let type of FULLSCREEN_EVENTS) {
       win.addEventListener(type, this, true);
     }
+    // Firefox's XULBrowserWindow.setOverLink() says which link the pointer
+    // is over with this, for pages and Firefox's own UI alike.
+    win.addEventListener("OverLink", this);
     this.#unwatch.push(
       NeekoSettings.watch((key, value) =>
         this.#emit("settings.change", { key, value })
@@ -898,6 +918,13 @@ export class NeekoAPI {
     if (this.listening.has("fullscreen.page")) {
       this.win.document.documentElement.removeAttribute(UI_FULLSCREEN);
     }
+    // And Firefox's status bubble shows links and messages again.
+    for (let [event, attribute] of Object.entries(UI_STATUS)) {
+      if (this.listening.has(event)) {
+        this.win.document.documentElement.removeAttribute(attribute);
+      }
+    }
+    this.win.removeEventListener("OverLink", this);
     for (let type of FULLSCREEN_EVENTS) {
       this.win.removeEventListener(type, this, true);
     }
@@ -1395,10 +1422,17 @@ export class NeekoAPI {
     if (changed.length) {
       this.#emit("tabs.update", { tab: now, changed });
     }
+    // Its status message goes when it's done loading.
+    if (!now.loading) {
+      this.#statusMessage(tab, "");
+    }
   }
 
   handleEvent(event) {
     switch (event.type) {
+      case "OverLink":
+        this.#overLink(event.detail?.url ?? "");
+        return;
       case "mousemove":
       case "mouseout":
         this.#pointerMoved(event);
@@ -1470,6 +1504,51 @@ export class NeekoAPI {
       default:
         // A tab woke up or went to sleep, which changes its back/forward.
         this.#update(tab);
+    }
+  }
+
+  /**
+   * Tells the UI which link the pointer is over, if that changed: the URL
+   * as the page has it, and as Firefox shows it (decoded, trimmed as the
+   * address bar trims, bidi controls escaped), which XULBrowserWindow.setOverLink()
+   * works out just after it fires the event.
+   */
+  #overLink(url) {
+    if (url == this.#link || !this.listening.has("status.link")) {
+      this.#link = url;
+      return;
+    }
+    this.#link = url;
+    Promise.resolve().then(() => {
+      if (this.#link == url) {
+        this.#emit("status.link", {
+          url,
+          text: url ? this.win.XULBrowserWindow?.overLink || url : "",
+        });
+      }
+    });
+  }
+
+  /**
+   * Tells the UI a tab's status message, if it changed: what Firefox says
+   * while a page loads ("Waiting for example.com…"), and "" once it's done.
+   */
+  #statusMessage(tab, message) {
+    if ((this.#messages.get(tab) ?? "") == message) {
+      return;
+    }
+    this.#messages.set(tab, message);
+    this.#emit("status.message", { tabId: tabId(tab), message });
+  }
+
+  /**
+   * Tabs progress listener: a tab's status message changed. Firefox only
+   * shows these while the tab is loading.
+   */
+  onStatusChange(browser, webProgress, request, status, message) {
+    let tab = this.gBrowser.getTabForBrowser(browser);
+    if (tab && !tab.closing) {
+      this.#statusMessage(tab, tab.hasAttribute("busy") ? message ?? "" : "");
     }
   }
 

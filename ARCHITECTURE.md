@@ -178,6 +178,8 @@ and sends events, but only the ones the UI listens for.
 - No `bookmarks` `request` listener: Cmd+D opens Firefox's bookmark panel.
 - No `settings` `request` listener: Cmd+, opens Firefox's settings.
 - No `find` `request` listener: Cmd+F opens Firefox's find bar.
+- No `status` `link` or `message` listener: Firefox's status bubble shows
+  them.
 
 Every future feature with a Firefox fallback (context menus) works the same
 way. Until then, Firefox's own versions of those already
