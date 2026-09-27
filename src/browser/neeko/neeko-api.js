@@ -171,6 +171,14 @@
       ungroup: groupId => call("groups.ungroup", groupId),
       on: events("groups", ["create", "remove", "update"]),
     }),
+    find: Object.freeze({
+      find: (text, options, tabId) => call("find.find", text, options, tabId),
+      next: tabId => call("find.next", tabId),
+      previous: tabId => call("find.previous", tabId),
+      highlight: (highlight, tabId) => call("find.highlight", highlight, tabId),
+      close: tabId => call("find.close", tabId),
+      on: events("find", ["request"]),
+    }),
     pointer: Object.freeze({
       setEdges: edges => call("pointer.setEdges", edges),
       on: events("pointer", ["edge"]),

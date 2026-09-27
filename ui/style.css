@@ -558,6 +558,72 @@ main {
   margin: 4px 0;
 }
 
+/* Find in page, over the top right of the page. */
+#find {
+  position: fixed;
+  right: 20px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  background: var(--button);
+  border: 1px solid var(--panel-border);
+  border-radius: 10px;
+  box-shadow: 0 10px 30px var(--menu-shadow);
+  -moz-window-dragging: no-drag;
+}
+
+#find[hidden] {
+  display: none;
+}
+
+#find-text {
+  width: 200px;
+  height: 26px;
+  padding: 0 8px;
+  background: var(--field);
+  color: inherit;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font: inherit;
+}
+
+#find-text:focus {
+  outline: 2px solid #4a7dff;
+  outline-offset: -1px;
+}
+
+#find-text.not-found {
+  outline-color: #e5484d;
+}
+
+#find-count {
+  min-width: 70px;
+  font-size: 12px;
+  color: var(--text-quiet);
+  text-align: center;
+}
+
+#find button {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  background: none;
+}
+
+#find button:hover {
+  background: var(--menu-hover);
+}
+
+#find label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 6px;
+  font-size: 12px;
+}
+
 #menu-button.open {
   background: var(--menu-hover);
 }

@@ -177,9 +177,10 @@ and sends events, but only the ones the UI listens for.
   download starts.
 - No `bookmarks` `request` listener: Cmd+D opens Firefox's bookmark panel.
 - No `settings` `request` listener: Cmd+, opens Firefox's settings.
+- No `find` `request` listener: Cmd+F opens Firefox's find bar.
 
-Every future feature with a Firefox fallback (context menus, find in page)
-works the same way. Until then, Firefox's own versions of those already
+Every future feature with a Firefox fallback (context menus) works the same
+way. Until then, Firefox's own versions of those already
 work, with their panels hanging from the top of the page.
 
 ## Decisions, and why

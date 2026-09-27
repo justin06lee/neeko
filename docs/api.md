@@ -5,8 +5,8 @@ before your first script runs, in your UI page (`ui/index.html`) and nowhere
 else. Web pages never get it.
 
 So far it covers tabs and tab groups, navigation, permission prompts, fullscreen,
-downloads, bookmarks, your UI's settings and the color scheme, drawing over
-the page, the pointer at the page's edges, and your browser's own pages
+downloads, bookmarks, your UI's settings and the color scheme, find in page,
+drawing over the page, the pointer at the page's edges, and your browser's own pages
 (which get a small API of their own, `neekoPage`). And Firefox's own UI,
 where it still shows, can take your browser's look (see
 [Firefox's own UI, in your look](#firefoxs-own-ui-in-your-look)). Features get
@@ -509,6 +509,51 @@ Firefox's Library window.
 | `update` | `{ bookmark, changed }` | Its title or URL changed; `changed` says which (`["title"]`, or `["url", "icon"]`). |
 | `request` | `{ tabId }` | The user asked to bookmark the page: Cmd+D, or Bookmarks > Bookmark Current Tab. Listening for this is how your UI says it bookmarks pages itself. |
 
+## Find in page
+
+Your UI can have its own find bar, with Firefox doing the finding: the same
+matching, selection, scrolling and highlighting as Firefox's find bar.
+Listen for `request` and Cmd+F comes to your UI instead of opening
+Firefox's.
+
+```js
+neeko.find.on("request", ({ command, selection }) => {
+  if (command == "find") showFindBar(selection);    // Cmd+F
+  if (command == "next") neeko.find.next();          // Cmd+G
+});
+input.oninput = async () => {
+  let { result, current, total } = await neeko.find.find(input.value);
+  count.textContent = result == "notFound" ? "No matches" : `${current} of ${total}`;
+};
+```
+
+A search looks like this:
+
+```js
+{
+  result: "found",   // or "wrapped" (it went around the end), or "notFound"
+  current: 2,        // which match is selected, from 1
+  total: 12,         // how many there are; -1 when there are more than limit
+  limit: 1000,       // how many Firefox counts at most
+}
+```
+
+| Method | What it does |
+| --- | --- |
+| `neeko.find.find(text, options?, tabId?)` | Finds `text` in the page, as typing in Firefox's find bar does: the first match from where the page's selection is, selected and scrolled to. Options: `caseSensitive`, `wholeWord` and `matchDiacritics`, all `false` unless given. `""` clears the search. Resolves to the search. |
+| `neeko.find.next(tabId?)` | The next match of what was last found, going around at the end, as Cmd+G does. |
+| `neeko.find.previous(tabId?)` | The one before, as Cmd+Shift+G does. |
+| `neeko.find.highlight(highlight, tabId?)` | Highlights every match (`true`), or stops. Later searches in the tab keep highlighting until `close()`. |
+| `neeko.find.close(tabId?)` | Done finding: the highlights go and the match stays selected, as when Firefox's find bar closes. Call `neeko.tabs.focus()` too, to give the page its keys back, as Firefox does. |
+| `neeko.find.on(event, listener)` | Listens for an event, as `tabs.on` does. |
+
+Each tab has its own search, like Firefox's find bars: `next()` goes on
+from what that tab last found. A tab that's asleep can't be searched.
+
+| Event | Data | When |
+| --- | --- | --- |
+| `request` | `{ command, selection }` | The user wants to find in the page. `command` is `"find"` (Cmd+F, Edit > Find, or / or ' typed in a page), `"next"` (Cmd+G), `"previous"` (Cmd+Shift+G) or `"selection"` (Cmd+E: find the selected text). `selection` is the text selected in the page, for `find` and `selection`, to start with, as Firefox's find bar does; `""` if none. Listening for this is how your UI says it finds in pages itself. |
+
 ## The browser's own pages
 
 Pages of your browser's own, shown in tabs like web pages: a start page,
@@ -775,6 +820,9 @@ even where its UI has no controls yet.
   window, with every bookmark.
 - **Drawing over the page.** Without elements marked `data-neeko-overlay`,
   the page stays on top of your UI everywhere in its slot.
+- **Find in page.** If your UI doesn't listen for `find` `request`, Cmd+F
+  (and / in a page) opens Firefox's find bar along the bottom of the page,
+  in your `theme` if you have one.
 - **Menus.** Without `menus` in `browser.json`, Firefox's menu bar and
   context menu are all there. Without a `settings` `request` listener,
   Cmd+, opens Firefox's settings.

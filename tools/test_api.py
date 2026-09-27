@@ -114,6 +114,9 @@ PAGES = {
     "navigator.geolocation.getCurrentPosition("
     "() => document.title = 'allowed', e => document.title = 'error ' + e.code)"
     "</script>",
+    # Text to find: "fox" three times, once as "Fox".
+    "/find": "<title>find</title><p>The quick brown fox jumps. A fox again."
+    " And a third Fox.</p>",
     # A link, for the context menu.
     "/link": "<title>link</title><a href='/one' style='font-size: 40px'>A link</a>",
     # A page's dialog, which the app's theme styles.

@@ -228,7 +228,18 @@ const EVENTS = [
   "groups.create",
   "groups.remove",
   "groups.update",
+  "find.request",
 ];
+
+// What Firefox's find reports (nsITypeAheadFind), as the API says it.
+const FIND_RESULTS = new Map([
+  [Ci.nsITypeAheadFind.FIND_FOUND, "found"],
+  [Ci.nsITypeAheadFind.FIND_NOTFOUND, "notFound"],
+  [Ci.nsITypeAheadFind.FIND_WRAPPED, "wrapped"],
+]);
+// How long a search may take to report its matches before find() settles
+// for what it has.
+const FIND_TIMEOUT = 5000;
 
 // The page's edges, in the order a corner counts as one of them.
 const EDGES = ["top", "left", "right", "bottom"];
@@ -699,6 +710,70 @@ const METHODS = {
   },
 
   /**
+   * Finds text in a tab's page, as typing in Firefox's find bar does: the
+   * first match from where the page's selection is, selected and scrolled
+   * to. Options: caseSensitive, wholeWord, matchDiacritics (all false by
+   * default). Resolves to { result, current, total, limit }. "" clears the
+   * search.
+   */
+  async "find.find"(text, options, id) {
+    if (typeof text != "string") {
+      throw new TypeError("Expected the text to find.");
+    }
+    let { caseSensitive = false, wholeWord = false, matchDiacritics = false } =
+      checkOptions(options, {
+        caseSensitive: "boolean",
+        wholeWord: "boolean",
+        matchDiacritics: "boolean",
+      });
+    let finder = this.finder(id);
+    if (!text) {
+      finder.removeSelection();
+      finder.highlight(false, "", false);
+      return { result: "notFound", current: 0, total: 0, limit: 0 };
+    }
+    finder.caseSensitive = caseSensitive;
+    finder.entireWord = wholeWord;
+    finder.matchDiacritics = matchDiacritics;
+    return this.runFind(finder, text, () => finder.fastFind(text, false, false));
+  },
+
+  /**
+   * The next match of what was last found in a tab's page, wrapping around
+   * at the end, as Cmd+G does.
+   */
+  "find.next"(id) {
+    return this.findAgain(id, false);
+  },
+
+  "find.previous"(id) {
+    return this.findAgain(id, true);
+  },
+
+  /**
+   * Highlights every match of what's being found in a tab's page, or stops.
+   * Later searches in the tab follow it until the tab's find is closed.
+   */
+  "find.highlight"(highlight, id) {
+    if (typeof highlight != "boolean") {
+      throw new TypeError("Expected true or false.");
+    }
+    let finder = this.finder(id);
+    finder.onHighlightAllChange(highlight);
+    finder.highlight(highlight, finder.searchString ?? "", false);
+  },
+
+  /**
+   * Done finding in a tab's page: its highlights go, and the match found
+   * stays selected, as when Firefox's find bar closes.
+   */
+  "find.close"(id) {
+    let finder = this.finder(id);
+    finder.onHighlightAllChange(false);
+    finder.onFindbarClose();
+  },
+
+  /**
    * Which of the page's edges to watch the pointer at, and how deep a band
    * along each, in CSS pixels: { top: 10, left: 4 }. Edges left out aren't
    * watched. Replaces what was set before.
@@ -751,6 +826,8 @@ export class NeekoAPI {
   #edges = {};
   /** The edge the UI last heard the pointer is at, and whether outside. */
   #edge = { edge: null, outside: false };
+  /** Find requests on their way to the UI, which arrive in order. */
+  #findRequests = Promise.resolve();
   #ui;
   #send;
   #destroyed = false;
@@ -1142,6 +1219,113 @@ export class NeekoAPI {
         this.#ui.URL.revokeObjectURL(icon.url);
       }
     }
+  }
+
+  /**
+   * Firefox's find for a tab's page (FinderParent, or Finder for a page in
+   * this process). Asleep, a tab has no page to find in.
+   */
+  finder(id) {
+    let tab = this.findTab(id);
+    if (!tab.linkedPanel) {
+      throw new Error(`Tab ${tabId(tab)} is asleep: there's no page to find in.`);
+    }
+    return tab.linkedBrowser.finder;
+  }
+
+  /**
+   * Finds the next or previous match of what was last found.
+   */
+  findAgain(id, backwards) {
+    let finder = this.finder(id);
+    let text = finder.searchString;
+    if (!text) {
+      throw new Error("Nothing to find yet: call find.find() first.");
+    }
+    return this.runFind(finder, text, () =>
+      finder.findAgain(text, backwards, false, false)
+    );
+  }
+
+  /**
+   * Runs a search and resolves with its outcome and match count, which
+   * Firefox reports separately (onFindResult, then onMatchesCountResult).
+   */
+  runFind(finder, text, search) {
+    return new Promise(resolve => {
+      let found = null;
+      let timer;
+      let done = count => {
+        this.win.clearTimeout(timer);
+        finder.removeResultListener(listener);
+        resolve({
+          result: FIND_RESULTS.get(found?.result) ?? "notFound",
+          current: count?.current ?? 0,
+          total: count?.total ?? 0,
+          limit: count?.limit ?? 0,
+        });
+      };
+      let listener = {
+        onFindResult(data) {
+          if (data.searchString == text) {
+            found = data;
+          }
+        },
+        onMatchesCountResult(data) {
+          if (found && data.searchString == text) {
+            done(data);
+          }
+        },
+        onHighlightFinished() {},
+        onCurrentSelection() {},
+      };
+      finder.addResultListener(listener);
+      timer = this.win.setTimeout(() => done(null), FIND_TIMEOUT);
+      search();
+    });
+  }
+
+  /**
+   * Tells the UI that the user wants to find in the page, if it finds
+   * itself: "find" (Cmd+F, or / or ' in a page), "next" (Cmd+G), "previous"
+   * (Cmd+Shift+G) or "selection" (Cmd+E, find the selected text), with the
+   * page's selected text for the first and last.
+   *
+   * @returns {boolean} false if the UI doesn't listen for that, so Firefox's
+   *   own find bar should open instead.
+   */
+  requestFind(command) {
+    if (!this.listening.has("find.request")) {
+      return false;
+    }
+    let browser = this.gBrowser.selectedBrowser;
+    // After Cmd+F in the page, the page passes its keys on to Firefox's find
+    // bar until that says it has the focus (FindBarChild): say so for it.
+    try {
+      browser.sendMessageToActor(
+        "Findbar:UpdateState",
+        { findMode: 0, isOpenAndFocused: true, hasQuickFindTimeout: false },
+        "FindBar",
+        "all"
+      );
+    } catch (e) {
+      // A page without Firefox's find helper.
+    }
+    // Asking the page for its selection takes a moment; requests still reach
+    // the UI in the order they came.
+    let selected =
+      (command == "find" || command == "selection") && browser.isRemoteBrowser
+        ? Promise.resolve(browser.finder.getInitialSelection()).catch(() => null)
+        : null;
+    this.#findRequests = this.#findRequests
+      .then(() => selected)
+      .then(response =>
+        this.#emit("find.request", {
+          command,
+          selection: response?.selectedText ?? "",
+        })
+      );
+    return true;
   }
 
   /**

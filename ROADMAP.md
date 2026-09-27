@@ -73,6 +73,10 @@ get added as it needs them.
   autocomplete, through Firefox's own design tokens. And Firefox's
   notification bars (a blocked pop-up, a slow page) show over the top of the
   page again, which they didn't under Neeko before. Fallback: Firefox's look.
+- [x] **Find in page** (v0.13.0): find, next, previous, match count,
+  highlight all, close, with Firefox doing the finding; Cmd+F, Cmd+G,
+  Cmd+Shift+G, Cmd+E and / in a page go to a UI that listens. Fallback:
+  Firefox's find bar.
 - [x] **Firefox's menus, trimmed** (v0.12.0): `browser.json`'s `menus` keeps
   only the menu bar menus and items, and the context menu items, the app
   lists (in Neeko's names), with separators tidied; Cmd+, goes to a UI that
@@ -90,26 +94,24 @@ get added as it needs them.
 2. [ ] **Context menus.** The UI can draw its own menu for pages, links,
    images and selections, with Firefox's actions available. Fallback:
    Firefox's own context menu, trimmed to the app's `menus` (v0.12.0).
-3. [ ] **Find in page.** Find, next, previous, match count. Fallback:
-   Firefox's find bar.
-4. [ ] **Address bar suggestions.** History, bookmark and open-tab matches
+3. [ ] **Address bar suggestions.** History, bookmark and open-tab matches
     for what the user types, and search suggestions, fetched only when the
     UI asks (search suggestions send what you type to the search engine,
     which is why they're off in Firefox's hidden address bar).
-5. [ ] **History.** Search and list visits, delete entries.
-6. [ ] **Tab sleeping.** Unload a tab to save memory, and a `sleeping`
+4. [ ] **History.** Search and list visits, delete entries.
+5. [ ] **Tab sleeping.** Unload a tab to save memory, and a `sleeping`
     field on tabs. Needed for "a bajillion tabs".
-7. [ ] **Tab previews, by reference.** Thumbnails the UI shows without
+6. [ ] **Tab previews, by reference.** Thumbnails the UI shows without
     copying image data (the way tab icons work).
-8. [ ] **Extensions UI.** List extensions' toolbar buttons, show their
+7. [ ] **Extensions UI.** List extensions' toolbar buttons, show their
     badges and open their popups from the UI. Today: extensions work, but
     their buttons live in the hidden toolbar.
-9. [ ] **DevTools.** Open and close DevTools for the page, and the Browser
+8. [ ] **DevTools.** Open and close DevTools for the page, and the Browser
     Toolbox for the UI (dev builds already allow it).
-10. [ ] **Performance test with a budget.** Automated: hundreds of tabs,
+9. [ ] **Performance test with a budget.** Automated: hundreds of tabs,
     memory and tab-switch time, measured against stock Firefox, failing
     when Neeko gets slower.
-11. [ ] **"Trick" mode.** Run the UI as a sandboxed, unprivileged page that
+10. [ ] **"Trick" mode.** Run the UI as a sandboxed, unprivileged page that
     can only use the API. The API is already messages of plain data, so
     this swaps the channel, not the calls.
 
