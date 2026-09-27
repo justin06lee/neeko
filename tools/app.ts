@@ -14,6 +14,9 @@
  *   ui/           the browser's UI: index.html and everything it loads
  *   pages/        optional: the browser's own pages, <name>.html as
  *                 about:<name> (start.html is the New Tab and home page)
+ *
+ * browser.json can also give the browser's look for what Firefox still
+ * draws itself, its "theme" (see readTheme).
  *   branding/     optional: icon.png (and icon.svg), prefs.js, and any
  *                 Firefox branding file to replace, at the same path
  *
@@ -57,7 +60,36 @@ type App = {
   vendor: string;
   appId: string;
   version: string;
+  // browser.json's "theme", checked by readTheme.
+  theme: Theme | null;
 };
+
+// The colors of one color scheme (see readTheme).
+type Colors = Record<(typeof COLOR_NAMES)[number], string | undefined>;
+
+type Theme = {
+  font: { family: string; files: FontFile[] } | null;
+  radius: number;
+  dialogRadius: number;
+  buttonHeight: number;
+  light: Colors;
+  dark: Colors;
+};
+
+type FontFile = { file: string; weight: string; style: string; unicodeRange: string | null };
+
+// A theme's colors for each scheme: the first four are required.
+const COLOR_NAMES = [
+  "text",
+  "surface",
+  "primary",
+  "onPrimary",
+  "muted",
+  "line",
+  "field",
+  "backdrop",
+] as const;
+const REQUIRED_COLORS = 4;
 
 function fail(message: string): never {
   console.error(`neeko: ${message}`);
@@ -117,6 +149,129 @@ function readApp(dir: string): App {
       /^\d+\.\d+(\.\d+)?([-+][0-9A-Za-z.-]+)?$/,
       "a version such as 1.2.0"
     ),
+    theme: json.theme === undefined ? null : readTheme(dir, file, json.theme),
+  };
+}
+
+/**
+ * Reads and checks browser.json's optional "theme": the browser's look for
+ * what Firefox still draws itself (its dialogs, panels and bars), which
+ * Neeko maps onto Firefox's own styles (src/browser/neeko/neeko-theme*.css).
+ * Only these values, never CSS aimed at Firefox's elements:
+ *
+ *   "theme": {
+ *     "font": { "family": "Poppins", "files": [
+ *       { "file": "fonts/poppins-400.woff2", "weight": 400 }, ... ] },
+ *     "radius": 12,           panels, bars, buttons and fields (px; 8)
+ *     "dialogRadius": 16,     a page's dialogs (px; radius + 4 by default)
+ *     "buttonHeight": 36,     (px; 32, Firefox's, by default)
+ *     "light": { "text", "surface", "primary", "onPrimary",
+ *                "muted", "line", "field", "backdrop" },
+ *     "dark":  { ...the same }
+ *   }
+ *
+ * Colors are CSS colors; text, surface, primary (the main button) and
+ * onPrimary (its text) are required, the rest are made from them. Font files
+ * are paths in the app folder; without "files", the family must be
+ * installed. Every value is checked, so nothing but a value reaches the CSS.
+ */
+function readTheme(dir: string, file: string, theme: unknown): Theme {
+  let where = (key: string) => `${file}: "theme${key ? `.${key}` : ""}"`;
+  let object = (value: unknown, key: string) => {
+    if (!value || typeof value != "object" || Array.isArray(value)) {
+      fail(`${where(key)} must be an object`);
+    }
+    return value as Record<string, unknown>;
+  };
+  let known = (value: Record<string, unknown>, key: string, names: readonly string[]) => {
+    for (let name of Object.keys(value)) {
+      if (!names.includes(name)) {
+        fail(`${where(key)} has an unknown key "${name}" (known: ${names.join(", ")})`);
+      }
+    }
+  };
+  let pixels = (value: unknown, key: string, min: number, max: number) => {
+    if (typeof value != "number" || !Number.isFinite(value) || value < min || value > max) {
+      fail(`${where(key)} must be a number of pixels from ${min} to ${max}`);
+    }
+    return value;
+  };
+
+  let t = object(theme, "");
+  known(t, "", ["font", "radius", "dialogRadius", "buttonHeight", "light", "dark"]);
+
+  let colors = (scheme: "light" | "dark"): Colors => {
+    let c = object(t[scheme], scheme);
+    known(c, scheme, COLOR_NAMES);
+    let result = {} as Colors;
+    COLOR_NAMES.forEach((name, i) => {
+      let value = c[name];
+      if (value === undefined && i >= REQUIRED_COLORS) {
+        return;
+      }
+      // Hex, a named color or a color function of numbers: nothing that
+      // could end the declaration it goes in.
+      if (
+        typeof value != "string" ||
+        !/^(#[0-9a-fA-F]{3,8}|[a-zA-Z]{3,30}|[a-z]{3,6}\([0-9a-zA-Z.,%/ +-]{1,80}\))$/.test(value.trim())
+      ) {
+        fail(`${where(`${scheme}.${name}`)} must be a CSS color such as "#171717" or "rgba(0, 0, 0, 0.07)"`);
+      }
+      result[name] = value.trim();
+    });
+    return result;
+  };
+
+  let font: Theme["font"] = null;
+  if (t.font !== undefined) {
+    let f = object(t.font, "font");
+    known(f, "font", ["family", "files"]);
+    if (typeof f.family != "string" || !/^[A-Za-z0-9][A-Za-z0-9 _-]{0,63}$/.test(f.family)) {
+      fail(`${where("font.family")} must be a font's name: letters, digits, spaces, - and _`);
+    }
+    let files: FontFile[] = [];
+    if (f.files !== undefined) {
+      if (!Array.isArray(f.files) || !f.files.length) {
+        fail(`${where("font.files")} must be a list of { "file", "weight" }`);
+      }
+      f.files.forEach((entry, i) => {
+        let key = `font.files[${i}]`;
+        let e = object(entry, key);
+        known(e, key, ["file", "weight", "style", "unicodeRange"]);
+        if (
+          typeof e.file != "string" ||
+          !/^[\w.@+\/-]+\.(woff2|woff|ttf|otf)$/.test(e.file) ||
+          e.file.split("/").includes("..") ||
+          !existsSync(join(dir, e.file))
+        ) {
+          fail(`${where(`${key}.file`)} must be a .woff2, .woff, .ttf or .otf file in the app folder`);
+        }
+        let weight = e.weight ?? 400;
+        if (!Number.isInteger(weight) || (weight as number) < 1 || (weight as number) > 1000) {
+          fail(`${where(`${key}.weight`)} must be a font weight from 1 to 1000`);
+        }
+        let style = e.style ?? "normal";
+        if (style != "normal" && style != "italic") {
+          fail(`${where(`${key}.style`)} must be "normal" or "italic"`);
+        }
+        let range = e.unicodeRange ?? null;
+        if (range !== null && (typeof range != "string" || !/^[Uu]\+[0-9A-Fa-f?]+(-[0-9A-Fa-f]+)?(, *[Uu]\+[0-9A-Fa-f?]+(-[0-9A-Fa-f]+)?)*$/.test(range))) {
+          fail(`${where(`${key}.unicodeRange`)} must be a CSS unicode-range such as "U+0000-00FF, U+0131"`);
+        }
+        files.push({ file: e.file, weight: String(weight), style, unicodeRange: range });
+      });
+    }
+    font = { family: f.family, files };
+  }
+
+  let radius = t.radius === undefined ? 8 : pixels(t.radius, "radius", 0, 32);
+  return {
+    font,
+    radius,
+    dialogRadius: t.dialogRadius === undefined ? radius + 4 : pixels(t.dialogRadius, "dialogRadius", 0, 40),
+    buttonHeight: t.buttonHeight === undefined ? 32 : pixels(t.buttonHeight, "buttonHeight", 20, 64),
+    light: colors("light"),
+    dark: colors("dark"),
   };
 }
 
@@ -463,6 +618,81 @@ function writePages(app: App, out: string) {
 }
 
 /**
+ * The app's theme (browser.json's "theme", see readTheme) as CSS custom
+ * properties, --neeko-theme-*, with its font files, bundled at
+ * chrome://neeko-theme/content/. NeekoTheme finds it there and loads it,
+ * with Neeko's own sheets that map these values onto Firefox's styles, into
+ * browser windows and Firefox's dialogs. Each color is light-dark(), so it
+ * follows the color scheme wherever it's used.
+ */
+function writeTheme(app: App, out: string) {
+  let theme = app.theme;
+  if (!theme) {
+    return;
+  }
+  let dir = join(out, "theme");
+  mkdirSync(join(dir, "fonts"), { recursive: true });
+  let files = ["theme.css"];
+  let css = [
+    `/* Generated by Neeko's tools/app.ts from ${app.dir}/browser.json ("theme"). */`,
+    "",
+  ];
+  theme.font?.files.forEach((font, i) => {
+    let name = `fonts/${i}-${font.file.split("/").pop()}`;
+    cpSync(join(app.dir, font.file), join(dir, name));
+    files.push(name);
+    let format = { woff2: "woff2", woff: "woff", ttf: "truetype", otf: "opentype" }[
+      font.file.split(".").pop()!
+    ];
+    css.push(
+      "@font-face {",
+      `  font-family: "${theme.font!.family}";`,
+      `  font-weight: ${font.weight};`,
+      `  font-style: ${font.style};`,
+      `  src: url("${name}") format("${format}");`,
+      ...(font.unicodeRange ? [`  unicode-range: ${font.unicodeRange};`] : []),
+      "}",
+      ""
+    );
+  });
+  // The optional colors, made from the required ones.
+  let derived = (colors: Colors, scheme: "light" | "dark"): Colors => ({
+    ...colors,
+    muted: colors.muted ?? `color-mix(in srgb, ${colors.text} 60%, transparent)`,
+    line: colors.line ?? `color-mix(in srgb, ${colors.text} 12%, transparent)`,
+    field: colors.field ?? `color-mix(in srgb, ${colors.text} 5%, transparent)`,
+    backdrop: colors.backdrop ?? (scheme == "light" ? "rgba(0, 0, 0, 0.25)" : "rgba(0, 0, 0, 0.5)"),
+  });
+  let light = derived(theme.light, "light");
+  let dark = derived(theme.dark, "dark");
+  let kebab = (name: string) => name.replace(/[A-Z]/g, c => `-${c.toLowerCase()}`);
+  css.push(":root {");
+  for (let name of COLOR_NAMES) {
+    css.push(`  --neeko-theme-${kebab(name)}: light-dark(${light[name]}, ${dark[name]});`);
+  }
+  css.push(`  --neeko-theme-radius: ${theme.radius}px;`);
+  css.push(`  --neeko-theme-dialog-radius: ${theme.dialogRadius}px;`);
+  css.push(`  --neeko-theme-button-height: ${theme.buttonHeight}px;`);
+  // Without a font, the system's, which is what Firefox uses.
+  css.push(`  --neeko-theme-font: ${theme.font ? `"${theme.font.family}", ` : ""}system-ui, sans-serif;`);
+  css.push("}", "");
+  writeFileSync(join(dir, "theme.css"), css.join("\n"));
+  writeFileSync(
+    join(dir, "moz.build"),
+    "# Generated by Neeko's tools/app.ts: the app's theme, bundled at chrome://neeko-theme/content/.\n" +
+      'JAR_MANIFESTS += ["jar.mn"]\n'
+  );
+  writeFileSync(
+    join(dir, "jar.mn"),
+    "# Generated by Neeko's tools/app.ts from the app's browser.json.\n" +
+      "browser.jar:\n" +
+      "% content neeko-theme %content/neeko-theme/\n" +
+      files.map(path => `  content/neeko-theme/${path} (${path})\n`).join("")
+  );
+  addBuildDir(out, "theme");
+}
+
+/**
  * The app's version files and build options. configs/common/mozconfig reads
  * app.mozconfig, so the program is named after the app and the profile
  * folder is its own.
@@ -497,6 +727,7 @@ function writeBranding(app: App) {
     copyBrandingFiles(app, out);
     writeUI(app, out);
     writePages(app, out);
+    writeTheme(app, out);
     writeBuildSettings(app, out);
     sync(out, BRANDING);
   } finally {

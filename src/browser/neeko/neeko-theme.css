@@ -1,0 +1,119 @@
+/* The app's theme on what Firefox still draws in a browser window (loaded by
+   NeekoTheme, after the app's chrome://neeko-theme/content/theme.css, which
+   defines the --neeko-theme-* values from browser.json). Where Firefox has
+   design tokens for something, this sets those, on the surfaces the theme
+   covers only; it sets properties directly only where Firefox has none. */
+
+:root[neeko-theme] {
+  /* Firefox's panels: the prompts it shows itself (camera, passwords,
+     add-ons...), the downloads and bookmark panels, form autocomplete. */
+  & panel,
+  /* The bars over the page: a blocked pop-up, a slow script. */
+  & notification-message,
+  /* The find bar, at the bottom of the page. */
+  & findbar,
+  /* The frame around a page's dialogs. */
+  & .dialogBox {
+    --panel-background-color: var(--neeko-theme-surface);
+    --panel-text-color: var(--neeko-theme-text);
+    --panel-border-color: var(--neeko-theme-line);
+    --panel-border-radius: var(--neeko-theme-radius);
+    --popup-border-radius: var(--neeko-theme-radius);
+    --border-radius-large: var(--neeko-theme-radius);
+    --text-color: var(--neeko-theme-text);
+    --text-color-deemphasized: var(--neeko-theme-muted);
+    --background-color-canvas: var(--neeko-theme-surface);
+    --border-color: var(--neeko-theme-line);
+    --border-color-deemphasized: var(--neeko-theme-line);
+    --color-accent-primary: var(--neeko-theme-primary);
+    --color-accent-primary-hover: color-mix(in srgb, var(--neeko-theme-primary) 85%, var(--neeko-theme-surface));
+    --color-accent-primary-active: color-mix(in srgb, var(--neeko-theme-primary) 75%, var(--neeko-theme-surface));
+    --focus-outline-color: var(--neeko-theme-primary);
+    --link-color: var(--neeko-theme-text);
+    --link-color-hover: var(--neeko-theme-text);
+    --link-color-active: var(--neeko-theme-muted);
+
+    --button-border-radius: var(--neeko-theme-radius);
+    --button-min-height: var(--neeko-theme-button-height);
+    --button-background-color: var(--neeko-theme-field);
+    --button-background-color-hover: color-mix(in srgb, var(--neeko-theme-text) 8%, transparent);
+    --button-background-color-active: color-mix(in srgb, var(--neeko-theme-text) 12%, transparent);
+    --button-border-color: var(--neeko-theme-line);
+    --button-border-color-hover: var(--neeko-theme-line);
+    --button-border-color-active: var(--neeko-theme-line);
+    --button-text-color: var(--neeko-theme-text);
+    --button-text-color-hover: var(--neeko-theme-text);
+    --button-text-color-active: var(--neeko-theme-text);
+    --button-background-color-primary: var(--neeko-theme-primary);
+    --button-background-color-primary-hover: color-mix(in srgb, var(--neeko-theme-primary) 85%, var(--neeko-theme-surface));
+    --button-background-color-primary-active: color-mix(in srgb, var(--neeko-theme-primary) 75%, var(--neeko-theme-surface));
+    --button-border-color-primary: transparent;
+    --button-border-color-primary-hover: transparent;
+    --button-border-color-primary-active: transparent;
+    --button-text-color-primary: var(--neeko-theme-on-primary);
+    --button-text-color-primary-hover: var(--neeko-theme-on-primary);
+    --button-text-color-primary-active: var(--neeko-theme-on-primary);
+
+    font-family: var(--neeko-theme-font);
+  }
+
+  /* The bars over the page. Firefox's stripe along their left edge is its
+     own brand gradient, not a token: the theme has none. */
+  & notification-message {
+    --info-bar-background-color: var(--neeko-theme-surface);
+    --info-bar-text-color: var(--neeko-theme-text);
+    --message-bar-background-color: var(--neeko-theme-surface);
+    --message-bar-text-color: var(--neeko-theme-text);
+    --message-bar-border-color: var(--neeko-theme-line);
+    --message-bar-border-radius: var(--neeko-theme-radius);
+    --message-bar-icon-color: var(--neeko-theme-muted);
+    --message-bar-icon-background-color: transparent;
+
+    &::before {
+      display: none;
+    }
+  }
+
+  /* The find bar, along the bottom of the page. */
+  & findbar {
+    --toolbar-field-background-color: var(--neeko-theme-field);
+    --toolbar-field-background-color-focus: var(--neeko-theme-field);
+    --toolbar-field-text-color: var(--neeko-theme-text);
+    --toolbar-field-text-color-focus: var(--neeko-theme-text);
+    --toolbar-field-border-color-focus: var(--neeko-theme-primary);
+    --input-border-color: var(--neeko-theme-line);
+    --border-color-interactive: var(--neeko-theme-line);
+    --border-radius-small: var(--neeko-theme-radius);
+    --border-radius-xlarge: var(--neeko-theme-radius);
+    --toolbarbutton-icon-fill: var(--neeko-theme-text);
+    --toolbarbutton-hover-background: var(--neeko-theme-field);
+    --toolbarbutton-active-background: var(--neeko-theme-line);
+    background-color: var(--neeko-theme-surface);
+    border-top-color: var(--neeko-theme-line);
+    color: var(--neeko-theme-text);
+
+    & .findbar-textbox:focus {
+      box-shadow: none;
+    }
+  }
+
+  /* A page's dialogs: the frame and the dimmed page behind it. The inside is
+     its own document (neeko-theme-dialog.css). */
+  & .dialogBox {
+    --card-border-color: var(--neeko-theme-line);
+    --border-radius-medium: var(--neeko-theme-dialog-radius);
+    background-color: var(--neeko-theme-surface);
+  }
+
+  & .dialogOverlay {
+    --background-color-overlay: var(--neeko-theme-backdrop);
+  }
+
+  /* The link status bubble at the bottom of the page. */
+  & #statuspanel-label {
+    background-color: var(--neeko-theme-surface);
+    border-color: var(--neeko-theme-line);
+    color: var(--neeko-theme-muted);
+    font-family: var(--neeko-theme-font);
+  }
+}

@@ -92,6 +92,7 @@ browser again.
 | `vendor` | Who makes it, as users see it. Firefox's build fixes the internal vendor to "Mozilla" (it's only settable by patching Firefox's configure), which only affects profile paths on Windows and Linux, where the name already keeps them apart from Firefox's. |
 | `appId` | A reverse-DNS id, used as the macOS bundle id. |
 | `version` | The browser's own version, shown in its About window. Firefox's version (`Services.appinfo.version`) stays the Firefox release, because add-on updates, Remote Settings and website compatibility checks compare against it. |
+| `theme` | Optional. Your browser's look (a font, a few colors, corner radii) for what Firefox still draws itself: a page's dialogs, Firefox's panels and bars, the find bar. See [the API docs](api.md#firefoxs-own-ui-in-your-look). |
 
 ## branding/
 
@@ -121,8 +122,9 @@ Surfer and Firefox's build need. Firefox's own files stay untouched.
    `engine/browser/branding/release/` and selected with `--with-branding`. It
    starts as a copy of Firefox's unofficial branding, then gets the app's
    names (`configure.sh`, `brand.ftl`, `brand.properties`), its prefs
-   appended to `firefox-branding.js`, its icons, its version files, and its
-   UI.
+   appended to `firefox-branding.js`, its icons, its version files, its UI,
+   and its theme (`browser.json`'s `theme` as CSS values, with its font
+   files, at `chrome://neeko-theme/content/`).
 3. **The UI goes inside the app.** The app's `ui/` folder is bundled into
    Firefox's `browser.jar` at `chrome://neeko-ui/content/`. Neeko uses it
    whenever the `neeko.ui.path` pref is empty, which is how packaged

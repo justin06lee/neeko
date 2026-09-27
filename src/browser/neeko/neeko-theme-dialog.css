@@ -1,0 +1,64 @@
+/* The app's theme inside Firefox's dialogs: a page's alert(), confirm() and
+   prompt(), leave-page and sign-in prompts (commonDialog.xhtml, a document
+   of its own inside the frame neeko-theme.css styles). Loaded by NeekoTheme
+   after the app's chrome://neeko-theme/content/theme.css. */
+
+:root[neeko-theme] {
+  --text-color: var(--neeko-theme-text);
+  --text-color-deemphasized: var(--neeko-theme-muted);
+  --background-color-canvas: var(--neeko-theme-surface);
+  --color-accent-primary: var(--neeko-theme-primary);
+  --color-accent-primary-hover: color-mix(in srgb, var(--neeko-theme-primary) 85%, var(--neeko-theme-surface));
+  --color-accent-primary-active: color-mix(in srgb, var(--neeko-theme-primary) 75%, var(--neeko-theme-surface));
+  --focus-outline-color: var(--neeko-theme-primary);
+  background-color: var(--neeko-theme-surface);
+  color: var(--neeko-theme-text);
+  font-family: var(--neeko-theme-font);
+
+  /* Its buttons, which are inside the dialog's shadow root, read these. */
+  & dialog {
+    --button-border-radius: var(--neeko-theme-radius);
+    --button-min-height: var(--neeko-theme-button-height);
+    --button-background-color: var(--neeko-theme-field);
+    --button-background-color-hover: color-mix(in srgb, var(--neeko-theme-text) 8%, transparent);
+    --button-background-color-active: color-mix(in srgb, var(--neeko-theme-text) 12%, transparent);
+    --button-border-color: var(--neeko-theme-line);
+    --button-border-color-hover: var(--neeko-theme-line);
+    --button-border-color-active: var(--neeko-theme-line);
+    --button-text-color: var(--neeko-theme-text);
+    --button-text-color-hover: var(--neeko-theme-text);
+    --button-text-color-active: var(--neeko-theme-text);
+    --button-background-color-primary: var(--neeko-theme-primary);
+    --button-background-color-primary-hover: color-mix(in srgb, var(--neeko-theme-primary) 85%, var(--neeko-theme-surface));
+    --button-background-color-primary-active: color-mix(in srgb, var(--neeko-theme-primary) 75%, var(--neeko-theme-surface));
+    --button-border-color-primary: transparent;
+    --button-border-color-primary-hover: transparent;
+    --button-border-color-primary-active: transparent;
+    --button-text-color-primary: var(--neeko-theme-on-primary);
+    --button-text-color-primary-hover: var(--neeko-theme-on-primary);
+    --button-text-color-primary-active: var(--neeko-theme-on-primary);
+    background: transparent;
+    font-family: inherit;
+  }
+
+  & dialog::part(dialog-button) {
+    font-family: inherit;
+  }
+
+  /* Its text fields: a sign-in prompt's name and password, prompt()'s. */
+  & input:is([type="text"], [type="password"]) {
+    appearance: none;
+    padding-inline: 10px;
+    min-height: var(--neeko-theme-button-height);
+    border: 1px solid var(--neeko-theme-line);
+    border-radius: var(--neeko-theme-radius);
+    background-color: var(--neeko-theme-field);
+    color: inherit;
+    font: inherit;
+
+    &:focus-visible {
+      outline: 2px solid var(--neeko-theme-primary);
+      outline-offset: -1px;
+    }
+  }
+}

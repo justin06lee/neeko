@@ -163,7 +163,8 @@ Add to it whenever something costs you time.
   (`nsSubDocumentFrame` adds its own event-receiving background item), so a
   UI raised above the page can't let clicks through where it's
   transparent. Only `pointer-events: none` on the frame does, for all of it.
-  So for `data-neeko-overlay`, NeekoWindow raises the UI frame (z-index 3)
+  So for `data-neeko-overlay`, NeekoWindow raises the UI frame (z-index 4,
+  above the notification bars' 3)
   and gives it a `clip-path`: the whole window, minus the page (a path with
   its rounded corners, wound the other way), plus each overlay's box and
   shadow. `clip-path` clips hit-testing as well as painting, and the wheel
@@ -220,6 +221,20 @@ Add to it whenever something costs you time.
   - After Firefox updates, check `#notification-popup` is still
     `PopupNotifications`' panel (`browser.js`); `tools/test_api.js` checks
     a real location prompt.
+- **Firefox's notification bars live in its toolbox** (Firefox 156): the
+  global ones and each tab's (a blocked pop-up, a slow page) are in
+  `#notifications-toolbar`, the tabs' in its `#tab-notification-deck`
+  (`Tabbrowser.getNotificationBox`). Hiding the whole toolbox hid them, so
+  until v0.11.0 nobody under Neeko ever saw a blocked pop-up. `neeko.css`
+  now hides the toolbox's other children and shows it over the top of the
+  page, with `--neeko-page-*` from `NeekoWindow` (CSS anchor positioning
+  can't: the toolbox comes before the page in the document), and a
+  ResizeObserver pads the page down by the bars' height. Bars added while a
+  page is still loading vanish when its address changes (Firefox removes
+  them on navigation), which caught out the first version of the test.
+- **Firefox pulls tab-modal dialogs 5px up** to overlap its toolbar
+  (`content-area.css`, `margin-top: -5px`); the page area's `overflow: clip`
+  cut their top edge off, so `neeko.css` hangs them 8px inside the page.
 - **Web page fullscreen** sets `inDOMFullscreen` on the window's root and
   makes the window fullscreen, but Firefox's own layout is what makes the
   page fill it. Neeko's page area keeps the inline position and size
@@ -409,6 +424,22 @@ Add to it whenever something costs you time.
   - The tab strip's `insertBefore(tab, node)` is `node.before(tab)`, so
     `moveTabTo` to a position among a group's tabs puts the tab in the
     group, as dragging does.
+- **The theme goes where Firefox's own values do.** Design tokens set on
+  an element from the document win over a shadow root's `:host` rules for
+  them, so `notification-message` (its `--info-bar-*` and `--message-bar-*`)
+  and the dialog's buttons (on `<dialog>`, read inside its shadow root) take
+  the theme from outside. Some Firefox rules set a token with an id
+  (`#PopupAutoComplete { --panel-border-radius: var(--popup-border-radius) }`),
+  which outranks Neeko's: set the token it reads instead. Where Firefox
+  styles properties directly (the find bar's and the status bubble's
+  colors, the infobar's gradient stripe), Neeko overrides those.
+  - `font-family: var(--x)` with `--x` undefined is invalid at computed-value
+    time, which for an inherited property means `unset`: inherit, but on a
+    root element that's the initial value, a serif font. The theme always
+    defines its font (the system's by default).
+  - Firefox's dialogs (`commonDialog.xhtml`) are documents of their own in a
+    `<browser>` in the window: `NeekoTheme` catches them at
+    `document-element-inserted` and loads its sheets there.
 - **The app's pages (`about:<name>`) need registering in every process.**
   Pages with `URI_MUST_LOAD_IN_CHILD` load in a content process, which
   resolves the `about:` address itself, so a dynamically registered
@@ -539,6 +570,15 @@ Add to it whenever something costs you time.
   "asked without a click" treatment (a dismissed post-prompt).
   `dom.webnotifications.requireuserinteraction` false lifts that for
   testing.
+- **Marionette's `WebDriver:NewSession` takes the capabilities as its bare
+  parameters** (geckodriver merges `alwaysMatch` before sending), so
+  `{ "unhandledPromptBehavior": "ignore" }`, not wrapped in `capabilities`.
+  Without it, any command sent while a page's `alert()` is open dismisses
+  it and fails.
+- **The privacy test counts every process from the app's folder**
+  (`pgrep -f` on its path), so another run of the same build meanwhile (a
+  dev session, a manual check) shows up as direct connections. Run nothing
+  else from that build during the privacy test.
 - **Marionette:** launch with `-marionette -remote-allow-system-access` and use
   `tools/marionette.py` to run JavaScript in the browser window or synthesize
   clicks.

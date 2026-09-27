@@ -29,7 +29,8 @@ From what a browser's developer writes, down to Firefox itself:
 A browser built on Neeko is a folder with three things, and a fourth if it
 wants:
 
-- `browser.json`: its name, vendor, app id and version.
+- `browser.json`: its name, vendor, app id and version, and optionally its
+  look for what Firefox still draws (`theme`).
 - `ui/`: its interface, an ordinary web page (`index.html` and whatever it
   loads).
 - `branding/`: its icon, its own default prefs, and any Firefox branding
@@ -74,7 +75,8 @@ official startup hooks (`Neeko.manifest`):
   drawn. It hides Firefox's toolbars and sidebar (`neeko.css`), mounts the
   UI frame, keeps the page area over the UI's content slot (or over the
   whole screen while a page is fullscreen) and the UI's overlays over the
-  page, gives the UI page its API, and
+  page, shows Firefox's notification bars across the top of the page, gives
+  the UI page its API, and
   sends Cmd+L to the UI's address bar (or shows Firefox's own if the UI has
   none). Pop-up windows keep Firefox's minimal UI.
 - **`NeekoPanels.sys.mjs`** gives Firefox's own panels (permission prompts,
@@ -96,6 +98,11 @@ official startup hooks (`Neeko.manifest`):
   `NeekoPageParent`) gives them `neekoPage`, checking every call. This is
   the one place web content gets an API (the user's decision, with those
   locks).
+- **`NeekoTheme.sys.mjs`** puts the app's look (`browser.json`'s `theme`,
+  bundled as CSS values) on what Firefox still draws: a page's dialogs, its
+  panels and bars, the find bar. Neeko's `neeko-theme.css` and
+  `neeko-theme-dialog.css` map the values onto Firefox's own styles, so apps
+  never style Firefox's elements.
 - **`NeekoSettings.sys.mjs`** keeps the UI's settings (prefs named
   `neeko.settings.*`, shared by every window) and the color scheme
   (Firefox's `ui.systemUsesDarkTheme`). The UI gets both with `neeko`,

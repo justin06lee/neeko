@@ -67,6 +67,12 @@ get added as it needs them.
   tabs, instead of Firefox's about:privatebrowsing, and `neekoPage.private`
   tells the page. Fallback: Firefox's private browsing page, for apps
   without a start page.
+- [x] **Firefox's own UI in the browser's look** (v0.11.0): `browser.json`'s
+  `theme` (a font, colors for light and dark, radii) on a page's dialogs,
+  Firefox's panels and bars, the find bar, the link status bubble and form
+  autocomplete, through Firefox's own design tokens. And Firefox's
+  notification bars (a blocked pop-up, a slow page) show over the top of the
+  page again, which they didn't under Neeko before. Fallback: Firefox's look.
 
 ## API features, in order
 

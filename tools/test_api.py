@@ -114,6 +114,8 @@ PAGES = {
     "navigator.geolocation.getCurrentPosition("
     "() => document.title = 'allowed', e => document.title = 'error ' + e.code)"
     "</script>",
+    # A page's dialog, which the app's theme styles.
+    "/alert": "<title>alert</title><script>setTimeout(() => alert('A test'), 100)</script>",
     # Goes fullscreen as soon as it loads (the test allows it without a click).
     "/fullscreen": "<title>fullscreen</title><script>"
     "onload = () => document.documentElement.requestFullscreen()</script>",

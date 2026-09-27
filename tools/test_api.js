@@ -631,6 +631,74 @@ await waitFor(
 DownloadsPanel.hidePanel();
 await neeko.tabs.close(promptTab.id);
 
+// Firefox's notification bars (a blocked pop-up, a slow page) show across
+// the top of the page, which moves down to make room, as in Firefox.
+let barTab = await neeko.tabs.open(`${BASE}/one`);
+// Firefox removes bars like this one when the page's address changes.
+await waitFor(() => updated(barTab.id, t => t.title == "Page one" && !t.loading), "a page for a bar");
+let pageTop = () => gBrowser.selectedBrowser.getBoundingClientRect().top;
+let topBefore = pageTop();
+let bars = gBrowser.getNotificationBox(gBrowser.selectedBrowser);
+let bar = await bars.appendNotification("neeko-test", {
+  label: "A test bar",
+  priority: bars.PRIORITY_INFO_MEDIUM,
+});
+await waitFor(
+  () => bar.checkVisibility() && pageTop() > topBefore,
+  "a notification bar shows, and the page moves down for it"
+);
+let barRect = bar.getBoundingClientRect();
+let pageRect = gBrowser.tabbox.getBoundingClientRect();
+check(
+  barRect.top >= pageRect.top &&
+    barRect.left >= pageRect.left &&
+    barRect.right <= pageRect.right &&
+    barRect.bottom <= pageTop(),
+  `across the top of the page, above it (bar ${Math.round(barRect.top)}-${Math.round(barRect.bottom)}, page from ${Math.round(pageTop())})`
+);
+bars.removeNotification(bar);
+await waitFor(() => pageTop() == topBefore, "and the page moves back up once it's gone");
+await neeko.tabs.close(barTab.id);
+
+// The app's theme (browser.json's, here the demo app's) on what Firefox
+// still draws: its panels, bars and find bar get the theme's values through
+// Firefox's own tokens, and a page's dialogs get it inside too.
+let themeValue = (element, name) =>
+  element.ownerDocument.defaultView.getComputedStyle(element).getPropertyValue(name).trim();
+let surface = themeValue(document.documentElement, "--neeko-theme-surface");
+check(
+  document.documentElement.hasAttribute("neeko-theme") && surface.length > 0,
+  `the window has the app's theme (surface ${surface})`
+);
+check(
+  themeValue(PopupNotifications.panel, "--panel-background-color") == surface &&
+    themeValue(PopupNotifications.panel, "--button-background-color-primary") ==
+      themeValue(document.documentElement, "--neeko-theme-primary"),
+  "Firefox's panels and their buttons take its colors"
+);
+let alertTab = await neeko.tabs.open(`${BASE}/alert`);
+let alertFrame = await waitFor(
+  () =>
+    [...document.querySelectorAll(".dialogFrame")].find(f =>
+      f.contentDocument?.documentURI.startsWith("chrome://global/content/commonDialog.xhtml")
+    )?.contentDocument?.readyState == "complete" &&
+    [...document.querySelectorAll(".dialogFrame")].find(f =>
+      f.contentDocument?.documentURI.startsWith("chrome://global/content/commonDialog.xhtml")
+    ),
+  "a page's alert()"
+);
+if (alertFrame) {
+  let dialogDoc = alertFrame.contentDocument;
+  let dialogBg = alertFrame.contentWindow.getComputedStyle(dialogDoc.documentElement).backgroundColor;
+  let boxBg = getComputedStyle(alertFrame.closest(".dialogBox")).backgroundColor;
+  check(
+    dialogDoc.documentElement.hasAttribute("neeko-theme") && dialogBg == boxBg,
+    `it has the theme inside and around it (${dialogBg}, ${boxBg})`
+  );
+  dialogDoc.querySelector("dialog").getButton("accept").click();
+}
+await neeko.tabs.close(alertTab.id);
+
 // Permission prompts. A UI that listens for "open" shows them itself, and
 // Firefox's own panel stays closed.
 let prompts = [];
