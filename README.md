@@ -102,7 +102,8 @@ browsers use.
   switch, move, duplicate, mute and group tabs (with their icons), navigate, answer
   sites' permission requests, lay out fullscreen, follow and manage
   downloads, read and edit bookmarks, keep your UI's settings for every
-  window, make pages light or dark, find in the page, hear when the pointer reaches the
+  window, make pages light or dark, find in the page, show the link the
+  pointer is over, hear when the pointer reaches the
   page's edges, and hear about every change.
 - What Firefox still draws itself (a page's dialogs, its panels and bars)
   can take your browser's look: a `theme` in `browser.json`. Its menus

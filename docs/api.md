@@ -6,7 +6,7 @@ else. Web pages never get it.
 
 So far it covers tabs and tab groups, navigation, permission prompts, fullscreen,
 downloads, bookmarks, your UI's settings and the color scheme, find in page,
-drawing over the page, the pointer at the page's edges, and your browser's own pages
+links and loading status, drawing over the page, the pointer at the page's edges, and your browser's own pages
 (which get a small API of their own, `neekoPage`). And Firefox's own UI,
 where it still shows, can take your browser's look (see
 [Firefox's own UI, in your look](#firefoxs-own-ui-in-your-look)). Features get
@@ -554,6 +554,35 @@ from what that tab last found. A tab that's asleep can't be searched.
 | --- | --- | --- |
 | `request` | `{ command, selection }` | The user wants to find in the page. `command` is `"find"` (Cmd+F, Edit > Find, or / or ' typed in a page), `"next"` (Cmd+G), `"previous"` (Cmd+Shift+G) or `"selection"` (Cmd+E: find the selected text). `selection` is the text selected in the page, for `find` and `selection`, to start with, as Firefox's find bar does; `""` if none. Listening for this is how your UI says it finds in pages itself. |
 
+## Links and loading status
+
+What Firefox shows in its status bubble at the bottom of the page: the
+link the pointer is over, and while a page loads, what it's waiting for.
+Listen, and your UI shows them however it likes; Firefox's bubble stops
+showing that kind.
+
+```js
+neeko.status.on("link", ({ url, text }) => {
+  bubble.textContent = text;         // "example.com/some/page"
+  bubble.hidden = !url;
+});
+neeko.status.on("message", ({ tabId, message }) => {
+  if (tabId == current.id) loading.textContent = message;
+});
+```
+
+| Event | Data | When |
+| --- | --- | --- |
+| `link` | `{ url, text }` | The pointer went onto a link, or off it (`url` and `text` are `""`). `url` is the link as the page has it; `text` is how Firefox shows it: decoded, trimmed as its address bar trims addresses (the scheme, per Firefox's settings, and a lone trailing `/`), and bidirectional control characters escaped, so a link can't disguise where it goes. Show `text`. Listening for this hides Firefox's bubble for links. |
+| `message` | `{ tabId, message }` | A tab's loading status changed: `"Waiting for example.com…"`, `"Transferring data from example.com…"`, and `""` once it's done. Every tab's come, so show the selected tab's. Listening for this hides Firefox's bubble for them. |
+
+The events come as they happen; Firefox's bubble waits a moment
+(`browser.overlink-delay`, 80ms) before showing a link, and a quarter of a
+second before hiding it, so it doesn't flicker as the pointer crosses a
+page.
+
+`neeko.status.on(event, listener)` listens, as `tabs.on` does.
+
 ## The browser's own pages
 
 Pages of your browser's own, shown in tabs like web pages: a start page,
@@ -820,6 +849,9 @@ even where its UI has no controls yet.
   window, with every bookmark.
 - **Drawing over the page.** Without elements marked `data-neeko-overlay`,
   the page stays on top of your UI everywhere in its slot.
+- **The status bubble.** Without `status` listeners, Firefox's bubble at
+  the bottom left of the page shows the link the pointer is over and what
+  a loading page waits for, in your `theme` if you have one.
 - **Find in page.** If your UI doesn't listen for `find` `request`, Cmd+F
   (and / in a page) opens Firefox's find bar along the bottom of the page,
   in your `theme` if you have one.

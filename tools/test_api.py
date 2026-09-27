@@ -158,6 +158,8 @@ DOWNLOAD = "/download"
 SLOW_DOWNLOAD = "/download-slow"
 SLOW_SIZE = 300_000
 BROKEN_DOWNLOAD = "/download-broken"
+# A page that takes a moment to answer.
+SLOW_PAGE = "/slow-page"
 
 
 class Pages(http.server.BaseHTTPRequestHandler):
@@ -195,6 +197,16 @@ class Pages(http.server.BaseHTTPRequestHandler):
                 socket.SOL_SOCKET, socket.SO_LINGER, struct.pack("ii", 1, 0)
             )
             self.connection.close()
+            return
+        if self.path == SLOW_PAGE:
+            # Long enough for Firefox to say it's waiting for the site.
+            time.sleep(1.5)
+            body = b"<title>slow</title>A slow page"
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
             return
         if self.path == SVG_FAVICON:
             self.send_response(200)

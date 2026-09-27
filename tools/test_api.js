@@ -1387,6 +1387,53 @@ await waitFor(
 gBrowser.getCachedFindBar().close(true);
 await neeko.tabs.close(findTab.id);
 
+// The link the pointer is over, and loading pages' status messages: a UI
+// that listens shows them itself, and Firefox's status bubble doesn't.
+let statusEvents = [];
+let stopLink = neeko.status.on("link", data => statusEvents.push({ type: "link", ...data }));
+let stopMessage = neeko.status.on("message", data => statusEvents.push({ type: "message", ...data }));
+let hoverTab = await neeko.tabs.open(`${BASE}/link`);
+await waitFor(() => updated(hoverTab.id, t => t.title == "link" && !t.loading), "a page with a link to point at");
+let hoverRect = gBrowser.selectedBrowser.getBoundingClientRect();
+let statusBubble = document.getElementById("statuspanel");
+synthesizeMouseEvent("mousemove", hoverRect.left + 30, hoverRect.top + 30, {});
+let linkEvent = await waitFor(
+  () => statusEvents.find(e => e.type == "link" && e.url == `${BASE}/one`),
+  "the link the pointer is over reaches the UI"
+);
+check(linkEvent?.text.endsWith("/one"), `with Firefox's text for it (${linkEvent?.text})`);
+// Past Firefox's delay before its bubble shows (browser.overlink-delay).
+await new Promise(r => setTimeout(r, 400));
+check(getComputedStyle(statusBubble).visibility == "hidden", "and Firefox's status bubble stays hidden");
+synthesizeMouseEvent("mousemove", hoverRect.left + 400, hoverRect.top + 300, {});
+await waitFor(
+  () => statusEvents.at(-1)?.type == "link" && statusEvents.at(-1).url == "",
+  "off the link, the UI hears it's gone"
+);
+await neeko.nav.go(`${BASE}/slow-page`);
+let loadingMessage = await waitFor(
+  () => statusEvents.find(e => e.type == "message" && e.tabId == hoverTab.id && e.message),
+  "a loading page's status message reaches the UI"
+);
+await waitFor(
+  () => statusEvents.findLast(e => e.type == "message" && e.tabId == hoverTab.id)?.message === "",
+  `and goes once it's loaded (it said "${loadingMessage?.message}")`
+);
+stopLink();
+stopMessage();
+await neeko.nav.go(`${BASE}/link`);
+await waitFor(() => updated(hoverTab.id, t => t.title == "link" && !t.loading), "the page with the link again");
+synthesizeMouseEvent("mousemove", hoverRect.left + 30, hoverRect.top + 30, {});
+await waitFor(
+  () =>
+    statusBubble.getAttribute("type") == "overLink" &&
+    !statusBubble.hasAttribute("inactive") &&
+    getComputedStyle(statusBubble).visibility == "visible",
+  "without a listener, Firefox's status bubble shows the link"
+);
+synthesizeMouseEvent("mousemove", hoverRect.left + 400, hoverRect.top + 300, {});
+await neeko.tabs.close(hoverTab.id);
+
 // Neeko sends only the events the UI listens for.
 let heardSelect = 0;
 let stopSelect = neeko.tabs.on("select", () => heardSelect++);
