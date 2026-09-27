@@ -217,6 +217,7 @@ const EVENTS = [
   "downloads.update",
   "downloads.remove",
   "settings.change",
+  "settings.request",
   "colorScheme.change",
   "bookmarks.add",
   "bookmarks.remove",
@@ -960,6 +961,21 @@ export class NeekoAPI {
     }
     this.#edge = { edge, outside };
     this.#emit("pointer.edge", { edge, outside });
+  }
+
+  /**
+   * Tells the UI that the user wants the browser's settings (Cmd+, or
+   * Settings... in the app menu), if it has settings of its own.
+   *
+   * @returns {boolean} false if the UI doesn't listen for that, so Firefox's
+   *   own settings should open instead.
+   */
+  requestSettings() {
+    if (!this.listening.has("settings.request")) {
+      return false;
+    }
+    this.#emit("settings.request", {});
+    return true;
   }
 
   /**

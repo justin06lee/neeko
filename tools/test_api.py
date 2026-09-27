@@ -114,6 +114,8 @@ PAGES = {
     "navigator.geolocation.getCurrentPosition("
     "() => document.title = 'allowed', e => document.title = 'error ' + e.code)"
     "</script>",
+    # A link, for the context menu.
+    "/link": "<title>link</title><a href='/one' style='font-size: 40px'>A link</a>",
     # A page's dialog, which the app's theme styles.
     "/alert": "<title>alert</title><script>setTimeout(() => alert('A test'), 100)</script>",
     # Goes fullscreen as soon as it loads (the test allows it without a click).
@@ -295,6 +297,14 @@ return results;
 """
 
 
+# The menus the test app keeps (browser.json's "menus", as tools/app.ts
+# writes them into the neeko.menus pref).
+TEST_MENUS = {
+    "menubar": {"file": ["newTab", "closeTab"], "edit": True, "window": True},
+    "context": ["back", "forward", "reload", "stop", "openLinkInTab", "copyLink", "copy"],
+}
+
+
 # Firefox's defaults, back. User prefs win over Marionette's "recommended
 # prefs", which stop the downloads panel from opening by itself and turn off
 # the delay before a prompt's buttons work.
@@ -394,7 +404,12 @@ def main():
             script = script.replace("__SLOW_SIZE__", str(SLOW_SIZE))
             script = script.replace("__CLOSED__", f"http://127.0.0.1:{free_port()}")
         with LeaveNoTrace(app):
-            prefs = {"neeko.ui.path": "TEST_UI", "neeko.pages.path": "TEST_PAGES", **FIREFOX_PREFS}
+            prefs = {
+                "neeko.ui.path": "TEST_UI",
+                "neeko.pages.path": "TEST_PAGES",
+                "neeko.menus": json.dumps(TEST_MENUS),
+                **FIREFOX_PREFS,
+            }
             results = run_in(binary, prefs, script, timeout=300000)
             # A dev build's content processes need to read Neeko's own files,
             # which it links to in src/ (see make run); packaged ones don't.

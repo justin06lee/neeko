@@ -638,6 +638,9 @@ function showMenu(show) {
 }
 
 menuButton.addEventListener("click", () => showMenu(menu.hidden));
+// Cmd+, (Settings... in the app menu): this UI's settings are in the ⋯ menu.
+// Listening also tells Neeko not to open Firefox's own settings.
+neeko.settings.on("request", () => showMenu(true));
 menu.addEventListener("click", event => {
   let button = event.target.closest("button");
   let command = button?.dataset.command;

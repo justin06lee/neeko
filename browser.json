@@ -24,5 +24,31 @@
       "primary": "#4a7dff",
       "onPrimary": "#ffffff"
     }
+  },
+  "menus": {
+    "menubar": {
+      "file": [
+        "newTab", "newWindow", "newPrivateWindow", "openFile", "closeTab",
+        "closeWindow", "savePage", "print"
+      ],
+      "edit": true,
+      "view": ["zoom", "fullScreen"],
+      "history": true,
+      "bookmarks": true,
+      "window": true,
+      "help": ["troubleshootingInfo"]
+    },
+    "context": [
+      "back", "forward", "reload", "stop", "bookmarkPage", "savePage",
+      "selectAll", "openLinkInTab", "openLinkInWindow",
+      "openLinkInPrivateWindow", "bookmarkLink", "saveLink", "copyLink",
+      "copyEmail", "copyPhone", "openImage", "saveImage", "copyImage",
+      "copyImageLink", "play", "pause", "mute", "unmute", "loop", "fullScreen",
+      "controls", "pictureInPicture", "saveVideo", "saveAudio",
+      "copyVideoLink", "copyAudioLink", "undo", "redo", "cut", "copy", "paste",
+      "delete", "revealPassword", "searchSelection", "printSelection",
+      "spelling", "passwords", "pdf", "frame", "viewSourceCommands",
+      "viewSource", "inspect", "extensions"
+    ]
   }
 }

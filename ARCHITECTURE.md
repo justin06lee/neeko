@@ -30,7 +30,8 @@ A browser built on Neeko is a folder with three things, and a fourth if it
 wants:
 
 - `browser.json`: its name, vendor, app id and version, and optionally its
-  look for what Firefox still draws (`theme`).
+  look for what Firefox still draws (`theme`) and which of Firefox's menus
+  to keep (`menus`).
 - `ui/`: its interface, an ordinary web page (`index.html` and whatever it
   loads).
 - `branding/`: its icon, its own default prefs, and any Firefox branding
@@ -103,6 +104,9 @@ official startup hooks (`Neeko.manifest`):
   panels and bars, the find bar. Neeko's `neeko-theme.css` and
   `neeko-theme-dialog.css` map the values onto Firefox's own styles, so apps
   never style Firefox's elements.
+- **`NeekoMenus.sys.mjs`** trims Firefox's menu bar and context menu to
+  what the app keeps (`browser.json`'s `menus`), in Neeko's names for them
+  (`NeekoMenuNames.sys.mjs`, which the build reads too).
 - **`NeekoSettings.sys.mjs`** keeps the UI's settings (prefs named
   `neeko.settings.*`, shared by every window) and the color scheme
   (Firefox's `ui.systemUsesDarkTheme`). The UI gets both with `neeko`,
@@ -172,6 +176,7 @@ and sends events, but only the ones the UI listens for.
 - No `downloads` `start` listener: Firefox's downloads panel opens when a
   download starts.
 - No `bookmarks` `request` listener: Cmd+D opens Firefox's bookmark panel.
+- No `settings` `request` listener: Cmd+, opens Firefox's settings.
 
 Every future feature with a Firefox fallback (context menus, find in page)
 works the same way. Until then, Firefox's own versions of those already

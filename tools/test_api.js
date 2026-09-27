@@ -1256,6 +1256,83 @@ for (let bookmark of await neeko.bookmarks.find(iconPage)) {
 }
 await neeko.tabs.close(bookmarkTab.id);
 
+// The menus: only what the app keeps (the test's neeko.menus pref), with
+// the separators tidied. Firefox's own menus are the fallback.
+let shownIn = popup =>
+  [...popup.children].filter(item => !item.hidden && !item.collapsed);
+let tidy = popup => {
+  let shown = shownIn(popup).map(item => item.localName == "menuseparator");
+  return !shown[0] && !shown.at(-1) && !shown.some((sep, i) => sep && shown[i + 1]);
+};
+let hiddenMenu = id => document.getElementById(id).hidden;
+check(
+  !hiddenMenu("file-menu") && !hiddenMenu("edit-menu") && !hiddenMenu("windowMenu") &&
+    hiddenMenu("view-menu") && hiddenMenu("history-menu") && hiddenMenu("tools-menu"),
+  "the menu bar has only the app's menus"
+);
+let filePopup = document.getElementById("menu_FilePopup");
+filePopup.dispatchEvent(new Event("popupshowing", { bubbles: true }));
+let fileItems = shownIn(filePopup).map(item => item.id).filter(Boolean);
+check(
+  fileItems.includes("menu_newNavigatorTab") &&
+    fileItems.includes("menu_close") &&
+    !fileItems.includes("menu_openFile") &&
+    !fileItems.includes("menu_print") &&
+    tidy(filePopup),
+  `and in them only the app's items, tidily (${fileItems})`
+);
+let linkTab = await neeko.tabs.open(`${BASE}/link`);
+await waitFor(() => updated(linkTab.id, t => t.title == "link" && !t.loading), "a page with a link");
+let contextMenu = document.getElementById("contentAreaContextMenu");
+let rightClick = async (x, y) => {
+  let shown = new Promise(r => contextMenu.addEventListener("popupshown", r, { once: true }));
+  let page = gBrowser.selectedBrowser.getBoundingClientRect();
+  for (let type of ["mousedown", "contextmenu", "mouseup"]) {
+    synthesizeMouseEvent(type, page.left + x, page.top + y, { button: 2 });
+  }
+  return Promise.race([shown.then(() => true), new Promise(r => setTimeout(() => r(false), 5000))]);
+};
+if (await waitFor(() => rightClick(30, 30), "the context menu on a link")) {
+  await new Promise(r => setTimeout(r, 300));
+  let items = shownIn(contextMenu).map(item => item.id).filter(Boolean);
+  check(
+    items.includes("context-openlinkintab") &&
+      items.includes("context-copylink") &&
+      !items.includes("context-openlink") &&
+      !items.includes("context-inspect") &&
+      !items.includes("context-ask-chat") &&
+      tidy(contextMenu),
+    `it has only the app's items for a link, tidily (${items})`
+  );
+  contextMenu.hidePopup();
+}
+await neeko.tabs.close(linkTab.id);
+
+// Cmd+, (Settings... in the app menu): the UI shows its own settings if it
+// listens, and otherwise Firefox's settings open.
+let settingsRequests = [];
+let stopSettings = neeko.settings.on("request", data => settingsRequests.push(data));
+await neeko.tabs.current();
+let tabsBeforeSettings = gBrowser.tabs.length;
+document.getElementById("menu_preferences").doCommand();
+await waitFor(() => settingsRequests.length == 1, "Cmd+, reaches a UI that listens");
+await new Promise(r => setTimeout(r, 300));
+check(gBrowser.tabs.length == tabsBeforeSettings, "and Firefox's settings stay closed");
+stopSettings();
+// From a web page: Firefox would open its settings in place of a New Tab
+// page.
+let settingsFrom = await neeko.tabs.open(`${BASE}/one`);
+await waitFor(() => updated(settingsFrom.id, t => t.title == "Page one" && !t.loading), "a page to open settings from");
+document.getElementById("menu_preferences").doCommand();
+let firefoxSettings = await waitFor(
+  () => gBrowser.tabs.find(tab => tab.linkedBrowser.currentURI.spec.startsWith("about:preferences")),
+  "without a listener, Firefox's settings open"
+);
+if (firefoxSettings) {
+  gBrowser.removeTab(firefoxSettings);
+}
+await neeko.tabs.close(settingsFrom.id);
+
 // Neeko sends only the events the UI listens for.
 let heardSelect = 0;
 let stopSelect = neeko.tabs.on("select", () => heardSelect++);

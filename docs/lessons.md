@@ -440,6 +440,32 @@ Add to it whenever something costs you time.
   - Firefox's dialogs (`commonDialog.xhtml`) are documents of their own in a
     `<browser>` in the window: `NeekoTheme` catches them at
     `document-element-inserted` and loads its sheets there.
+- **Firefox's menus show and hide their own items as they open.** The
+  context menu is filled in a `popupshowing` listener on the menu itself
+  (`browser-context.js`, at DOMContentLoaded), and menu bar menus unhide
+  items in theirs (containers, full screen). A listener on the menu added
+  earlier runs before them, so `NeekoMenus` listens on the document: at the
+  target, all the menu's own listeners run before the event bubbles up.
+  Some context menu items appear a moment later (a link to a highlight,
+  translations), so it also watches the open menu with a MutationObserver.
+  macOS's native menus follow the `hidden` attribute, even while open.
+  - The context menu's navigation items are a `<menugroup>` only on some
+    platforms; on macOS they're plain items.
+  - Extensions' items have ids with `-menuitem-` (`ext-menus.js`), spell
+    suggestions the class `spell-suggestion`.
+  - A synthesized right-click opens the context menu in tests:
+    `synthesizeMouseEvent` `mousedown`, `contextmenu`, `mouseup`, with
+    `button: 2`, over the page. macOS's native context menu doesn't block
+    the script.
+  - Settings... and Cmd+, are a `command` event on `menu_preferences` (or
+    `menu_settings`) handled by a listener on `#main-menubar`; the macOS
+    app menu dispatches it to that element. `openPreferences()` opens in
+    the current tab if it's a New Tab page.
+  - With no window open, macOS shows the hidden window's menu bar
+    (`hiddenWindowMac.xhtml`), which `NeekoMenus` trims too.
+- **`ownerGlobal` is undefined on nodes in module code, documents
+  included** (see Hide and plug): `doc.defaultView`. It cost the context
+  menu a debugging round (the watcher threw before it was set up).
 - **The app's pages (`about:<name>`) need registering in every process.**
   Pages with `URI_MUST_LOAD_IN_CHILD` load in a content process, which
   resolves the `about:` address itself, so a dynamically registered
@@ -570,6 +596,8 @@ Add to it whenever something costs you time.
   "asked without a click" treatment (a dismissed post-prompt).
   `dom.webnotifications.requireuserinteraction` false lifts that for
   testing.
+- **`test_api.js` is one script**, so a `let` it declares twice is a
+  syntax error that stops every check; name new variables distinctly.
 - **Marionette's `WebDriver:NewSession` takes the capabilities as its bare
   parameters** (geckodriver merges `alwaysMatch` before sending), so
   `{ "unhandledPromptBehavior": "ignore" }`, not wrapped in `capabilities`.

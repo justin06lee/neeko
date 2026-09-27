@@ -245,6 +245,32 @@ function handleBookmarkPage(win) {
   });
 }
 
+// The menu items for Firefox's settings: on macOS, the app menu's Settings...
+// (Cmd+,), which nsMenuBarX makes from one of them.
+const SETTINGS_ITEMS = ["menu_preferences", "menu_settings"];
+
+/**
+ * Cmd+, (Settings... in the app menu, or Tools > Settings) asks for the
+ * browser's settings. A UI that listens for the "settings.request" event gets
+ * it instead of Firefox, whose own settings (about:preferences) otherwise
+ * open. Firefox handles these on the menu bar, further up, so a capturing
+ * listener there hears them first.
+ */
+function handleSettings(win) {
+  win.document.getElementById("main-menubar")?.addEventListener(
+    "command",
+    event => {
+      if (
+        SETTINGS_ITEMS.includes(event.target.id) &&
+        apis.get(win)?.requestSettings()
+      ) {
+        event.stopPropagation();
+      }
+    },
+    true
+  );
+}
+
 /**
  * The fallback for UIs without an address bar: shows Firefox's navigation
  * toolbar across the top of the window (neeko.css) until it loses focus.
@@ -582,6 +608,7 @@ export const NeekoWindow = {
 
     handleOpenLocation(win);
     handleBookmarkPage(win);
+    handleSettings(win);
     NeekoPanels.init(win, () => apis.get(win));
     followNotificationBars(win);
   },

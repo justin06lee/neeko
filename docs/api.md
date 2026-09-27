@@ -405,6 +405,14 @@ setting that isn't there.
 | Event | Data | When |
 | --- | --- | --- |
 | `change` | `{ key, value }` | A setting changed, in this window or another (or in about:config). `value` is `null` if it was removed. |
+| `request` | `{}` | The user asked for your browser's settings: Cmd+, or Settings… in the app menu. Show yours (open your settings page, say). Listening for this is how your UI says it has settings of its own; otherwise Firefox's open. |
+
+```js
+// Cmd+, opens the browser's own settings page.
+neeko.settings.on("request", () => neeko.tabs.open("about:mybrowser-settings"));
+```
+
+Firefox's settings stay reachable by their address, `about:preferences`.
 
 Settings are Firefox prefs named `neeko.settings.<key>`. Your browser can
 ship defaults for them in its `branding/prefs.js`, such as
@@ -693,6 +701,61 @@ working when Firefox changes. Change the theme and run `make` again.
 
 Without a `theme`, Firefox's own look stays: that's the fallback.
 
+## Firefox's menus, trimmed
+
+The menu bar (on macOS, File, Edit, View and the rest at the top of the
+screen) and the page's context menu (right-click) are Firefox's. Say in
+`browser.json` which of their menus and items your browser keeps, and the
+rest are hidden, with the separators tidied (never first, last or two in a
+row):
+
+```json
+"menus": {
+  "menubar": {
+    "file": ["newWindow", "newPrivateWindow", "newTab", "closeTab", "closeWindow"],
+    "edit": true,
+    "view": ["zoom", "fullScreen"],
+    "window": true,
+    "help": []
+  },
+  "context": ["back", "forward", "reload", "stop", "openLinkInTab", "copyLink",
+              "copy", "paste", "cut", "undo", "redo", "selectAll", "spelling",
+              "openImage", "saveImage", "copyImage", "savePage", "inspect"]
+}
+```
+
+- **`menubar`**: the menus to keep, each with the items it keeps, or `true`
+  to keep it whole. Menus left out are hidden. Items keep Firefox's order.
+  On macOS the application menu (About, Settings, Services, Hide, Quit)
+  always stays, and so does Quit elsewhere.
+- **`context`**: the items to keep. Firefox still shows only those that fit
+  what was clicked (a link's items on a link), so list everything your
+  browser should ever offer.
+- **Without `menus`, or without one of its parts,** that menu is Firefox's
+  own, whole: the fallback. Items Firefox adds in later versions stay
+  hidden in a trimmed menu until Neeko names them and you list them.
+- Keyboard shortcuts keep working, even for hidden items.
+
+The names, which Neeko keeps working across Firefox versions
+(`src/browser/neeko/NeekoMenuNames.sys.mjs`); `make` rejects any other:
+
+| Menu | Items |
+| --- | --- |
+| `file` | `newTab`, `newContainerTab`, `newWindow`, `newPrivateWindow`, `openLocation`, `openFile`, `closeTab`, `closeWindow`, `savePage`, `emailLink`, `pageSetup`, `print`, `import`, `workOffline` |
+| `edit` | `undo`, `redo`, `cut`, `copy`, `paste`, `delete`, `selectAll`, `find`, `findAgain`, `textDirection` |
+| `view` | `toolbars`, `sidebar`, `zoom`, `pageStyle`, `repairTextEncoding`, `fullScreen`, `readerView`, `allTabs`, `pageDirection` |
+| `tools` | `downloads`, `addons`, `sync`, `firefoxView`, `editPDF`, `browserTools`, `pageInfo` |
+| `help` | `help`, `reportBrokenSite`, `feedback`, `troubleshootMode`, `troubleshootingInfo`, `reportDeceptiveSite`, `switchDevice`, `policySupport` |
+| `history`, `bookmarks`, `profiles`, `window` | Only `true`: their contents are Firefox's own lists. |
+
+| Context menu | Items |
+| --- | --- |
+| The page | `back`, `forward`, `reload`, `stop`, `bookmarkPage`, `savePage`, `selectAll`, `takeScreenshot`, `sendPageToDevice`, `viewSource`, `inspect`, `inspectAccessibility`, `pageDirection`, `drmLearnMore` |
+| Links | `openLinkInCurrentTab`, `openLinkInTab`, `openLinkInContainerTab`, `openLinkInSplitView`, `openLinkInWindow`, `openLinkInPrivateWindow`, `openLinkInSmartWindow`, `previewLink`, `bookmarkLink`, `saveLink`, `copyLink`, `copyCleanLink`, `copyEmail`, `copyPhone`, `sendLinkToDevice` |
+| Images, video, audio | `openImage`, `reloadImage`, `saveImage`, `copyImage`, `copyImageLink`, `emailImage`, `copyTextFromImage`, `imageInfo`, `imageDescription`, `visualSearch`, `setAsDesktopBackground`, `play`, `pause`, `mute`, `unmute`, `playbackSpeed`, `loop`, `fullScreen`, `controls`, `openVideo`, `pictureInPicture`, `saveVideoFrame`, `saveVideo`, `saveAudio`, `copyVideoLink`, `copyAudioLink`, `emailVideo`, `emailAudio` |
+| Text and selections | `undo`, `redo`, `cut`, `copy`, `paste`, `pasteWithoutFormatting`, `delete`, `revealPassword`, `textDirection`, `searchSelection`, `searchSelectionPrivate`, `translateSelection`, `printSelection`, `viewSelectionSource`, `linkToHighlight`, `addSearchEngine`, `askAIChatbot` |
+| Groups | `spelling` (suggestions, dictionaries), `passwords` (fill, generate, manage), `frame` (the This Frame menu), `pdf` (in Firefox's PDF viewer), `viewSourceCommands` (on view-source: pages), `extensions` (every item extensions add) |
+
 ## Fallbacks
 
 Firefox keeps running underneath your UI, so a browser built on Neeko works
@@ -712,6 +775,9 @@ even where its UI has no controls yet.
   window, with every bookmark.
 - **Drawing over the page.** Without elements marked `data-neeko-overlay`,
   the page stays on top of your UI everywhere in its slot.
+- **Menus.** Without `menus` in `browser.json`, Firefox's menu bar and
+  context menu are all there. Without a `settings` `request` listener,
+  Cmd+, opens Firefox's settings.
 - **Notification bars.** Firefox's bars about the page (it blocked a
   pop-up, the page is slowing the browser down, and the like) show across
   the top of the page, which moves down to make room, as in Firefox. They
@@ -790,6 +856,8 @@ The pieces:
   (Places) into plain data and events.
 - `src/browser/neeko/NeekoTheme.sys.mjs` puts your `theme` on Firefox's own
   UI, with `neeko-theme.css` and `neeko-theme-dialog.css`.
+- `src/browser/neeko/NeekoMenus.sys.mjs` trims Firefox's menus to your
+  `menus`, by the names in `NeekoMenuNames.sys.mjs`.
 - `src/browser/neeko/NeekoPages.sys.mjs` serves the app's pages as `about:`
   pages, in every process; `NeekoPageChild.sys.mjs` gives them `neekoPage`,
   and `NeekoPageParent.sys.mjs` checks and carries out its calls.
