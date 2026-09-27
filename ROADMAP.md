@@ -73,6 +73,11 @@ get added as it needs them.
   autocomplete, through Firefox's own design tokens. And Firefox's
   notification bars (a blocked pop-up, a slow page) show over the top of the
   page again, which they didn't under Neeko before. Fallback: Firefox's look.
+- [x] **Firefox's menus, trimmed** (v0.12.0): `browser.json`'s `menus` keeps
+  only the menu bar menus and items, and the context menu items, the app
+  lists (in Neeko's names), with separators tidied; Cmd+, goes to a UI that
+  listens for `settings` `request`. Fallback: Firefox's whole menus and
+  settings.
 
 ## API features, in order
 
@@ -84,7 +89,7 @@ get added as it needs them.
    and add-on installs show forms and permission lists.
 2. [ ] **Context menus.** The UI can draw its own menu for pages, links,
    images and selections, with Firefox's actions available. Fallback:
-   Firefox's own context menu.
+   Firefox's own context menu, trimmed to the app's `menus` (v0.12.0).
 3. [ ] **Find in page.** Find, next, previous, match count. Fallback:
    Firefox's find bar.
 4. [ ] **Address bar suggestions.** History, bookmark and open-tab matches

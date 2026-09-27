@@ -151,7 +151,7 @@
       get: key => settings.get(key),
       all: () => Object.fromEntries(settings),
       set: (key, value) => call("settings.set", key, value),
-      on: events("settings", ["change"]),
+      on: events("settings", ["change", "request"]),
     }),
     bookmarks: Object.freeze({
       // The folders every profile has: { toolbar, menu, other, mobile }.

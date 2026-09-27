@@ -105,7 +105,8 @@ browsers use.
   window, make pages light or dark, hear when the pointer reaches the
   page's edges, and hear about every change.
 - What Firefox still draws itself (a page's dialogs, its panels and bars)
-  can take your browser's look: a `theme` in `browser.json`.
+  can take your browser's look: a `theme` in `browser.json`. Its menus
+  (the menu bar, the context menu) keep only what `menus` lists.
 - Your browser's own pages (a start page, settings) go in `pages/`:
   `pages/start.html` is `about:start`, the New Tab page (private windows'
   too). They're locked-down

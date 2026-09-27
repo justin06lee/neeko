@@ -16,7 +16,8 @@
  *                 about:<name> (start.html is the New Tab and home page)
  *
  * browser.json can also give the browser's look for what Firefox still
- * draws itself, its "theme" (see readTheme).
+ * draws itself, its "theme" (see readTheme), and which of Firefox's menus
+ * and items to keep, its "menus" (see readMenus).
  *   branding/     optional: icon.png (and icon.svg), prefs.js, and any
  *                 Firefox branding file to replace, at the same path
  *
@@ -40,6 +41,8 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
+// Neeko's names for Firefox's menus and their items (plain data).
+import { CONTEXT, MENUBAR } from "../src/browser/neeko/NeekoMenuNames.sys.mjs";
 
 const NEEKO = resolve(import.meta.dir, "..");
 const ENGINE = join(NEEKO, "engine");
@@ -62,6 +65,13 @@ type App = {
   version: string;
   // browser.json's "theme", checked by readTheme.
   theme: Theme | null;
+  // browser.json's "menus", checked by readMenus.
+  menus: Menus | null;
+};
+
+type Menus = {
+  menubar?: Record<string, true | string[]>;
+  context?: string[];
 };
 
 // The colors of one color scheme (see readTheme).
@@ -150,7 +160,69 @@ function readApp(dir: string): App {
       "a version such as 1.2.0"
     ),
     theme: json.theme === undefined ? null : readTheme(dir, file, json.theme),
+    menus: json.menus === undefined ? null : readMenus(file, json.menus),
   };
+}
+
+/**
+ * Reads and checks browser.json's optional "menus": which of Firefox's menus
+ * and items to keep, in Neeko's names (src/browser/neeko/NeekoMenuNames.sys.mjs,
+ * listed in docs/api.md). NeekoMenus hides the rest.
+ *
+ *   "menus": {
+ *     "menubar": { "file": ["newTab", "closeTab"], "edit": true, "window": true },
+ *     "context": ["back", "forward", "reload", "copy", "copyLink"]
+ *   }
+ *
+ * In the menu bar, true keeps a menu whole; menus not named are hidden.
+ */
+function readMenus(file: string, menus: unknown): Menus {
+  let where = (key: string) => `${file}: "menus${key ? `.${key}` : ""}"`;
+  let isObject = (value: unknown): value is Record<string, unknown> =>
+    !!value && typeof value == "object" && !Array.isArray(value);
+  let names = (value: unknown, key: string, known: Record<string, unknown>) => {
+    if (!Array.isArray(value) || value.some(name => typeof name != "string")) {
+      fail(`${where(key)} must be a list of names`);
+    }
+    for (let name of value as string[]) {
+      if (!Object.hasOwn(known, name)) {
+        fail(`${where(key)} has an unknown name "${name}" (known: ${Object.keys(known).join(", ")})`);
+      }
+    }
+    return value as string[];
+  };
+  if (!isObject(menus)) {
+    fail(`${where("")} must be an object`);
+  }
+  let result: Menus = {};
+  for (let key of Object.keys(menus)) {
+    if (key != "menubar" && key != "context") {
+      fail(`${where("")} has an unknown key "${key}" (known: menubar, context)`);
+    }
+  }
+  if (menus.menubar !== undefined) {
+    if (!isObject(menus.menubar)) {
+      fail(`${where("menubar")} must be an object, such as { "file": true }`);
+    }
+    result.menubar = {};
+    for (let [name, keep] of Object.entries(menus.menubar)) {
+      let menu = (MENUBAR as Record<string, { items?: Record<string, unknown> }>)[name];
+      if (!menu) {
+        fail(`${where("menubar")} has an unknown menu "${name}" (known: ${Object.keys(MENUBAR).join(", ")})`);
+      }
+      if (keep === true) {
+        result.menubar[name] = true;
+      } else if (!menu.items) {
+        fail(`${where(`menubar.${name}`)} can only be true: it's kept whole or not at all`);
+      } else {
+        result.menubar[name] = names(keep, `menubar.${name}`, menu.items);
+      }
+    }
+  }
+  if (menus.context !== undefined) {
+    result.context = names(menus.context, "context", CONTEXT);
+  }
+  return result;
 }
 
 /**
@@ -693,6 +765,23 @@ function writeTheme(app: App, out: string) {
 }
 
 /**
+ * The app's menus (browser.json's "menus", see readMenus) in the neeko.menus
+ * pref, where NeekoMenus reads them.
+ */
+function writeMenus(app: App, out: string) {
+  if (!app.menus) {
+    return;
+  }
+  let prefs = join(out, "pref/firefox-branding.js");
+  writeFileSync(
+    prefs,
+    read(prefs) +
+      "\n// The app's menus, from browser.json (added by Neeko's tools/app.ts).\n" +
+      `pref("neeko.menus", ${JSON.stringify(JSON.stringify(app.menus))});\n`
+  );
+}
+
+/**
  * The app's version files and build options. configs/common/mozconfig reads
  * app.mozconfig, so the program is named after the app and the profile
  * folder is its own.
@@ -728,6 +817,7 @@ function writeBranding(app: App) {
     writeUI(app, out);
     writePages(app, out);
     writeTheme(app, out);
+    writeMenus(app, out);
     writeBuildSettings(app, out);
     sync(out, BRANDING);
   } finally {

@@ -1,14 +1,17 @@
 # Neeko: hides Firefox's own UI and mounts a custom one in its place.
 # Firefox builds this folder because of the one-line src/browser/moz-build.patch.
 
-# Registers NeekoWindow, NeekoPages and NeekoTheme on Firefox's per-window
-# startup hook, and NeekoPrivacy and NeekoPages on its once-per-startup hook.
+# Registers NeekoWindow, NeekoPages, NeekoTheme and NeekoMenus on Firefox's
+# per-window startup hook, and NeekoPrivacy and NeekoPages on its
+# once-per-startup hook.
 EXTRA_COMPONENTS += ["Neeko.manifest"]
 
 MOZ_SRC_FILES += [
     "NeekoAPI.sys.mjs",
     "NeekoBookmarks.sys.mjs",
     "NeekoDownloads.sys.mjs",
+    "NeekoMenuNames.sys.mjs",
+    "NeekoMenus.sys.mjs",
     "NeekoPageChild.sys.mjs",
     "NeekoPageParent.sys.mjs",
     "NeekoPages.sys.mjs",
