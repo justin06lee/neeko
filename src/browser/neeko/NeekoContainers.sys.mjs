@@ -100,16 +100,9 @@ function checkFields(fields, { creating }) {
   if (!fields || typeof fields != "object" || Array.isArray(fields)) {
     throw new TypeError("Expected a container's fields, like { name }.");
   }
-  let known = creating
-    ? ["name", "color", "picture", "ephemeral"]
-    : ["name", "color", "picture"];
   for (let key of Object.keys(fields)) {
-    if (!known.includes(key)) {
-      throw new TypeError(
-        creating || key != "ephemeral"
-          ? `Unknown field "${key}".`
-          : "A container can't become ephemeral or stop being: make another."
-      );
+    if (!["name", "color", "picture", "ephemeral"].includes(key)) {
+      throw new TypeError(`Unknown field "${key}".`);
     }
   }
   let { name, color, picture, ephemeral } = fields;
@@ -365,6 +358,21 @@ function saveToSession(win) {
     lazy.SessionStore.setCustomWindowValue(win, SESSION_KEY, id);
   } catch (e) {
     console.error("Neeko: couldn't save a window's container.", e);
+  }
+}
+
+/**
+ * Forgets the closed windows that were in a container, so none comes back
+ * into what it has become, or into nothing.
+ */
+function forgetClosedWindows(container) {
+  for (let data of lazy.SessionStore.getClosedWindowData()) {
+    if (
+      data.extData?.[SESSION_KEY] == container.id ||
+      data.tabs?.some(tab => (tab.userContextId ?? 0) == container.userContextId)
+    ) {
+      lazy.SessionStore.forgetClosedWindowById(data.closedId);
+    }
   }
 }
 
@@ -754,13 +762,36 @@ export const NeekoContainers = {
     return describe(container);
   },
 
-  /** Renames a container, or changes its color or picture. */
-  update(id, changes) {
+  /**
+   * Renames a container, or changes its color or picture, or whether it's
+   * ephemeral (only while none of its windows is open: what it kept is
+   * wiped).
+   */
+  async update(id, changes) {
     checkFields(changes, { creating: false });
     let s = getStore();
     let container = s.byId(id);
     if (!container) {
       throw new Error(`No container with id ${id}.`);
+    }
+    // Ephemeral or not, while none of its windows is open: private windows
+    // or normal ones hold it, and nothing it kept carries over.
+    if (changes.ephemeral !== undefined && changes.ephemeral != container.ephemeral) {
+      if (container.userContextId == 0) {
+        throw new Error("The default container can't be ephemeral.");
+      }
+      let open = lazy.BrowserWindowTracker.orderedWindows.some(
+        win => !win.closed && windows.get(win)?.container == id
+      );
+      if (open) {
+        throw new Error(
+          "A container becomes ephemeral, or stops being, only while none of its windows is open."
+        );
+      }
+      // Windows that pick it meanwhile are of its new kind.
+      container.ephemeral = changes.ephemeral;
+      forgetClosedWindows(container);
+      await clearUserContext(container.userContextId);
     }
     if (changes.name !== undefined) {
       container.name = changes.name.trim();
@@ -803,6 +834,7 @@ export const NeekoContainers = {
         orphan(win);
       }
     }
+    forgetClosedWindows(container);
     await clearUserContext(container.userContextId);
   },
 

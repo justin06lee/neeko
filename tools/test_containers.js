@@ -187,11 +187,32 @@ check(
 );
 let renamed = await neeko.containers.update("test-one", { name: "Renamed", picture: "pictures/test.svg" });
 check(renamed.name == "Renamed" && renamed.picture == "pictures/test.svg", "update() renames one");
-await rejects(neeko.containers.update("test-one", { ephemeral: true }), /ephemeral/, "a container can't become ephemeral");
+// Ephemeral or not, only while none of its windows is open, and its closed
+// windows are forgotten.
+async function closeOneIn(id) {
+  let win = await opened(() => OpenBrowserWindow());
+  let winNeeko = await neekoOf(win, `a window in ${id}`);
+  await winNeeko.window.setContainer(id);
+  win.openTrustedLinkIn(`${BASE}/one`, "current");
+  await waitFor(() => urls(win).join() == `${BASE}/one`, "a page in it");
+  await closed(win);
+}
+let closedIn = id =>
+  SessionStore.getClosedWindowData().filter(data => data.extData?.["neeko-container"] == id).length;
+await rejects(neeko.containers.update("work", { ephemeral: true }), /windows is open/, "a container with open windows can't become ephemeral");
+await rejects(neeko.containers.update("personal", { ephemeral: true }), /default/, "the default container can't be ephemeral");
+await closeOneIn("test-one");
+await waitFor(() => closedIn("test-one") == 1, "a closed window of it to reopen");
+let madeEphemeral = await neeko.containers.update("test-one", { ephemeral: true });
+check(madeEphemeral.ephemeral, "a container without open windows can become ephemeral");
+check(closedIn("test-one") == 0, "and its closed windows are forgotten");
+let madeNormal = await neeko.containers.update("test-one", { ephemeral: false });
+check(!madeNormal.ephemeral, "and stop being");
 await rejects(neeko.containers.create({ name: "" }), /name/, "create() without a name");
 await rejects(neeko.containers.create({ name: "x", color: "red; }" }), /color/, "create() with a bad color");
 await rejects(neeko.containers.remove("personal"), /default/, "the default container can't be removed");
 
+await closeOneIn("test-one");
 let doomed = await opened(() => OpenBrowserWindow());
 let doomedNeeko = await neekoOf(doomed, "a window in the new container");
 await doomedNeeko.window.setContainer("test-one");
@@ -202,6 +223,7 @@ await waitFor(
   "removing a container sends its windows back to the picker"
 );
 check(!(await neeko.containers.list()).some(c => c.id == "test-one"), "and it's gone");
+check(closedIn("test-one") == 0, "with its closed windows");
 await closed(doomed);
 
 // Clearing one wipes what it keeps.
@@ -223,6 +245,14 @@ await waitFor(
   "a page knows its tab's container (neekoPage.container)"
 );
 await neeko.tabs.close(pageTab.id);
+// Making one ephemeral, or not, wipes it: a page needs a click for that.
+let ephemeralTab = await neeko.tabs.open("about:start?test=ephemeral-now&id=private");
+let ephemeralTitle = await waitFor(
+  () => /^(updated|refused)/.test(gBrowser.selectedTab.label) && gBrowser.selectedTab.label,
+  "a page making a container ephemeral without a click"
+);
+check(/refused.*click/.test(ephemeralTitle), `is refused (${ephemeralTitle})`);
+await neeko.tabs.close(ephemeralTab.id);
 await neeko.tabs.close(tab.id);
 
 return results;
