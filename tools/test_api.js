@@ -1171,20 +1171,24 @@ let fakeLibrary = PathUtils.join(PathUtils.profileDir, "fake-library");
 let fakeChrome = PathUtils.join(fakeLibrary, "Application Support", "Google", "Chrome");
 let importedURL = `${BASE}/one?from-chrome`;
 await IOUtils.makeDirectory(PathUtils.join(fakeChrome, "Default"));
-await IOUtils.writeJSON(PathUtils.join(fakeChrome, "Local State"), {
-  profile: { info_cache: { Default: { name: "Neeko Tester" } } },
-});
-await IOUtils.writeJSON(PathUtils.join(fakeChrome, "Default", "Bookmarks"), {
+let chromeBookmarks = url => ({
   roots: {
     bookmark_bar: {
       type: "folder",
       name: "Bookmarks bar",
-      children: [{ type: "url", name: "From Chrome", url: importedURL, date_added: "13300000000000000" }],
+      children: [{ type: "url", name: "From Chrome", url, date_added: "13300000000000000" }],
     },
     other: { type: "folder", name: "Other bookmarks", children: [] },
     synced: { type: "folder", name: "Mobile bookmarks", children: [] },
   },
   version: 1,
+});
+let secondURL = `${BASE}/two?from-chrome`;
+await IOUtils.writeJSON(PathUtils.join(fakeChrome, "Default", "Bookmarks"), chromeBookmarks(importedURL));
+await IOUtils.makeDirectory(PathUtils.join(fakeChrome, "Profile 1"));
+await IOUtils.writeJSON(PathUtils.join(fakeChrome, "Profile 1", "Bookmarks"), chromeBookmarks(secondURL));
+await IOUtils.writeJSON(PathUtils.join(fakeChrome, "Local State"), {
+  profile: { info_cache: { Default: { name: "Neeko Tester" }, "Profile 1": { name: "Work Tester" } } },
 });
 let useLibrary = path => {
   Services.dirsvc.undefine("ULibDir");
@@ -1197,7 +1201,7 @@ useLibrary(fakeLibrary);
 try {
   let browsersTest = await pageTest("browsers", title => title.startsWith("browsers") || title.startsWith("refused"), "neekoPage.import.browsers()");
   check(
-    /^browsers \d+ \[\["chrome",false,\[\["Default","Neeko Tester","bookmarks"\]\]\]\]$/.test(browsersTest.title) &&
+    /^browsers \d+ \[\["chrome",false,\[\["Default","Neeko Tester","bookmarks"\],\["Profile 1","Work Tester","bookmarks"\]\]\]\]$/.test(browsersTest.title) &&
       Number(browsersTest.title.split(" ")[1]) > 1,
     `lists the browsers it knows, with the profiles and what they have of those here (${browsersTest.title})`
   );
@@ -1220,6 +1224,26 @@ try {
     await neeko.bookmarks.remove(bookmark.id);
   }
   await neeko.tabs.close(importTest.tab.id);
+  // Several profiles from one click.
+  useLibrary(fakeLibrary);
+  let importAll = await pageTest("import-all", title => title == "ready", "a page importing every profile");
+  clickPage();
+  let importedAll = await waitFor(
+    () => updated(importAll.tab.id, t => t.title.startsWith("imported ") || t.title.startsWith("refused")),
+    "fromBrowser() with profiles, after one click"
+  );
+  check(
+    importedAll?.tab.title == 'imported {"Default":{"bookmarks":{"count":1}},"Profile 1":{"bookmarks":{"count":1}}}' &&
+      (await neeko.bookmarks.find(importedURL)).length == 1 &&
+      (await neeko.bookmarks.find(secondURL)).length == 1,
+    `imports each, with what came from each (${importedAll?.tab.title})`
+  );
+  for (let url of [importedURL, secondURL]) {
+    for (let bookmark of await neeko.bookmarks.find(url)) {
+      await neeko.bookmarks.remove(bookmark.id);
+    }
+  }
+  await neeko.tabs.close(importAll.tab.id);
 } finally {
   useLibrary(realLibrary);
 }

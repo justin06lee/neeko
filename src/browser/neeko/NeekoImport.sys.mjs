@@ -95,6 +95,9 @@ async function findProfile(id, profileId) {
   }
   let profiles = (await migrator.getSourceProfiles()) ?? null;
   if (!profiles) {
+    if (profileId !== undefined && profileId !== "") {
+      throw new Error(`${await displayName(id)} has no profile "${profileId}".`);
+    }
     return { migrator, profile: null };
   }
   let profile = profiles.find(p => p.id === profileId) ?? null;
@@ -105,6 +108,60 @@ async function findProfile(id, profileId) {
     throw new Error(`${await displayName(id)} has no profile "${profileId}".`);
   }
   return { migrator, profile };
+}
+
+/**
+ * Imports some of what one browser profile has (all it has by default):
+ * for each type, { count } (null where Firefox doesn't count) or { error }.
+ */
+async function importProfile(migrator, profile, types) {
+  let has = await typesIn(migrator, profile);
+  let wanted = types ?? has;
+  let result = {};
+  if (!(await migrator.hasPermissions())) {
+    for (let type of wanted) {
+      result[type] = { error: "permission" };
+    }
+    return result;
+  }
+  let resources = 0;
+  for (let type of wanted) {
+    if (has.includes(type)) {
+      resources |= lazy.MigrationUtils.resourceTypes[TYPES[type].resource];
+    } else {
+      result[type] = { error: "none" };
+    }
+  }
+  if (!resources) {
+    return result;
+  }
+  // Firefox counts what came in for this migration (it starts again at 0).
+  let done = {};
+  await migrator.migrate(resources, false, profile, (resource, success) => {
+    done[resource] = success;
+  });
+  for (let type of wanted) {
+    if (result[type]) {
+      continue;
+    }
+    let { resource, count } = TYPES[type];
+    if (done[lazy.MigrationUtils.resourceTypes[resource]]) {
+      result[type] = {
+        count: count ? lazy.MigrationUtils.getImportedCount(count) : null,
+      };
+    } else {
+      // The profile's passwords were readable to find (see typesIn), so
+      // when a Chromium browser's don't come, it's the key to decrypt
+      // them, in the macOS keychain, that was refused.
+      result[type] = {
+        error:
+          type == "passwords" && migrator._keychainServiceName
+            ? "keychain"
+            : "failed",
+      };
+    }
+  }
+  return result;
 }
 
 /**
@@ -166,59 +223,39 @@ export const NeekoImport = {
   /**
    * Imports some of what a browser profile has (all of it by default): for
    * each type, { count } (null where Firefox doesn't count) or { error }.
+   * With `profiles` (ids), several profiles, one after the other: the same
+   * for each, by profile id.
    */
-  fromBrowser(id, { profile: profileId, types } = {}) {
+  fromBrowser(id, { profile: profileId, profiles: profileIds, types } = {}) {
     return oneAtATime(async () => {
       if (types !== undefined) {
         if (!Array.isArray(types) || types.some(type => !Object.hasOwn(TYPES, type))) {
           throw new TypeError(`Types are some of: ${Object.keys(TYPES).join(", ")}.`);
         }
       }
-      let { migrator, profile } = await findProfile(id, profileId);
-      let has = await typesIn(migrator, profile);
-      let wanted = types ?? has;
+      if (profileIds === undefined) {
+        let { migrator, profile } = await findProfile(id, profileId);
+        return importProfile(migrator, profile, types);
+      }
+      if (profileId !== undefined) {
+        throw new TypeError("Give a profile or profiles, not both.");
+      }
+      if (
+        !Array.isArray(profileIds) ||
+        !profileIds.length ||
+        profileIds.some(p => typeof p != "string") ||
+        new Set(profileIds).size != profileIds.length
+      ) {
+        throw new TypeError("profiles is a list of profile ids.");
+      }
+      // Every profile is checked before anything is imported.
+      let found = [];
+      for (let p of profileIds) {
+        found.push(await findProfile(id, p));
+      }
       let result = {};
-      if (!(await migrator.hasPermissions())) {
-        for (let type of wanted) {
-          result[type] = { error: "permission" };
-        }
-        return result;
-      }
-      let resources = 0;
-      for (let type of wanted) {
-        if (has.includes(type)) {
-          resources |= lazy.MigrationUtils.resourceTypes[TYPES[type].resource];
-        } else {
-          result[type] = { error: "none" };
-        }
-      }
-      if (!resources) {
-        return result;
-      }
-      let done = {};
-      await migrator.migrate(resources, false, profile, (resource, success) => {
-        done[resource] = success;
-      });
-      for (let type of wanted) {
-        if (result[type]) {
-          continue;
-        }
-        let { resource, count } = TYPES[type];
-        if (done[lazy.MigrationUtils.resourceTypes[resource]]) {
-          result[type] = {
-            count: count ? lazy.MigrationUtils.getImportedCount(count) : null,
-          };
-        } else {
-          // The profile's passwords were readable to find (see typesIn), so
-          // when a Chromium browser's don't come, it's the key to decrypt
-          // them, in the macOS keychain, that was refused.
-          result[type] = {
-            error:
-              type == "passwords" && migrator._keychainServiceName
-                ? "keychain"
-                : "failed",
-          };
-        }
+      for (let [i, { migrator, profile }] of found.entries()) {
+        result[profileIds[i]] = await importProfile(migrator, profile, types);
       }
       return result;
     });

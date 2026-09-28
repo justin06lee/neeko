@@ -11,7 +11,7 @@
  *   neekoPage.settings.get(key) / all() / set(key, value) / on("change", fn)
  *   neekoPage.search.engines() / setDefault(id)
  *   neekoPage.defaultBrowser.isDefault() / setDefault()
- *   neekoPage.import.browsers() / fromBrowser(id, { profile, types })
+ *   neekoPage.import.browsers() / fromBrowser(id, { profile | profiles, types })
  *     / requestPermission(id) / openFullDiskAccess() / fromFile(kind)
  *   neekoPage.container                  its tab's container, if any
  *   neekoPage.containers.list() / create(fields) / update(id, changes)
@@ -123,6 +123,7 @@ export class NeekoPageChild extends JSWindowActorChild {
       askAfterClick("import.fromBrowser", {
         id,
         profile: options?.profile,
+        profiles: options?.profiles ? [...options.profiles] : undefined,
         types: options?.types ? [...options.types] : undefined,
       })
     );

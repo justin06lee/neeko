@@ -63,27 +63,34 @@ let browsers = [];
 const showBrowsers = async () => {
   browsers = await neekoPage.import.browsers();
   importFrom.replaceChildren();
-  for (let browser of browsers.filter(b => b.available)) {
-    for (let profile of browser.profiles) {
-      let label = browser.profiles.length > 1 ? `${browser.name} (${profile.name})` : browser.name;
-      importFrom.add(new Option(label, JSON.stringify([browser.id, profile.id])));
-    }
+  for (let browser of browsers.filter(b => b.available && b.profiles.length)) {
+    importFrom.add(new Option(browser.name, browser.id));
   }
   let missing = browsers.filter(b => !b.available).map(b => b.name);
   importFrom.title = missing.length ? `Not on this computer: ${missing.join(", ")}` : "";
   importBrowser.disabled = !importFrom.options.length;
 };
+// Every profile of the browser, from the one click.
 importBrowser.addEventListener("click", async () => {
-  let [id, profile] = JSON.parse(importFrom.value);
-  let browser = browsers.find(b => b.id == id);
+  let browser = browsers.find(b => b.id == importFrom.value);
+  let id = browser.id;
   // Safari's data needs the user's say-so first: a folder picker at it.
   if (browser.needsPermission && !(await neekoPage.import.requestPermission(id))) {
     showResult(`${browser.name}: ${REASONS.permission}.`);
     return;
   }
   showResult(`Importing from ${browser.name}…`);
-  let result = await neekoPage.import.fromBrowser(id, { profile });
-  showResult(`${browser.name}: ${describe(result) || "nothing to import"}.`);
+  let result = await neekoPage.import.fromBrowser(id, {
+    profiles: browser.profiles.map(p => p.id),
+  });
+  let several = browser.profiles.length > 1;
+  showResult(
+    `${browser.name}: ` +
+      browser.profiles
+        .map(p => `${several ? `${p.name}: ` : ""}${describe(result[p.id]) || "nothing to import"}`)
+        .join("; ") +
+      "."
+  );
 });
 for (let kind of ["bookmarks", "passwords"]) {
   document.getElementById(`import-${kind}`).addEventListener("click", async () => {

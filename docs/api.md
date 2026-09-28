@@ -772,7 +772,7 @@ button.onclick = async () => {
 | Method | What it does |
 | --- | --- |
 | `neekoPage.import.browsers()` | Every browser Firefox can import from on this system, installed or not (`available`), with its profiles and what each has to import: some of `bookmarks`, `history` and `passwords`. A browser with a single profile has one, with the id `""`. `needsPermission` is `true` while the system keeps its data from the browser (Safari's, on macOS). |
-| `neekoPage.import.fromBrowser(id, options?)` | Imports a profile: `profile` (its id; the first by default) and `types` (all it has, by default). Resolves to one entry per type: `{ count }` (`null` for history, which Firefox doesn't count), or `{ error }`: `"permission"` (see `requestPermission`), `"keychain"` (macOS's keychain refused the key to a Chromium browser's passwords), `"none"` (the profile has none) or `"failed"`. Needs a click. |
+| `neekoPage.import.fromBrowser(id, options?)` | Imports a profile: `profile` (its id; the first by default) and `types` (all it has, by default). Or several, one after the other, from the one click: `profiles`, a list of ids, resolving to the same for each, by id (`{ "Default": { bookmarks: { count: 12 } }, "Profile 1": {…} }`); every id is checked before anything is imported. Resolves to one entry per type: `{ count }` (`null` for history, which Firefox doesn't count), or `{ error }`: `"permission"` (see `requestPermission`), `"keychain"` (macOS's keychain refused the key to a Chromium browser's passwords), `"none"` (the profile has none) or `"failed"`. Needs a click. |
 | `neekoPage.import.requestPermission(id)` | Asks the user for access to a browser's data where the system protects it, as Firefox does: a folder picker opens at Safari's folder, and choosing it gives access. Resolves to whether it did. Needs a click. |
 | `neekoPage.import.openFullDiskAccess()` | Opens macOS's System Settings at Full Disk Access, the other way to let the browser read Safari's data (the browser then needs restarting). Needs a click. |
 | `neekoPage.import.fromFile(kind)` | Asks the user for a file and imports it: `"bookmarks"` (an HTML bookmarks file, as browsers export them, or Firefox's JSON backup) or `"passwords"` (a CSV or TSV export). Resolves to `{ count }` (for passwords also `updated`, the ones Firefox already had and changed), `{ canceled: true }`, or `{ error: "failed" }` for a file it couldn't read. Needs a click. |
@@ -780,7 +780,8 @@ button.onclick = async () => {
 Safari's passwords can't be imported directly: the user exports them from
 Safari (or macOS's Passwords app) and imports the file. Chromium browsers'
 passwords make macOS ask the user whether to allow reading the key to them
-from the keychain.
+from the keychain, once for each profile unless they choose "Always
+Allow".
 
 **Some calls need a click.** Those that change something outside the
 browser only work in response to the user: call them from a click (or key)
