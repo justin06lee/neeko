@@ -508,6 +508,33 @@ Add to it whenever something costs you time.
 - **`ownerGlobal` is undefined on nodes in module code, documents
   included** (see Hide and plug): `doc.defaultView`. It cost the context
   menu a debugging round (the watcher threw before it was set up).
+- **Containers are user contexts Neeko numbers itself** (from 1000, the
+  default one 0), not Firefox's `ContextualIdentityService`: Firefox copes
+  with a userContextId it doesn't know (no tab indicator, and session
+  restore keeps it), and its own containers (1 to 4, and more that
+  extensions make) stay apart. Private windows can have one too
+  (privateBrowsingId 1 with a userContextId).
+  - A window's first tab takes `window.arguments[5]` (Tabbrowser, before
+    the per-window `browser-window-domcontentloaded-before-tabbrowser`
+    hook's result is used); setting it makes browser-init.js load the first
+    page with the full form of the arguments, which needs `[8]`, a
+    triggering principal, or nothing loads. `gBrowserInit.uriToLoadPromise`
+    is read (and kept) earlier, for the bookmarks toolbar: a window that
+    must load nothing replaces it with null.
+  - Every tab goes through `gBrowser.addTab` (session restore through
+    `addTrustedTab`), so one wrapper keeps a window's tabs in its
+    container. Adopting a tab from another window is `adoptTab` and
+    `swapBrowsersAndCloseOther`; dropping one asks
+    `tabContainer.tabDragAndDrop.getDropEffectForTabDrag`.
+  - Session restore creates a window's tabs before it restores its saved
+    values (`extData`), between `SSWindowStateBusy` and
+    `SSWindowStateReady`: the window's container is decided at Ready.
+    `SessionStore.setCustomWindowValue` needs the window to be followed
+    (`__SSi`), from the `browser-window-sessionstore-initialized` hook.
+  - `Services.clearData.deleteDataFromOriginAttributesPattern({
+    userContextId })` wipes a container, private data included.
+  - SessionStore is `moz-src:///browser/components/sessionstore/`, not
+    `resource:///modules/sessionstore/`, in Firefox 156.
 - **The app's pages (`about:<name>`) need registering in every process.**
   Pages with `URI_MUST_LOAD_IN_CHILD` load in a content process, which
   resolves the `about:` address itself, so a dynamically registered

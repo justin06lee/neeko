@@ -658,6 +658,53 @@ neeko.settings.on("change", ({ key, value }) => {
   }
 });
 
+// Containers: each window is in one (neeko.window.container), with its own
+// cookies and site data. A new window has none, and loads nothing, until the
+// user picks one in "Who's browsing?"; picking an ephemeral one (it keeps
+// nothing) makes Neeko replace the window with a private one. The badge next
+// to the address bar says which this window is in. Without containers in
+// browser.json, there's no picker and no badge.
+const picker = document.getElementById("picker");
+const pickerList = document.getElementById("picker-list");
+const badge = document.getElementById("container-badge");
+
+async function showContainer() {
+  let containers = await neeko.containers.list();
+  let current = containers.find(c => c.id == neeko.window.container);
+  picker.hidden = !!current || !containers.length;
+  badge.hidden = !current;
+  if (current) {
+    badge.textContent = current.name;
+    badge.style.setProperty("--container-color", current.color);
+    return;
+  }
+  pickerList.replaceChildren(
+    ...containers.map(container => {
+      let button = document.createElement("button");
+      let avatar = document.createElement("span");
+      avatar.className = "avatar";
+      avatar.style.setProperty("--container-color", container.color);
+      let name = document.createElement("span");
+      name.textContent = container.name;
+      button.append(avatar, name);
+      if (container.ephemeral) {
+        let note = document.createElement("span");
+        note.className = "note";
+        note.textContent = "Forgets everything";
+        button.append(note);
+      }
+      button.addEventListener("click", () =>
+        neeko.window.setContainer(container.id).catch(reportError)
+      );
+      return button;
+    })
+  );
+}
+
+neeko.window.on("container", showContainer);
+neeko.containers.on("change", showContainer);
+showContainer();
+
 // The link the pointer is over in the page, or else the selected tab's
 // loading status ("Waiting for example.com…"), at the bottom of the tab
 // list. Listening for them hides Firefox's own status bubble.

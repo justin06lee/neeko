@@ -19,6 +19,7 @@
  */
 
 import { NeekoBookmarks } from "moz-src:///browser/neeko/NeekoBookmarks.sys.mjs";
+import { NeekoContainers } from "moz-src:///browser/neeko/NeekoContainers.sys.mjs";
 import { NeekoDownloads } from "moz-src:///browser/neeko/NeekoDownloads.sys.mjs";
 import { NeekoPanels } from "moz-src:///browser/neeko/NeekoPanels.sys.mjs";
 import { NeekoSettings } from "moz-src:///browser/neeko/NeekoSettings.sys.mjs";
@@ -231,6 +232,8 @@ const EVENTS = [
   "find.request",
   "status.link",
   "status.message",
+  "containers.change",
+  "window.container",
 ];
 
 // What Firefox's find reports (nsITypeAheadFind), as the API says it.
@@ -249,8 +252,9 @@ const EDGES = ["top", "left", "right", "bottom"];
 const MAX_EDGE = 200;
 
 // Events sent whether or not the UI listens: neeko-api.js keeps its copy of
-// the settings and color scheme (read without waiting) up to date with them.
-const ALWAYS_SENT = ["settings.change", "colorScheme.change"];
+// the settings, the color scheme and the window's container (read without
+// waiting) up to date with them.
+const ALWAYS_SENT = ["settings.change", "colorScheme.change", "window.container"];
 
 // Set on the window's root while the UI lays out page fullscreen itself, which
 // turns off neeko.css's fallback (the page filling the window over the UI).
@@ -787,6 +791,38 @@ const METHODS = {
   },
 
   /**
+   * The app's containers (NeekoContainers): each { id, name, color,
+   * picture, ephemeral, default }.
+   */
+  "containers.list"() {
+    return NeekoContainers.list();
+  },
+
+  "containers.create"(fields) {
+    return NeekoContainers.create(fields);
+  },
+
+  "containers.update"(id, changes) {
+    return NeekoContainers.update(id, changes);
+  },
+
+  "containers.remove"(id) {
+    return NeekoContainers.remove(id);
+  },
+
+  "containers.clear"(id) {
+    return NeekoContainers.clear(id);
+  },
+
+  /**
+   * Puts this window, which has no container yet, in one. A container of
+   * the other kind (ephemeral or not) replaces the window.
+   */
+  "window.setContainer"(id) {
+    return NeekoContainers.setContainer(this.win, id);
+  },
+
+  /**
    * Which of the page's edges to watch the pointer at, and how deep a band
    * along each, in CSS pixels: { top: 10, left: 4 }. Edges left out aren't
    * watched. Replaces what was set before.
@@ -892,6 +928,14 @@ export class NeekoAPI {
       ),
       NeekoSettings.watchColorScheme(colorScheme =>
         this.#emit("colorScheme.change", { colorScheme })
+      ),
+      NeekoContainers.watchWindows((changedWindow, container) => {
+        if (changedWindow == win) {
+          this.#emit("window.container", { container });
+        }
+      }),
+      NeekoContainers.watch(containers =>
+        this.#emit("containers.change", { containers })
       )
     );
   }
@@ -906,6 +950,9 @@ export class NeekoAPI {
     }
     this.#emit("colorScheme.change", {
       colorScheme: NeekoSettings.colorScheme(),
+    });
+    this.#emit("window.container", {
+      container: NeekoContainers.containerOf(this.win),
     });
   }
 

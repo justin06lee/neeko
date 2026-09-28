@@ -50,5 +50,10 @@
       "spelling", "passwords", "pdf", "frame", "viewSourceCommands",
       "viewSource", "inspect", "extensions"
     ]
-  }
+  },
+  "containers": [
+    {"id": "personal", "name": "Personal", "color": "#4a7dff", "default": true},
+    {"id": "work", "name": "Work", "color": "#2dc653"},
+    {"id": "private", "name": "Private", "color": "#9b5de5", "ephemeral": true}
+  ]
 }

@@ -322,6 +322,10 @@ def main():
                 ("network.proxy.failover_direct", False),
                 ("marionette.port", marionette_port),
                 ("remote.prefs.recommended", False),
+                # An app's containers make a new window wait for its UI to
+                # pick one, which nobody does here, so the websites the test
+                # opens would never load. They make no connections.
+                ("neeko.containers.builtin", "[]"),
                 # A dev build's content processes need to read Neeko's own
                 # files, which it links to in src/, for the app's start page
                 # (see make run). Packaged builds carry them inside the app.

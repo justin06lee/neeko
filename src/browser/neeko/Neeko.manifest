@@ -4,3 +4,8 @@ category browser-window-before-initial-xul-layout moz-src:///browser/neeko/Neeko
 category browser-window-before-initial-xul-layout moz-src:///browser/neeko/NeekoMenus.sys.mjs NeekoMenus.init
 category browser-before-ui-startup moz-src:///browser/neeko/NeekoPrivacy.sys.mjs NeekoPrivacy.init
 category browser-before-ui-startup moz-src:///browser/neeko/NeekoPages.sys.mjs NeekoPages.init
+category browser-window-domcontentloaded-before-tabbrowser moz-src:///browser/neeko/NeekoContainers.sys.mjs NeekoContainers.beforeTabbrowser
+category browser-window-domcontentloaded moz-src:///browser/neeko/NeekoContainers.sys.mjs NeekoContainers.initWindow
+category browser-window-sessionstore-initialized moz-src:///browser/neeko/NeekoContainers.sys.mjs NeekoContainers.sessionStoreReady
+category browser-window-unload-begin moz-src:///browser/neeko/NeekoContainers.sys.mjs NeekoContainers.uninitWindow
+category browser-before-ui-startup moz-src:///browser/neeko/NeekoContainers.sys.mjs NeekoContainers.init

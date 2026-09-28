@@ -638,6 +638,89 @@ main {
   font-size: 12px;
 }
 
+/* The window's container, next to the address bar. */
+#container-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px;
+  font-size: 12px;
+  color: var(--text-quiet);
+  white-space: nowrap;
+}
+
+#container-badge[hidden] {
+  display: none;
+}
+
+#container-badge::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--container-color, var(--text-quiet));
+}
+
+/* "Who's browsing?", over the whole window until the window has a
+   container. */
+#picker {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  background: var(--background);
+  -moz-window-dragging: drag;
+}
+
+#picker[hidden] {
+  display: none;
+}
+
+#picker h1 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--text-strong);
+}
+
+#picker-list {
+  display: flex;
+  gap: 16px;
+}
+
+#picker-list button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  width: 120px;
+  padding: 18px 8px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--button);
+  -moz-window-dragging: no-drag;
+}
+
+#picker-list button:hover {
+  background: var(--button-hover);
+}
+
+#picker-list .avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--container-color, var(--text-quiet));
+}
+
+#picker-list .note {
+  font-size: 11px;
+  color: var(--text-quiet);
+}
+
 #menu-button.open {
   background: var(--menu-hover);
 }

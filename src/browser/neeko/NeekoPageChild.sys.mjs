@@ -13,15 +13,22 @@
  *   neekoPage.defaultBrowser.isDefault() / setDefault()
  *   neekoPage.import.browsers() / fromBrowser(id, { profile, types })
  *     / requestPermission(id) / openFullDiskAccess() / fromFile(kind)
+ *   neekoPage.container                  its tab's container, if any
+ *   neekoPage.containers.list() / create(fields) / update(id, changes)
+ *     / remove(id) / clear(id) / on("change", fn)
  *
  * Every method returns a promise; docs/api.md documents them. Those that
  * change something outside the browser need a click (or key) in the page
  * first, which only the page's user can give (askAfterClick).
  */
 
+import { NeekoContainers } from "moz-src:///browser/neeko/NeekoContainers.sys.mjs";
+
 export class NeekoPageChild extends JSWindowActorChild {
   /** The page's listeners for settings changes. */
   #listeners = new Set();
+  /** And for container changes. */
+  #containerListeners = new Set();
 
   handleEvent(event) {
     // The page's document exists and none of its scripts have run.
@@ -35,9 +42,11 @@ export class NeekoPageChild extends JSWindowActorChild {
   }
 
   receiveMessage({ name, data }) {
-    if (name == "settings.change") {
+    if (name == "settings.change" || name == "containers.change") {
       let win = this.contentWindow;
-      for (let listener of this.#listeners) {
+      let listeners =
+        name == "settings.change" ? this.#listeners : this.#containerListeners;
+      for (let listener of listeners) {
         try {
           listener(Cu.cloneInto(data, win));
         } catch (e) {
@@ -125,7 +134,32 @@ export class NeekoPageChild extends JSWindowActorChild {
     );
     define(imports, "fromFile", kind => askAfterClick("import.fromFile", { kind }));
 
-    for (let object of [settings, search, defaultBrowser, imports, api]) {
+    // The container of the page's tab: a tab never changes container.
+    Cu.waiveXrays(api).container = NeekoContainers.idForUserContext(
+      this.browsingContext.originAttributes.userContextId
+    );
+    let containers = Cu.createObjectIn(api, { defineAs: "containers" });
+    define(containers, "list", () => ask("containers.list"));
+    define(containers, "create", fields =>
+      ask("containers.create", { fields: Cu.cloneInto(fields, {}) })
+    );
+    define(containers, "update", (id, changes) =>
+      ask("containers.update", { id, changes: Cu.cloneInto(changes, {}) })
+    );
+    define(containers, "remove", id => askAfterClick("containers.remove", { id }));
+    define(containers, "clear", id => askAfterClick("containers.clear", { id }));
+    define(containers, "on", (type, listener) => {
+      if (type != "change" || typeof listener != "function") {
+        throw new win.TypeError('Expected "change" and a listener.');
+      }
+      if (!this.#containerListeners.size) {
+        this.sendAsyncMessage("containers.listen");
+      }
+      this.#containerListeners.add(listener);
+      return Cu.exportFunction(() => this.#containerListeners.delete(listener), win);
+    });
+
+    for (let object of [settings, search, defaultBrowser, imports, containers, api]) {
       Cu.waiveXrays(win).Object.freeze(Cu.waiveXrays(object));
     }
   }
