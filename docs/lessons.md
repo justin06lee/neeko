@@ -555,6 +555,21 @@ Add to it whenever something costs you time.
   before the per-window hook runs, so `NeekoPages.initWindow` replaces the
   kept value (or the argument, if nobody read it yet). Nothing has loaded
   by then.
+- **A page's click can be checked, and used up, from its actor.** The
+  document's `hasValidTransientUserGestureActivation` and
+  `consumeTransientUserGestureActivation()` are chrome-only, so
+  `NeekoPageChild` checks them before sending a call that needs a click;
+  the parent can't see a page's activation itself. In a test,
+  `browser.messageManager.loadFrameScript("data:,content.document.notifyUserGestureActivation(); …")`
+  gives the page a click from chrome code (synthesized mouse events from
+  the parent don't count as one).
+- **The default browser, on macOS:** `ShellService.isDefaultBrowser(false,
+  false)` compares the bundle id with the `http` handler (cheap);
+  `setDefaultBrowser()` asks Launch Services, and macOS then asks the user
+  in its own dialog, telling the app nothing. `NeekoPageParent` waits for
+  the browser to become the default or for the app to come back to the
+  foreground. `ShellService` is a Proxy whose methods can be replaced for a
+  test (the API test does, so it never changes the machine's default).
 - **The browser window hears the pointer over web pages.** Mouse events
   are dispatched in the parent's document first, with the page's
   `<browser>` as their target, before Firefox forwards them to the content

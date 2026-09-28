@@ -73,6 +73,10 @@ get added as it needs them.
   autocomplete, through Firefox's own design tokens. And Firefox's
   notification bars (a blocked pop-up, a slow page) show over the top of the
   page again, which they didn't under Neeko before. Fallback: Firefox's look.
+- [x] **The default browser, for the browser's pages** (v0.15.0):
+  `neekoPage.defaultBrowser`: whether it is, and asking the system to make
+  it so, after a click in the page. Fallback: Firefox's own prompt and
+  settings.
 - [x] **Links and loading status** (v0.14.0): the link the pointer is over
   (as the page has it, and as Firefox shows it) and loading pages' status
   messages, as events. Fallback: Firefox's status bubble.

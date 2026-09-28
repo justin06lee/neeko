@@ -93,6 +93,12 @@ TEST_PAGES = {
     "`engines ${list.length} ${list.filter(e => e.isDefault).length}`), fail); break;"
     "case 'default': neekoPage.search.setDefault(q.get('id'))"
     ".then(() => show('default set'), fail); break;"
+    "case 'isdefault': neekoPage.defaultBrowser.isDefault()"
+    ".then(v => show('isdefault ' + v), fail); break;"
+    "case 'setdefault-now': neekoPage.defaultBrowser.setDefault()"
+    ".then(v => show('set ' + v), fail); break;"
+    "case 'setdefault': onclick = () => neekoPage.defaultBrowser.setDefault()"
+    ".then(v => show('set ' + v), fail); show('ready'); break;"
     "}</script>",
     # Named like Firefox's own about:preferences, so it isn't served.
     "preferences.html": "<title>not Firefox's</title>",

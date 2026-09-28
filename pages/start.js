@@ -1,6 +1,7 @@
 // The demo app's start page, built on `neekoPage`, the API of the browser's
 // own pages: search or go somewhere, pick the search engine, and share a
-// setting with the UI. Private windows show it too, with a note.
+// setting with the UI, and make this the default browser. Private windows
+// show it too, with a note.
 
 const query = document.getElementById("query");
 const engineMenu = document.getElementById("engine");
@@ -23,6 +24,19 @@ for (let engine of await neekoPage.search.engines()) {
 engineMenu.addEventListener("change", () => {
   neekoPage.search.setDefault(engineMenu.value);
 });
+
+// Whether this is the default browser, and a button to make it so. The
+// system asks the user in a dialog of its own; the page checks again when
+// it gets the focus back, in case that changed some other way.
+const notDefault = document.getElementById("not-default");
+const showDefault = async () => {
+  notDefault.hidden = await neekoPage.defaultBrowser.isDefault();
+};
+document.getElementById("make-default").addEventListener("click", async () => {
+  notDefault.hidden = await neekoPage.defaultBrowser.setDefault();
+});
+addEventListener("focus", showDefault);
+showDefault();
 
 // The UI's "tabs" setting (neeko.settings): the same in the UI's ⋯ menu.
 let showTabs = value => (tabsRight.checked = value == "right");

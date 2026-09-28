@@ -1116,6 +1116,47 @@ if (otherEngine) {
   await SearchService.setDefault(defaultEngine, SearchService.CHANGE_REASON.USER);
   await neeko.tabs.close(defaultTest.tab.id);
 }
+// The default browser: whether this browser is, and making it so, which only
+// a click in the page can start. Firefox's call is replaced for the test, so
+// it never changes this computer's default browser.
+let { ShellService } = ChromeUtils.importESModule("moz-src:///browser/components/shell/ShellService.sys.mjs");
+let isDefaultTest = await pageTest("isdefault", title => title.startsWith("isdefault") || title.startsWith("refused"), "neekoPage.defaultBrowser.isDefault()");
+check(
+  isDefaultTest.title == `isdefault ${ShellService.isDefaultBrowser(false, false)}`,
+  `says whether this browser is the default (${isDefaultTest.title})`
+);
+await neeko.tabs.close(isDefaultTest.tab.id);
+let setNowTest = await pageTest("setdefault-now", title => title.startsWith("set") || title.startsWith("refused"), "setDefault() without a click");
+check(/refused.*click/.test(setNowTest.title), `is refused (${setNowTest.title})`);
+await neeko.tabs.close(setNowTest.tab.id);
+let realSetDefault = ShellService.setDefaultBrowser;
+let realIsDefault = ShellService.isDefaultBrowser;
+let defaultAsked = 0;
+ShellService.setDefaultBrowser = async () => {
+  defaultAsked++;
+};
+ShellService.isDefaultBrowser = () => defaultAsked > 0;
+try {
+  let clickTest = await pageTest("setdefault", title => title == "ready", "a page with a button to make this the default browser");
+  // A click in the page, which Firefox counts as the user's: only chrome
+  // code can make one without a person.
+  gBrowser.selectedBrowser.messageManager.loadFrameScript(
+    "data:,content.document.notifyUserGestureActivation(); content.document.body.click();",
+    false
+  );
+  let clicked = await waitFor(
+    () => updated(clickTest.tab.id, t => t.title.startsWith("set ") || t.title.startsWith("refused")),
+    "setDefault() after a click"
+  );
+  check(
+    clicked?.tab.title == "set true" && defaultAsked == 1,
+    `asks the system once, and resolves to whether it's the default now (${clicked?.tab.title})`
+  );
+  await neeko.tabs.close(clickTest.tab.id);
+} finally {
+  ShellService.setDefaultBrowser = realSetDefault;
+  ShellService.isDefaultBrowser = realIsDefault;
+}
 await neeko.tabs.close(startTab.id);
 
 // Private windows show the start page too, first and in new tabs, instead of
