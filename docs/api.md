@@ -660,6 +660,40 @@ let theme = await neekoPage.settings.get("theme");
 | `neekoPage.defaultBrowser.isDefault()` | Whether your browser is the system's default browser. Cheap: ask again when your page gets the focus back, say. |
 | `neekoPage.defaultBrowser.setDefault()` | Asks the system to make your browser the default, and resolves once the user has answered: whether it is now. On macOS the system asks in a dialog of its own (so it can take a while), and nothing changes until the user agrees. Needs a click (see below). |
 
+### Importing from other browsers
+
+Your pages can offer to bring over bookmarks, history and passwords from
+the other browsers on this computer, or from files the user exported, with
+Firefox's own importers. They go into Firefox's bookmarks, history and
+password manager; your page gets names and counts, never the data.
+Importing never goes online (Firefox's importing of other browsers'
+extensions, which matches them on addons.mozilla.org, isn't offered).
+
+```js
+let browsers = await neekoPage.import.browsers();
+// [{ id: "chrome", name: "Chrome", available: true, needsPermission: false,
+//    profiles: [{ id: "Default", name: "Person 1", types: ["bookmarks", "history", "passwords"] }] },
+//  { id: "safari", name: "Safari", available: true, needsPermission: true, profiles: [...] },
+//  { id: "vivaldi", name: "Vivaldi", available: false, profiles: [] }, ...]
+button.onclick = async () => {
+  let result = await neekoPage.import.fromBrowser("chrome", { profile: "Default" });
+  // { bookmarks: { count: 212 }, history: { count: null }, passwords: { error: "keychain" } }
+};
+```
+
+| Method | What it does |
+| --- | --- |
+| `neekoPage.import.browsers()` | Every browser Firefox can import from on this system, installed or not (`available`), with its profiles and what each has to import: some of `bookmarks`, `history` and `passwords`. A browser with a single profile has one, with the id `""`. `needsPermission` is `true` while the system keeps its data from the browser (Safari's, on macOS). |
+| `neekoPage.import.fromBrowser(id, options?)` | Imports a profile: `profile` (its id; the first by default) and `types` (all it has, by default). Resolves to one entry per type: `{ count }` (`null` for history, which Firefox doesn't count), or `{ error }`: `"permission"` (see `requestPermission`), `"keychain"` (macOS's keychain refused the key to a Chromium browser's passwords), `"none"` (the profile has none) or `"failed"`. Needs a click. |
+| `neekoPage.import.requestPermission(id)` | Asks the user for access to a browser's data where the system protects it, as Firefox does: a folder picker opens at Safari's folder, and choosing it gives access. Resolves to whether it did. Needs a click. |
+| `neekoPage.import.openFullDiskAccess()` | Opens macOS's System Settings at Full Disk Access, the other way to let the browser read Safari's data (the browser then needs restarting). Needs a click. |
+| `neekoPage.import.fromFile(kind)` | Asks the user for a file and imports it: `"bookmarks"` (an HTML bookmarks file, as browsers export them, or Firefox's JSON backup) or `"passwords"` (a CSV or TSV export). Resolves to `{ count }` (for passwords also `updated`, the ones Firefox already had and changed), `{ canceled: true }`, or `{ error: "failed" }` for a file it couldn't read. Needs a click. |
+
+Safari's passwords can't be imported directly: the user exports them from
+Safari (or macOS's Passwords app) and imports the file. Chromium browsers'
+passwords make macOS ask the user whether to allow reading the key to them
+from the keychain.
+
 **Some calls need a click.** Those that change something outside the
 browser only work in response to the user: call them from a click (or key)
 handler, or they're refused with an error that says so. Each click allows

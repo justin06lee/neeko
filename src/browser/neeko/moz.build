@@ -10,6 +10,7 @@ MOZ_SRC_FILES += [
     "NeekoAPI.sys.mjs",
     "NeekoBookmarks.sys.mjs",
     "NeekoDownloads.sys.mjs",
+    "NeekoImport.sys.mjs",
     "NeekoMenuNames.sys.mjs",
     "NeekoMenus.sys.mjs",
     "NeekoPageChild.sys.mjs",

@@ -99,6 +99,15 @@ TEST_PAGES = {
     ".then(v => show('set ' + v), fail); break;"
     "case 'setdefault': onclick = () => neekoPage.defaultBrowser.setDefault()"
     ".then(v => show('set ' + v), fail); show('ready'); break;"
+    "case 'browsers': neekoPage.import.browsers().then(list => show('browsers ' + list.length + ' '"
+    " + JSON.stringify(list.filter(b => b.available).map(b => [b.id, b.needsPermission,"
+    " b.profiles.map(p => [p.id, p.name, p.types.join('+')])]))), fail); break;"
+    "case 'import-now': neekoPage.import.fromBrowser('chrome')"
+    ".then(r => show('imported ' + JSON.stringify(r)), fail); break;"
+    "case 'import': onclick = () => neekoPage.import.fromBrowser('chrome', { profile: 'Default' })"
+    ".then(r => show('imported ' + JSON.stringify(r)), fail); show('ready'); break;"
+    "case 'file': onclick = () => neekoPage.import.fromFile(q.get('kind'))"
+    ".then(r => show('file ' + JSON.stringify(r)), fail); show('ready'); break;"
     "}</script>",
     # Named like Firefox's own about:preferences, so it isn't served.
     "preferences.html": "<title>not Firefox's</title>",

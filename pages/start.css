@@ -72,8 +72,23 @@ select {
   font: inherit;
 }
 
-#not-default {
+#import,
+#import-result {
+  font-size: 13px;
+  opacity: 0.75;
+}
+
+#import {
   margin-top: 32px;
+}
+
+#import select,
+#import button {
+  font: inherit;
+}
+
+#not-default {
+  margin-top: 16px;
   font-size: 13px;
   opacity: 0.75;
 }

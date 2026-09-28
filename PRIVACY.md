@@ -57,6 +57,10 @@ a website.
   for updates once a day. Mozilla and Google see your internet address and
   your browser and system versions.
 - **Installing add-ons** from addons.mozilla.org.
+- **Importing from another browser** (if this browser offers it) reads that
+  browser's bookmarks, history and passwords on this computer and connects
+  to nothing. Firefox can also match another browser's extensions on
+  addons.mozilla.org; browsers built on Neeko don't offer that.
 - **DNS lookups** go to your computer's usual DNS server, as for any other
   app. The browser doesn't send them to an encrypted DNS provider unless you
   choose one in Settings.

@@ -10,6 +10,7 @@
  */
 
 import { goTo, openTab } from "moz-src:///browser/neeko/NeekoAPI.sys.mjs";
+import { NeekoImport } from "moz-src:///browser/neeko/NeekoImport.sys.mjs";
 import { NeekoPages } from "moz-src:///browser/neeko/NeekoPages.sys.mjs";
 import { NeekoSettings } from "moz-src:///browser/neeko/NeekoSettings.sys.mjs";
 
@@ -141,9 +142,27 @@ export class NeekoPageParent extends JSWindowActorParent {
       }
       case "defaultBrowser.isDefault":
         return lazy.ShellService.isDefaultBrowser(false, false);
-      // The page's child actor only sends this after a click in the page.
+      // The page's child actor only sends this after a click in the page,
+      // as it does the import calls below but the first.
       case "defaultBrowser.setDefault":
         return setDefaultBrowser();
+      case "import.browsers":
+        return NeekoImport.browsers();
+      case "import.fromBrowser":
+        if (data.profile !== undefined && typeof data.profile != "string") {
+          throw new TypeError("A profile is its id, a string.");
+        }
+        return NeekoImport.fromBrowser(data.id, {
+          profile: data.profile,
+          types: data.types,
+        });
+      case "import.requestPermission":
+        return NeekoImport.requestPermission(data.id, win);
+      case "import.openFullDiskAccess":
+        NeekoImport.openFullDiskAccess();
+        return undefined;
+      case "import.fromFile":
+        return NeekoImport.fromFile(data.kind, win);
     }
     throw new Error(`Unknown message "${name}".`);
   }

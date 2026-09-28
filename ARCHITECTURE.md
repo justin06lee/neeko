@@ -96,7 +96,8 @@ official startup hooks (`Neeko.manifest`):
   Firefox's privileged about: process, not linkable by websites, with the
   start page as the New Tab and home page, and private windows' first page. A process script registers them
   in content processes too, and a window actor (`NeekoPageChild` and
-  `NeekoPageParent`) gives them `neekoPage`, checking every call. This is
+  `NeekoPageParent`) gives them `neekoPage`, checking every call, and
+  `NeekoImport.sys.mjs` does their importing from other browsers. This is
   the one place web content gets an API (the user's decision, with those
   locks).
 - **`NeekoTheme.sys.mjs`** puts the app's look (`browser.json`'s `theme`,

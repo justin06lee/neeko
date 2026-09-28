@@ -1,7 +1,7 @@
 // The demo app's start page, built on `neekoPage`, the API of the browser's
 // own pages: search or go somewhere, pick the search engine, and share a
-// setting with the UI, and make this the default browser. Private windows
-// show it too, with a note.
+// setting with the UI, import from other browsers, and make this the
+// default browser. Private windows show it too, with a note.
 
 const query = document.getElementById("query");
 const engineMenu = document.getElementById("engine");
@@ -37,6 +37,63 @@ document.getElementById("make-default").addEventListener("click", async () => {
 });
 addEventListener("focus", showDefault);
 showDefault();
+
+// Importing from another browser on this computer, or from a file, with
+// Firefox's importers. Browsers that aren't here are listed as such.
+const importFrom = document.getElementById("import-from");
+const importBrowser = document.getElementById("import-browser");
+const importResult = document.getElementById("import-result");
+const showResult = text => {
+  importResult.textContent = text;
+  importResult.hidden = false;
+};
+const REASONS = {
+  permission: "needs your permission to read it",
+  keychain: "the keychain didn't allow it",
+  none: "there were none",
+  failed: "they couldn't be read",
+};
+const describe = result =>
+  Object.entries(result)
+    .map(([type, { count, error }]) =>
+      error ? `${type}: ${REASONS[error] ?? error}` : count === null ? `${type}: done` : `${count} ${type}`
+    )
+    .join(", ");
+let browsers = [];
+const showBrowsers = async () => {
+  browsers = await neekoPage.import.browsers();
+  importFrom.replaceChildren();
+  for (let browser of browsers.filter(b => b.available)) {
+    for (let profile of browser.profiles) {
+      let label = browser.profiles.length > 1 ? `${browser.name} (${profile.name})` : browser.name;
+      importFrom.add(new Option(label, JSON.stringify([browser.id, profile.id])));
+    }
+  }
+  let missing = browsers.filter(b => !b.available).map(b => b.name);
+  importFrom.title = missing.length ? `Not on this computer: ${missing.join(", ")}` : "";
+  importBrowser.disabled = !importFrom.options.length;
+};
+importBrowser.addEventListener("click", async () => {
+  let [id, profile] = JSON.parse(importFrom.value);
+  let browser = browsers.find(b => b.id == id);
+  // Safari's data needs the user's say-so first: a folder picker at it.
+  if (browser.needsPermission && !(await neekoPage.import.requestPermission(id))) {
+    showResult(`${browser.name}: ${REASONS.permission}.`);
+    return;
+  }
+  showResult(`Importing from ${browser.name}…`);
+  let result = await neekoPage.import.fromBrowser(id, { profile });
+  showResult(`${browser.name}: ${describe(result) || "nothing to import"}.`);
+});
+for (let kind of ["bookmarks", "passwords"]) {
+  document.getElementById(`import-${kind}`).addEventListener("click", async () => {
+    let result = await neekoPage.import.fromFile(kind);
+    if (!result.canceled) {
+      showResult(result.error ? `The file: ${REASONS[result.error]}.` : `${result.count} ${kind} imported.`);
+    }
+  });
+}
+showBrowsers();
 
 // The UI's "tabs" setting (neeko.settings): the same in the UI's ⋯ menu.
 let showTabs = value => (tabsRight.checked = value == "right");
