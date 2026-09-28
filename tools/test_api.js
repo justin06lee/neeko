@@ -1157,6 +1157,144 @@ try {
   ShellService.setDefaultBrowser = realSetDefault;
   ShellService.isDefaultBrowser = realIsDefault;
 }
+// Importing from other browsers, with Firefox's importers. Firefox looks for
+// other browsers in the Library folder: here, a fake one with a Chrome
+// profile, so this computer's own browsers are never read.
+let { MigrationUtils } = ChromeUtils.importESModule("resource:///modules/MigrationUtils.sys.mjs");
+let clickPage = () =>
+  gBrowser.selectedBrowser.messageManager.loadFrameScript(
+    "data:,content.document.notifyUserGestureActivation(); content.document.body.click();",
+    false
+  );
+let realLibrary = Services.dirsvc.get("ULibDir", Ci.nsIFile);
+let fakeLibrary = PathUtils.join(PathUtils.profileDir, "fake-library");
+let fakeChrome = PathUtils.join(fakeLibrary, "Application Support", "Google", "Chrome");
+let importedURL = `${BASE}/one?from-chrome`;
+await IOUtils.makeDirectory(PathUtils.join(fakeChrome, "Default"));
+await IOUtils.writeJSON(PathUtils.join(fakeChrome, "Local State"), {
+  profile: { info_cache: { Default: { name: "Neeko Tester" } } },
+});
+await IOUtils.writeJSON(PathUtils.join(fakeChrome, "Default", "Bookmarks"), {
+  roots: {
+    bookmark_bar: {
+      type: "folder",
+      name: "Bookmarks bar",
+      children: [{ type: "url", name: "From Chrome", url: importedURL, date_added: "13300000000000000" }],
+    },
+    other: { type: "folder", name: "Other bookmarks", children: [] },
+    synced: { type: "folder", name: "Mobile bookmarks", children: [] },
+  },
+  version: 1,
+});
+let useLibrary = path => {
+  Services.dirsvc.undefine("ULibDir");
+  Services.dirsvc.set("ULibDir", typeof path == "string" ? new FileUtils.File(path) : path);
+  // Firefox's importers keep what they found.
+  MigrationUtils.finishMigration();
+};
+let { FileUtils } = ChromeUtils.importESModule("resource://gre/modules/FileUtils.sys.mjs");
+useLibrary(fakeLibrary);
+try {
+  let browsersTest = await pageTest("browsers", title => title.startsWith("browsers") || title.startsWith("refused"), "neekoPage.import.browsers()");
+  check(
+    /^browsers \d+ \[\["chrome",false,\[\["Default","Neeko Tester","bookmarks"\]\]\]\]$/.test(browsersTest.title) &&
+      Number(browsersTest.title.split(" ")[1]) > 1,
+    `lists the browsers it knows, with the profiles and what they have of those here (${browsersTest.title})`
+  );
+  await neeko.tabs.close(browsersTest.tab.id);
+  let importNow = await pageTest("import-now", title => title.startsWith("imported") || title.startsWith("refused"), "fromBrowser() without a click");
+  check(/refused.*click/.test(importNow.title), `is refused (${importNow.title})`);
+  await neeko.tabs.close(importNow.tab.id);
+  let importTest = await pageTest("import", title => title == "ready", "a page with an import button");
+  clickPage();
+  let imported = await waitFor(
+    () => updated(importTest.tab.id, t => t.title.startsWith("imported ") || t.title.startsWith("refused")),
+    "fromBrowser() after a click"
+  );
+  check(
+    imported?.tab.title == 'imported {"bookmarks":{"count":1}}' &&
+      (await neeko.bookmarks.find(importedURL)).length == 1,
+    `imports the profile's bookmarks into Firefox's, and counts them (${imported?.tab.title})`
+  );
+  for (let bookmark of await neeko.bookmarks.find(importedURL)) {
+    await neeko.bookmarks.remove(bookmark.id);
+  }
+  await neeko.tabs.close(importTest.tab.id);
+} finally {
+  useLibrary(realLibrary);
+}
+
+// And from files the user picks. Firefox's file picker is replaced for the
+// test, answering with a file of the test's.
+let pickerAnswer = null;
+let pickerCID = Components.ID(Services.uuid.generateUUID().toString());
+let pickerContract = "@mozilla.org/filepicker;1";
+let realPickerCID = Components.manager
+  .QueryInterface(Ci.nsIComponentRegistrar)
+  .contractIDToCID(pickerContract);
+let fakePicker = {
+  QueryInterface: ChromeUtils.generateQI(["nsIFactory"]),
+  createInstance(iid) {
+    return {
+      QueryInterface: ChromeUtils.generateQI(["nsIFilePicker"]),
+      init() {},
+      appendFilter() {},
+      appendFilters() {},
+      open(callback) {
+        let path = pickerAnswer;
+        this.file = path && new FileUtils.File(path);
+        Services.tm.dispatchToMainThread(() =>
+          callback.done(path ? Ci.nsIFilePicker.returnOK : Ci.nsIFilePicker.returnCancel)
+        );
+      },
+    }.QueryInterface(iid);
+  },
+};
+let registrar = Components.manager.QueryInterface(Ci.nsIComponentRegistrar);
+registrar.registerFactory(pickerCID, "Neeko test file picker", pickerContract, fakePicker);
+try {
+  let bookmarksFile = PathUtils.join(PathUtils.profileDir, "exported-bookmarks.html");
+  let fileURL = `${BASE}/two?from-file`;
+  await IOUtils.writeUTF8(
+    bookmarksFile,
+    `<!DOCTYPE NETSCAPE-Bookmark-file-1><DL><p><DT><A HREF="${fileURL}">From a file</A></DL>`
+  );
+  let passwordsFile = PathUtils.join(PathUtils.profileDir, "exported-passwords.csv");
+  await IOUtils.writeUTF8(passwordsFile, "url,username,password\nhttps://neeko-test.example,alice,secret\n");
+  let fileTest = async (kind, answer, what) => {
+    pickerAnswer = answer;
+    let tab = await pageTest(`file&kind=${kind}`, title => title == "ready", `a page to import ${kind} from a file`);
+    clickPage();
+    let done = await waitFor(
+      () => updated(tab.tab.id, t => t.title.startsWith("file ") || t.title.startsWith("refused")),
+      what
+    );
+    await neeko.tabs.close(tab.tab.id);
+    return done?.tab.title;
+  };
+  let bookmarksResult = await fileTest("bookmarks", bookmarksFile, "fromFile(\"bookmarks\")");
+  check(
+    bookmarksResult == 'file {"count":1}' && (await neeko.bookmarks.find(fileURL)).length == 1,
+    `imports a bookmarks file into Firefox's bookmarks (${bookmarksResult})`
+  );
+  for (let bookmark of await neeko.bookmarks.find(fileURL)) {
+    await neeko.bookmarks.remove(bookmark.id);
+  }
+  let passwordsResult = await fileTest("passwords", passwordsFile, "fromFile(\"passwords\")");
+  let savedLogins = await Services.logins.searchLoginsAsync({ origin: "https://neeko-test.example" });
+  check(
+    passwordsResult == 'file {"count":1,"updated":0}' && savedLogins.length == 1,
+    `imports a passwords file into Firefox's password manager (${passwordsResult})`
+  );
+  for (let login of savedLogins) {
+    await Services.logins.removeLoginAsync(login);
+  }
+  let canceledResult = await fileTest("bookmarks", null, "fromFile() when the user cancels");
+  check(canceledResult == 'file {"canceled":true}', `says so (${canceledResult})`);
+} finally {
+  registrar.unregisterFactory(pickerCID, fakePicker);
+  registrar.registerFactory(realPickerCID, "", pickerContract, null);
+}
 await neeko.tabs.close(startTab.id);
 
 // Private windows show the start page too, first and in new tabs, instead of

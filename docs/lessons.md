@@ -570,6 +570,28 @@ Add to it whenever something costs you time.
   the browser to become the default or for the app to come back to the
   foreground. `ShellService` is a Proxy whose methods can be replaced for a
   test (the API test does, so it never changes the machine's default).
+- **Importing is Firefox's `MigrationUtils`** (what its import wizard,
+  `MigrationWizardParent`, uses): `availableMigratorKeys` (every importer
+  for the platform, installed or not; names are the Fluent strings
+  `migration-wizard-migrator-display-name-<key>`), `getMigrator(key)`
+  (null if not installed), `getSourceProfiles()` (null for one profile),
+  `getMigrateData(profile)` (a bitmask of `resourceTypes`), and
+  `migrate(types, false, profile, callback)`, which resolves once every
+  type is done, with `getImportedCount("bookmarks" | "logins")` after.
+  - Its `EXTENSIONS` type matches extensions on addons.mozilla.org, the
+    only part that goes online: Neeko never asks for it.
+  - Importers keep what they found (profiles, resources) until
+    `MigrationUtils.finishMigration()`.
+  - They find other browsers under the `ULibDir` directory, which a test
+    can point elsewhere (`Services.dirsvc.undefine`, then `set`), with a
+    fake Chrome profile: `Local State` (`profile.info_cache`) and
+    `Default/Bookmarks` (`roots.bookmark_bar/other/synced`).
+  - Safari's data needs Full Disk Access or the user choosing
+    `~/Library/Safari` in a folder picker (`getPermissions(win)`); its
+    passwords only come as a file export.
+  - A test replaces the native file picker by registering a factory for
+    `@mozilla.org/filepicker;1` (and puts the real one back with its CID).
+  - `Services.logins.removeLogin` is gone; it's `removeLoginAsync`.
 - **The browser window hears the pointer over web pages.** Mouse events
   are dispatched in the parent's document first, with the page's
   `<browser>` as their target, before Firefox forwards them to the content

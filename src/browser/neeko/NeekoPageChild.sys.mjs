@@ -11,6 +11,8 @@
  *   neekoPage.settings.get(key) / all() / set(key, value) / on("change", fn)
  *   neekoPage.search.engines() / setDefault(id)
  *   neekoPage.defaultBrowser.isDefault() / setDefault()
+ *   neekoPage.import.browsers() / fromBrowser(id, { profile, types })
+ *     / requestPermission(id) / openFullDiskAccess() / fromFile(kind)
  *
  * Every method returns a promise; docs/api.md documents them. Those that
  * change something outside the browser need a click (or key) in the page
@@ -106,7 +108,24 @@ export class NeekoPageChild extends JSWindowActorChild {
       askAfterClick("defaultBrowser.setDefault")
     );
 
-    for (let object of [settings, search, defaultBrowser, api]) {
+    let imports = Cu.createObjectIn(api, { defineAs: "import" });
+    define(imports, "browsers", () => ask("import.browsers"));
+    define(imports, "fromBrowser", (id, options) =>
+      askAfterClick("import.fromBrowser", {
+        id,
+        profile: options?.profile,
+        types: options?.types ? [...options.types] : undefined,
+      })
+    );
+    define(imports, "requestPermission", id =>
+      askAfterClick("import.requestPermission", { id })
+    );
+    define(imports, "openFullDiskAccess", () =>
+      askAfterClick("import.openFullDiskAccess")
+    );
+    define(imports, "fromFile", kind => askAfterClick("import.fromFile", { kind }));
+
+    for (let object of [settings, search, defaultBrowser, imports, api]) {
       Cu.waiveXrays(win).Object.freeze(Cu.waiveXrays(object));
     }
   }

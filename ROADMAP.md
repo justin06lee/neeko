@@ -73,6 +73,12 @@ get added as it needs them.
   autocomplete, through Firefox's own design tokens. And Firefox's
   notification bars (a blocked pop-up, a slow page) show over the top of the
   page again, which they didn't under Neeko before. Fallback: Firefox's look.
+- [x] **Importing from other browsers, for the browser's pages**
+  (v0.16.0): `neekoPage.import`: the browsers Firefox can import from, and
+  their profiles; importing bookmarks, history and passwords with Firefox's
+  importers (never extensions, which would go online); Safari's
+  permission; bookmarks and passwords files. Fallback: Firefox's import
+  wizard (File > Import from Another Browser, and its settings).
 - [x] **The default browser, for the browser's pages** (v0.15.0):
   `neekoPage.defaultBrowser`: whether it is, and asking the system to make
   it so, after a click in the page. Fallback: Firefox's own prompt and
