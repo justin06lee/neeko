@@ -79,7 +79,8 @@ get added as it needs them.
   `neekoPage.containers`; each window in one, picked by the UI for a new
   window (which loads nothing meanwhile), kept by links, pop-ups, dragged
   tabs and session restore; ephemeral ones in private windows, wiped when
-  closed. Fallback: no containers.
+  closed, and a container made ephemeral, or not, while none of its
+  windows is open (v0.19.0). Fallback: no containers.
 - [x] **Importing from other browsers, for the browser's pages**
   (v0.16.0): `neekoPage.import`: the browsers Firefox can import from, and
   their profiles; importing bookmarks, history and passwords with Firefox's

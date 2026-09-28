@@ -18,8 +18,9 @@
  *     / remove(id) / clear(id) / on("change", fn)
  *
  * Every method returns a promise; docs/api.md documents them. Those that
- * change something outside the browser need a click (or key) in the page
- * first, which only the page's user can give (askAfterClick).
+ * change something outside the browser, or wipe what the user kept, need a
+ * click (or key) in the page first, which only the page's user can give
+ * (askAfterClick).
  */
 
 import { NeekoContainers } from "moz-src:///browser/neeko/NeekoContainers.sys.mjs";
@@ -144,9 +145,13 @@ export class NeekoPageChild extends JSWindowActorChild {
     define(containers, "create", fields =>
       ask("containers.create", { fields: Cu.cloneInto(fields, {}) })
     );
-    define(containers, "update", (id, changes) =>
-      ask("containers.update", { id, changes: Cu.cloneInto(changes, {}) })
-    );
+    define(containers, "update", (id, changes) => {
+      let data = { id, changes: Cu.cloneInto(changes, {}) };
+      // Becoming ephemeral, or not, wipes what the container kept.
+      return data.changes?.ephemeral !== undefined
+        ? askAfterClick("containers.update", data)
+        : ask("containers.update", data);
+    });
     define(containers, "remove", id => askAfterClick("containers.remove", { id }));
     define(containers, "clear", id => askAfterClick("containers.clear", { id }));
     define(containers, "on", (type, listener) => {

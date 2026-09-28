@@ -110,6 +110,8 @@ TEST_PAGES = {
     " { profiles: ['Default', 'Profile 1'] })"
     ".then(r => show('imported ' + JSON.stringify(r)), fail); show('ready'); break;"
     "case 'container': show('container ' + neekoPage.container); break;"
+    "case 'ephemeral-now': neekoPage.containers.update(q.get('id'), { ephemeral: true })"
+    ".then(() => show('updated'), fail); break;"
     "case 'file': onclick = () => neekoPage.import.fromFile(q.get('kind'))"
     ".then(r => show('file ' + JSON.stringify(r)), fail); show('ready'); break;"
     "}</script>",

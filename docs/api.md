@@ -631,8 +631,8 @@ A container looks like this:
 | `neeko.window.on(event, listener)` | Listens for an event, as `tabs.on` does. |
 | `neeko.containers.list()` | Every container, in order. |
 | `neeko.containers.create(fields)` | Makes one: `name`, and optionally `color`, `picture` and `ephemeral`. Its `id` is made from its name. Resolves to it. |
-| `neeko.containers.update(id, changes)` | Changes its `name`, `color` or `picture` (not `ephemeral`). Resolves to it. |
-| `neeko.containers.remove(id)` | Removes it and wipes everything it kept; its windows go back to having none (show the picker). The default one and the last one can't be removed. |
+| `neeko.containers.update(id, changes)` | Changes its `name`, `color`, `picture` or `ephemeral`. Resolves to it. A container becomes ephemeral, or stops being, only while none of its windows is open (it's refused otherwise), and everything it kept is wiped, its closed windows too: nothing carries over. The default one can't be ephemeral. |
+| `neeko.containers.remove(id)` | Removes it and wipes everything it kept, and forgets its closed windows; its open windows go back to having none (show the picker). The default one and the last one can't be removed. |
 | `neeko.containers.clear(id)` | Wipes everything it kept (cookies, storage, cache, site permissions) and reloads its tabs. |
 | `neeko.containers.on(event, listener)` | Listens for an event, as `tabs.on` does. |
 
@@ -742,7 +742,7 @@ let theme = await neekoPage.settings.get("theme");
 | `neekoPage.search.engines()` | Firefox's search engines, as `[{ id, name, isDefault }]`, in Firefox's order. |
 | `neekoPage.search.setDefault(id)` | Makes one of them the default, as Firefox's settings do. |
 | `neekoPage.container` | The id of the container the page's tab is in, or `null`. At once. |
-| `neekoPage.containers.list()` / `create(fields)` / `update(id, changes)` | As in `neeko.containers`, for a settings page. |
+| `neekoPage.containers.list()` / `create(fields)` / `update(id, changes)` | As in `neeko.containers`, for a settings page. An `update` with `ephemeral` needs a click, since it wipes the container. |
 | `neekoPage.containers.remove(id)` / `clear(id)` | The same. Need a click. |
 | `neekoPage.containers.on("change", listener)` | Calls `listener({ containers })` when they change. Returns a function that stops it. |
 | `neekoPage.defaultBrowser.isDefault()` | Whether your browser is the system's default browser. Cheap: ask again when your page gets the focus back, say. |

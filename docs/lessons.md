@@ -533,6 +533,11 @@ Add to it whenever something costs you time.
     (`__SSi`), from the `browser-window-sessionstore-initialized` hook.
   - `Services.clearData.deleteDataFromOriginAttributesPattern({
     userContextId })` wipes a container, private data included.
+  - Wiping doesn't touch the closed windows SessionStore keeps to reopen:
+    one reopened after its container was removed, or made ephemeral,
+    would load its page in the old user context before the picker. Neeko
+    forgets them (`getClosedWindowData`, `forgetClosedWindowById`).
+    Closed private windows aren't kept at all.
   - SessionStore is `moz-src:///browser/components/sessionstore/`, not
     `resource:///modules/sessionstore/`, in Firefox 156.
 - **The app's pages (`about:<name>`) need registering in every process.**
