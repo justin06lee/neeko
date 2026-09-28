@@ -83,8 +83,9 @@ get added as it needs them.
 - [x] **Importing from other browsers, for the browser's pages**
   (v0.16.0): `neekoPage.import`: the browsers Firefox can import from, and
   their profiles; importing bookmarks, history and passwords with Firefox's
-  importers (never extensions, which would go online); Safari's
-  permission; bookmarks and passwords files. Fallback: Firefox's import
+  importers (never extensions, which would go online), several profiles
+  from one click (v0.18.0); Safari's permission; bookmarks and passwords
+  files. Fallback: Firefox's import
   wizard (File > Import from Another Browser, and its settings).
 - [x] **The default browser, for the browser's pages** (v0.15.0):
   `neekoPage.defaultBrowser`: whether it is, and asking the system to make

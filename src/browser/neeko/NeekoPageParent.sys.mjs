@@ -157,6 +157,7 @@ export class NeekoPageParent extends JSWindowActorParent {
         }
         return NeekoImport.fromBrowser(data.id, {
           profile: data.profile,
+          profiles: data.profiles,
           types: data.types,
         });
       case "import.requestPermission":
