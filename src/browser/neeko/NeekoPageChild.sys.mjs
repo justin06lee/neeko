@@ -10,8 +10,11 @@
  *   neekoPage.open(input, { background })  a new tab next to this one
  *   neekoPage.settings.get(key) / all() / set(key, value) / on("change", fn)
  *   neekoPage.search.engines() / setDefault(id)
+ *   neekoPage.defaultBrowser.isDefault() / setDefault()
  *
- * Every method returns a promise; docs/api.md documents them.
+ * Every method returns a promise; docs/api.md documents them. Those that
+ * change something outside the browser need a click (or key) in the page
+ * first, which only the page's user can give (askAfterClick).
  */
 
 export class NeekoPageChild extends JSWindowActorChild {
@@ -51,6 +54,18 @@ export class NeekoPageChild extends JSWindowActorChild {
           e => reject(new win.Error(e.message))
         );
       });
+    // The same, for what only the page's user may start: it's refused unless
+    // the user just clicked or typed in the page, and uses up that click, as
+    // opening a pop-up does.
+    let askAfterClick = (name, data = {}) => {
+      if (!this.document.hasValidTransientUserGestureActivation) {
+        return win.Promise.reject(
+          new win.Error("This needs a click in the page first: call it from a click handler.")
+        );
+      }
+      this.document.consumeTransientUserGestureActivation();
+      return ask(name, data);
+    };
     let define = (target, name, fn) =>
       Cu.exportFunction(fn, target, { defineAs: name });
 
@@ -85,7 +100,13 @@ export class NeekoPageChild extends JSWindowActorChild {
     define(search, "engines", () => ask("search.engines"));
     define(search, "setDefault", id => ask("search.setDefault", { id }));
 
-    for (let object of [settings, search, api]) {
+    let defaultBrowser = Cu.createObjectIn(api, { defineAs: "defaultBrowser" });
+    define(defaultBrowser, "isDefault", () => ask("defaultBrowser.isDefault"));
+    define(defaultBrowser, "setDefault", () =>
+      askAfterClick("defaultBrowser.setDefault")
+    );
+
+    for (let object of [settings, search, defaultBrowser, api]) {
       Cu.waiveXrays(win).Object.freeze(Cu.waiveXrays(object));
     }
   }

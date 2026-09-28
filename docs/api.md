@@ -657,6 +657,14 @@ let theme = await neekoPage.settings.get("theme");
 | `neekoPage.settings.on("change", listener)` | Calls `listener({ key, value })` when a setting changes, from anywhere. Returns a function that stops it. |
 | `neekoPage.search.engines()` | Firefox's search engines, as `[{ id, name, isDefault }]`, in Firefox's order. |
 | `neekoPage.search.setDefault(id)` | Makes one of them the default, as Firefox's settings do. |
+| `neekoPage.defaultBrowser.isDefault()` | Whether your browser is the system's default browser. Cheap: ask again when your page gets the focus back, say. |
+| `neekoPage.defaultBrowser.setDefault()` | Asks the system to make your browser the default, and resolves once the user has answered: whether it is now. On macOS the system asks in a dialog of its own (so it can take a while), and nothing changes until the user agrees. Needs a click (see below). |
+
+**Some calls need a click.** Those that change something outside the
+browser only work in response to the user: call them from a click (or key)
+handler, or they're refused with an error that says so. Each click allows
+one such call. A page can't pretend: Firefox knows which input came from the
+user.
 
 In dev launches (`make`), pages load from your app's `pages/` folder, so
 changes only need a relaunch or a reload of the page. Firefox's content

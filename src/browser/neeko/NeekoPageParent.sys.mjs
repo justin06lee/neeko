@@ -16,7 +16,51 @@ import { NeekoSettings } from "moz-src:///browser/neeko/NeekoSettings.sys.mjs";
 const lazy = {};
 ChromeUtils.defineESModuleGetters(lazy, {
   SearchService: "moz-src:///toolkit/components/search/SearchService.sys.mjs",
+  setTimeout: "resource://gre/modules/Timer.sys.mjs",
+  ShellService: "moz-src:///browser/components/shell/ShellService.sys.mjs",
 });
+
+// How long setting the default browser waits for the system's answer.
+const DEFAULT_BROWSER_TIMEOUT = 120000;
+
+/**
+ * Asks the system to make this browser the default, and resolves once the
+ * user has answered: whether it's the default now. On macOS the system asks
+ * in a dialog of its own, which takes the app out of the foreground until
+ * the user answers, and says nothing to the app; so this watches for the
+ * browser to become the default, or for the app to come back to the
+ * foreground (the user kept the other browser).
+ */
+async function setDefaultBrowser() {
+  let isDefault = () => lazy.ShellService.isDefaultBrowser(false, false);
+  if (isDefault()) {
+    return true;
+  }
+  await lazy.ShellService.setDefaultBrowser(false);
+  let started = Date.now();
+  let leftForeground = false;
+  let backAt = 0;
+  while (Date.now() - started < DEFAULT_BROWSER_TIMEOUT) {
+    if (isDefault()) {
+      return true;
+    }
+    let inForeground = !!Services.focus.activeWindow;
+    if (!inForeground) {
+      leftForeground = true;
+    } else if (leftForeground) {
+      // Back from the system's dialog: the change can land a moment later.
+      backAt ||= Date.now();
+      if (Date.now() - backAt > 1000) {
+        break;
+      }
+    } else if (Date.now() - started > 3000) {
+      // No dialog came up (the system didn't ask).
+      break;
+    }
+    await new Promise(resolve => lazy.setTimeout(resolve, 250));
+  }
+  return isDefault();
+}
 
 /**
  * Takes what a user typed, for a page to load: an address or search terms,
@@ -95,6 +139,11 @@ export class NeekoPageParent extends JSWindowActorParent {
         );
         return undefined;
       }
+      case "defaultBrowser.isDefault":
+        return lazy.ShellService.isDefaultBrowser(false, false);
+      // The page's child actor only sends this after a click in the page.
+      case "defaultBrowser.setDefault":
+        return setDefaultBrowser();
     }
     throw new Error(`Unknown message "${name}".`);
   }

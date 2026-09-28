@@ -71,3 +71,14 @@ h1 {
 select {
   font: inherit;
 }
+
+#not-default {
+  margin-top: 32px;
+  font-size: 13px;
+  opacity: 0.75;
+}
+
+#not-default button {
+  margin-left: 8px;
+  font: inherit;
+}
