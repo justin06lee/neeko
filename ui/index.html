@@ -9,7 +9,7 @@
 
   This is the demo UI: a tab list, an address bar with a bookmark star, a
   menu, a find bar, a bar for permission prompts, bookmarks and downloads
-  lists, and a status line for links,
+  lists, a status line for links, and a container picker for new windows,
   built only on the Neeko API (the global
   `neeko` object, see docs/api.md). It's plain on purpose, just enough to show every API feature
   working. Replace it with your own.
@@ -46,6 +46,7 @@
       <button id="back" title="Back (Cmd+[)" disabled>&larr;</button>
       <button id="forward" title="Forward (Cmd+])" disabled>&rarr;</button>
       <button id="reload" title="Reload (Cmd+R)">&#x21bb;</button>
+      <span id="container-badge" hidden></span>
       <input
         id="address"
         placeholder="Search or enter address"
@@ -90,6 +91,13 @@
         ><input id="find-highlight" type="checkbox" /> All</label
       >
       <button id="find-close" title="Close (Escape)">&times;</button>
+    </div>
+    <!-- "Who's browsing?": a new window has no container (neeko.window)
+         until one is picked here, and loads nothing meanwhile. It covers the
+         whole window, page and all: an overlay. -->
+    <div id="picker" data-neeko-overlay hidden>
+      <h1>Who's browsing?</h1>
+      <div id="picker-list"></div>
     </div>
     <!-- The prompt bar sits above the page and pushes it down. (It could
          overlap the page instead, marked data-neeko-overlay like the menu.) -->

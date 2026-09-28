@@ -5,7 +5,8 @@ before your first script runs, in your UI page (`ui/index.html`) and nowhere
 else. Web pages never get it.
 
 So far it covers tabs and tab groups, navigation, permission prompts, fullscreen,
-downloads, bookmarks, your UI's settings and the color scheme, find in page,
+downloads, bookmarks, your UI's settings and the color scheme, containers
+(one per window), find in page,
 links and loading status, drawing over the page, the pointer at the page's edges, and your browser's own pages
 (which get a small API of their own, `neekoPage`). And Firefox's own UI,
 where it still shows, can take your browser's look (see
@@ -560,6 +561,89 @@ such as `pref("ui.textHighlightBackground", "#fbbf24");`.
 | --- | --- | --- |
 | `request` | `{ command, selection }` | The user wants to find in the page. `command` is `"find"` (Cmd+F, Edit > Find, or / or ' typed in a page), `"next"` (Cmd+G), `"previous"` (Cmd+Shift+G) or `"selection"` (Cmd+E: find the selected text). `selection` is the text selected in the page, for `find` and `selection`, to start with, as Firefox's find bar does; `""` if none. Listening for this is how your UI says it finds in pages itself. |
 
+## Containers, one per window
+
+Containers keep sites apart: each has its own cookies, site storage and
+cache, while history and bookmarks are shared. Your browser might call them
+profiles (Personal, Work, Shopping). Each window is in one, and every tab in
+it is in that one. They're Firefox's user contexts underneath, but not
+Firefox's container feature: declaring your own turns Firefox's container
+menus and settings off.
+
+Declare the ones a new profile starts with in `browser.json`:
+
+```json
+"containers": [
+  { "id": "personal", "name": "Personal", "color": "#0ea5e9", "picture": "profiles/personal.svg", "default": true },
+  { "id": "work", "name": "Work", "color": "#10b981", "picture": "profiles/work.svg" },
+  { "id": "private", "name": "Private", "color": "#8b5cf6", "ephemeral": true }
+]
+```
+
+- **`default`** marks the one that's Firefox's default context: what the
+  profile already had (cookies, logins on sites) is in it. It can be
+  renamed and cleared, but not removed.
+- **`ephemeral`** ones keep nothing: they live in private windows, and
+  everything in them is wiped when their last window closes (and at
+  startup).
+- **`color`** is any CSS color and **`picture`** any string of yours (a
+  path to your artwork, say); Neeko keeps them for you.
+- They seed a new profile only. After that the list is the user's, kept in
+  the profile and changed through the API (your settings page, say):
+  containers you add to `browser.json` later don't reach existing users.
+
+```js
+if (neeko.window.container === null) {
+  showPicker(await neeko.containers.list());   // "Who's browsing?"
+}
+picker.onchoose = id => neeko.window.setContainer(id);
+```
+
+**A window without a container** (a plain new window, Cmd+N, or the first
+window at launch) loads nothing until your UI puts it in one: show a
+picker. What it was opened with (a link from another app, the first-run
+page) waits, and opens once it has one; with nothing waiting, the New Tab
+page opens. Other windows know theirs: "Open Link in New Window" and
+pop-ups keep the opener's container, a tab dragged out keeps its own, a
+private window (Cmd+Shift+N) is in the first ephemeral container, and
+windows restored with the session come back in theirs. A tab of another
+container can't be dragged or moved into a window. Pop-ups and windows
+without a UI of yours to pick with go to the default (or ephemeral)
+container.
+
+A container looks like this:
+
+```js
+{
+  id: "work",
+  name: "Work",
+  color: "#10b981",        // or null
+  picture: "profiles/work.svg",  // or null
+  ephemeral: false,
+  default: false,
+}
+```
+
+| Method | What it does |
+| --- | --- |
+| `neeko.window.container` | This window's container: its id, or `null` while it has none. At once, not a promise. |
+| `neeko.window.setContainer(id)` | Puts this window, which has none yet, in a container. A container of the other kind (ephemeral in a normal window, or the reverse) replaces the window with one of the right kind at the same place and size, and your UI page goes with the old one. A window that has a container keeps it: open a new window for another. |
+| `neeko.window.on(event, listener)` | Listens for an event, as `tabs.on` does. |
+| `neeko.containers.list()` | Every container, in order. |
+| `neeko.containers.create(fields)` | Makes one: `name`, and optionally `color`, `picture` and `ephemeral`. Its `id` is made from its name. Resolves to it. |
+| `neeko.containers.update(id, changes)` | Changes its `name`, `color` or `picture` (not `ephemeral`). Resolves to it. |
+| `neeko.containers.remove(id)` | Removes it and wipes everything it kept; its windows go back to having none (show the picker). The default one and the last one can't be removed. |
+| `neeko.containers.clear(id)` | Wipes everything it kept (cookies, storage, cache, site permissions) and reloads its tabs. |
+| `neeko.containers.on(event, listener)` | Listens for an event, as `tabs.on` does. |
+
+| Event | Data | When |
+| --- | --- | --- |
+| `window` `container` | `{ container }` | This window was put in a container, or its container was removed (`null`) or changed (renamed, say). Always sent: `neeko.window.container` follows it. |
+| `containers` `change` | `{ containers }` | A container was made, changed or removed, from anywhere: the whole list. |
+
+Without `containers` in `browser.json`, windows have none, nothing waits,
+and `create()` refuses: that's the fallback.
+
 ## Links and loading status
 
 What Firefox shows in its status bubble at the bottom of the page: the
@@ -657,6 +741,10 @@ let theme = await neekoPage.settings.get("theme");
 | `neekoPage.settings.on("change", listener)` | Calls `listener({ key, value })` when a setting changes, from anywhere. Returns a function that stops it. |
 | `neekoPage.search.engines()` | Firefox's search engines, as `[{ id, name, isDefault }]`, in Firefox's order. |
 | `neekoPage.search.setDefault(id)` | Makes one of them the default, as Firefox's settings do. |
+| `neekoPage.container` | The id of the container the page's tab is in, or `null`. At once. |
+| `neekoPage.containers.list()` / `create(fields)` / `update(id, changes)` | As in `neeko.containers`, for a settings page. |
+| `neekoPage.containers.remove(id)` / `clear(id)` | The same. Need a click. |
+| `neekoPage.containers.on("change", listener)` | Calls `listener({ containers })` when they change. Returns a function that stops it. |
 | `neekoPage.defaultBrowser.isDefault()` | Whether your browser is the system's default browser. Cheap: ask again when your page gets the focus back, say. |
 | `neekoPage.defaultBrowser.setDefault()` | Asks the system to make your browser the default, and resolves once the user has answered: whether it is now. On macOS the system asks in a dialog of its own (so it can take a while), and nothing changes until the user agrees. Needs a click (see below). |
 
@@ -903,6 +991,8 @@ even where its UI has no controls yet.
 - **Find in page.** If your UI doesn't listen for `find` `request`, Cmd+F
   (and / in a page) opens Firefox's find bar along the bottom of the page,
   in your `theme` if you have one.
+- **Containers.** Without `containers` in `browser.json`, windows aren't in
+  any and never wait for a pick.
 - **Menus.** Without `menus` in `browser.json`, Firefox's menu bar and
   context menu are all there. Without a `settings` `request` listener,
   Cmd+, opens Firefox's settings.
@@ -984,6 +1074,8 @@ The pieces:
   (Places) into plain data and events.
 - `src/browser/neeko/NeekoTheme.sys.mjs` puts your `theme` on Firefox's own
   UI, with `neeko-theme.css` and `neeko-theme-dialog.css`.
+- `src/browser/neeko/NeekoContainers.sys.mjs` keeps the containers and each
+  window's, and every tab in its window's.
 - `src/browser/neeko/NeekoMenus.sys.mjs` trims Firefox's menus to your
   `menus`, by the names in `NeekoMenuNames.sys.mjs`.
 - `src/browser/neeko/NeekoPages.sys.mjs` serves the app's pages as `about:`

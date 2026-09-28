@@ -16,8 +16,9 @@
  *                 about:<name> (start.html is the New Tab and home page)
  *
  * browser.json can also give the browser's look for what Firefox still
- * draws itself, its "theme" (see readTheme), and which of Firefox's menus
- * and items to keep, its "menus" (see readMenus).
+ * draws itself, its "theme" (see readTheme), which of Firefox's menus and
+ * items to keep, its "menus" (see readMenus), and its "containers", one per
+ * window (see readContainers).
  *   branding/     optional: icon.png (and icon.svg), prefs.js, and any
  *                 Firefox branding file to replace, at the same path
  *
@@ -67,6 +68,17 @@ type App = {
   theme: Theme | null;
   // browser.json's "menus", checked by readMenus.
   menus: Menus | null;
+  // browser.json's "containers", checked by readContainers.
+  containers: Container[] | null;
+};
+
+type Container = {
+  id: string;
+  name: string;
+  color?: string;
+  picture?: string;
+  ephemeral?: boolean;
+  default?: boolean;
 };
 
 type Menus = {
@@ -161,7 +173,74 @@ function readApp(dir: string): App {
     ),
     theme: json.theme === undefined ? null : readTheme(dir, file, json.theme),
     menus: json.menus === undefined ? null : readMenus(file, json.menus),
+    containers: json.containers === undefined ? null : readContainers(file, json.containers),
   };
+}
+
+/**
+ * Reads and checks browser.json's optional "containers": the browser's own
+ * identities, one per window (NeekoContainers), that a new profile starts
+ * with. The one marked "default" is Firefox's default context; "ephemeral"
+ * ones live in private windows and keep nothing.
+ *
+ *   "containers": [
+ *     { "id": "personal", "name": "Personal", "color": "#0ea5e9",
+ *       "picture": "profiles/personal.svg", "default": true },
+ *     { "id": "private", "name": "Private", "ephemeral": true }
+ *   ]
+ */
+function readContainers(file: string, containers: unknown): Container[] {
+  let where = (i: number, key?: string) =>
+    `${file}: "containers[${i}]${key ? `.${key}` : ""}"`;
+  if (!Array.isArray(containers) || !containers.length) {
+    fail(`${file}: "containers" must be a list of containers`);
+  }
+  let ids = new Set<string>();
+  let defaults = 0;
+  let result = containers.map((entry, i) => {
+    if (!entry || typeof entry != "object" || Array.isArray(entry)) {
+      fail(`${where(i)} must be an object`);
+    }
+    let c = entry as Record<string, unknown>;
+    for (let key of Object.keys(c)) {
+      if (!["id", "name", "color", "picture", "ephemeral", "default"].includes(key)) {
+        fail(`${where(i)} has an unknown key "${key}"`);
+      }
+    }
+    if (typeof c.id != "string" || !/^[a-z0-9][a-z0-9-]{0,63}$/.test(c.id) || ids.has(c.id)) {
+      fail(`${where(i, "id")} must be a new id: lowercase letters, digits and -`);
+    }
+    ids.add(c.id);
+    if (typeof c.name != "string" || !c.name.trim() || c.name.length > 64) {
+      fail(`${where(i, "name")} must be 1 to 64 characters`);
+    }
+    if (
+      c.color !== undefined &&
+      (typeof c.color != "string" ||
+        !/^(#[0-9a-fA-F]{3,8}|[a-zA-Z]{3,30}|[a-z]{3,6}\([0-9a-zA-Z.,%/ +-]{1,80}\))$/.test(c.color))
+    ) {
+      fail(`${where(i, "color")} must be a CSS color such as "#0ea5e9"`);
+    }
+    if (c.picture !== undefined && (typeof c.picture != "string" || c.picture.length > 256)) {
+      fail(`${where(i, "picture")} must be a string (the app's own, such as a path)`);
+    }
+    for (let key of ["ephemeral", "default"]) {
+      if (c[key] !== undefined && typeof c[key] != "boolean") {
+        fail(`${where(i, key)} must be true or false`);
+      }
+    }
+    if (c.default) {
+      if (c.ephemeral) {
+        fail(`${where(i)}: the default container can't be ephemeral`);
+      }
+      defaults++;
+    }
+    return c as Container;
+  });
+  if (defaults > 1) {
+    fail(`${file}: only one of "containers" can be the default`);
+  }
+  return result;
 }
 
 /**
@@ -782,6 +861,26 @@ function writeMenus(app: App, out: string) {
 }
 
 /**
+ * The app's containers (browser.json's "containers", see readContainers) in
+ * the neeko.containers.builtin pref, where NeekoContainers finds them for a
+ * new profile. A browser with containers of its own shows no sign of
+ * Firefox's: its container menus, tab indicator and settings go.
+ */
+function writeContainers(app: App, out: string) {
+  if (!app.containers) {
+    return;
+  }
+  let prefs = join(out, "pref/firefox-branding.js");
+  writeFileSync(
+    prefs,
+    read(prefs) +
+      "\n// The app's containers, from browser.json (added by Neeko's tools/app.ts).\n" +
+      `pref("neeko.containers.builtin", ${JSON.stringify(JSON.stringify(app.containers))});\n` +
+      'pref("privacy.userContext.ui.enabled", false);\n'
+  );
+}
+
+/**
  * The app's version files and build options. configs/common/mozconfig reads
  * app.mozconfig, so the program is named after the app and the profile
  * folder is its own.
@@ -818,6 +917,7 @@ function writeBranding(app: App) {
     writePages(app, out);
     writeTheme(app, out);
     writeMenus(app, out);
+    writeContainers(app, out);
     writeBuildSettings(app, out);
     sync(out, BRANDING);
   } finally {

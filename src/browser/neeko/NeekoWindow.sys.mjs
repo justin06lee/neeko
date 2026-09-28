@@ -21,6 +21,7 @@
 import { AppConstants } from "resource://gre/modules/AppConstants.sys.mjs";
 import { NeekoAPI } from "moz-src:///browser/neeko/NeekoAPI.sys.mjs";
 import { NeekoBookmarks } from "moz-src:///browser/neeko/NeekoBookmarks.sys.mjs";
+import { NeekoContainers } from "moz-src:///browser/neeko/NeekoContainers.sys.mjs";
 import { NeekoPanels } from "moz-src:///browser/neeko/NeekoPanels.sys.mjs";
 import { NeekoSettings } from "moz-src:///browser/neeko/NeekoSettings.sys.mjs";
 
@@ -168,6 +169,7 @@ function connectAPI(win, uiWin) {
     settings: NeekoSettings.all(),
     colorScheme: NeekoSettings.colorScheme(),
     bookmarkFolders: NeekoBookmarks.folders,
+    container: NeekoContainers.containerOf(win),
   });
 
   let api = null;

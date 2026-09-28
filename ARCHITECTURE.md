@@ -30,8 +30,8 @@ A browser built on Neeko is a folder with three things, and a fourth if it
 wants:
 
 - `browser.json`: its name, vendor, app id and version, and optionally its
-  look for what Firefox still draws (`theme`) and which of Firefox's menus
-  to keep (`menus`).
+  look for what Firefox still draws (`theme`), which of Firefox's menus to
+  keep (`menus`) and its containers (`containers`).
 - `ui/`: its interface, an ordinary web page (`index.html` and whatever it
   loads).
 - `branding/`: its icon, its own default prefs, and any Firefox branding
@@ -105,6 +105,11 @@ official startup hooks (`Neeko.manifest`):
   panels and bars, the find bar. Neeko's `neeko-theme.css` and
   `neeko-theme-dialog.css` map the values onto Firefox's own styles, so apps
   never style Firefox's elements.
+- **`NeekoContainers.sys.mjs`** keeps the app's containers (Firefox user
+  contexts: its own cookies and site data each) and each window's: it
+  decides a new window's from how it was opened, keeps a window without one
+  from loading until the UI picks, and every tab in its window's
+  container.
 - **`NeekoMenus.sys.mjs`** trims Firefox's menu bar and context menu to
   what the app keeps (`browser.json`'s `menus`), in Neeko's names for them
   (`NeekoMenuNames.sys.mjs`, which the build reads too).

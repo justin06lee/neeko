@@ -73,6 +73,13 @@ get added as it needs them.
   autocomplete, through Firefox's own design tokens. And Firefox's
   notification bars (a blocked pop-up, a slow page) show over the top of the
   page again, which they didn't under Neeko before. Fallback: Firefox's look.
+- [x] **Containers, one per window** (v0.17.0): the app's own identities
+  (profiles, say), each with its own cookies and site data, declared in
+  `browser.json` and managed through `neeko.containers` and
+  `neekoPage.containers`; each window in one, picked by the UI for a new
+  window (which loads nothing meanwhile), kept by links, pop-ups, dragged
+  tabs and session restore; ephemeral ones in private windows, wiped when
+  closed. Fallback: no containers.
 - [x] **Importing from other browsers, for the browser's pages**
   (v0.16.0): `neekoPage.import`: the browsers Firefox can import from, and
   their profiles; importing bookmarks, history and passwords with Firefox's

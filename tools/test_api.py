@@ -106,6 +106,7 @@ TEST_PAGES = {
     ".then(r => show('imported ' + JSON.stringify(r)), fail); break;"
     "case 'import': onclick = () => neekoPage.import.fromBrowser('chrome', { profile: 'Default' })"
     ".then(r => show('imported ' + JSON.stringify(r)), fail); show('ready'); break;"
+    "case 'container': show('container ' + neekoPage.container); break;"
     "case 'file': onclick = () => neekoPage.import.fromFile(q.get('kind'))"
     ".then(r => show('file ' + JSON.stringify(r)), fail); show('ready'); break;"
     "}</script>",
@@ -330,6 +331,17 @@ return results;
 """
 
 
+# The containers of the containers check's launch (browser.json's
+# "containers", as tools/app.ts writes them into a pref). The others run
+# without any.
+TEST_CONTAINERS = [
+    {"id": "personal", "name": "Personal", "color": "#0ea5e9", "default": True},
+    {"id": "work", "name": "Work", "color": "#10b981"},
+    {"id": "private", "name": "Private", "color": "#8b5cf6", "ephemeral": True},
+]
+NO_CONTAINERS = {"neeko.containers.builtin": "[]"}
+
+
 # The menus the test app keeps (browser.json's "menus", as tools/app.ts
 # writes them into the neeko.menus pref).
 TEST_MENUS = {
@@ -444,12 +456,24 @@ def main():
                 "neeko.ui.path": "TEST_UI",
                 "neeko.pages.path": "TEST_PAGES",
                 "neeko.menus": json.dumps(TEST_MENUS),
+                **NO_CONTAINERS,
                 **FIREFOX_PREFS,
             }
             results = run_in(binary, prefs, script, timeout=300000)
+            # Containers change how every window starts, so they get a
+            # launch of their own.
+            with open(os.path.join(ROOT, "tools/test_containers.js")) as f:
+                containers_script = f.read().replace("__BASE__", base)
+            containers_prefs = {
+                "neeko.ui.path": "TEST_UI",
+                "neeko.pages.path": "TEST_PAGES",
+                "neeko.containers.builtin": json.dumps(TEST_CONTAINERS),
+                **FIREFOX_PREFS,
+            }
+            results += run_in(binary, containers_prefs, containers_script, timeout=180000)
             # A dev build's content processes need to read Neeko's own files,
             # which it links to in src/ (see make run); packaged ones don't.
-            bundled_prefs = {}
+            bundled_prefs = {**NO_CONTAINERS}
             if not args.app:
                 bundled_prefs["security.sandbox.content.mac.testing_read_path1"] = (
                     os.path.realpath(os.path.join(ROOT, "src"))

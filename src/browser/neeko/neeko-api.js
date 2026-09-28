@@ -9,7 +9,7 @@
  *
  * The file's value is a function Neeko calls with the MessagePort that
  * carries the messages, and what the UI can read without waiting
- * ({ platform, settings, colorScheme, bookmarkFolders }), so nothing else
+ * ({ platform, settings, colorScheme, bookmarkFolders, container }), so nothing else
  * leaks into the page's globals.
  */
 
@@ -21,6 +21,7 @@
   // Neeko always sends, so reading them never waits.
   let settings = new Map(Object.entries(facts.settings));
   let colorScheme = facts.colorScheme;
+  let container = facts.container;
 
   let nextId = 1;
   let pending = new Map();
@@ -37,6 +38,8 @@
       }
     } else if (data.event == "colorScheme.change") {
       colorScheme = data.data.colorScheme;
+    } else if (data.event == "window.container") {
+      container = data.data.container;
     }
     if (data.event) {
       for (let listener of listeners.get(data.event) ?? []) {
@@ -185,6 +188,22 @@
     pointer: Object.freeze({
       setEdges: edges => call("pointer.setEdges", edges),
       on: events("pointer", ["edge"]),
+    }),
+    containers: Object.freeze({
+      list: () => call("containers.list"),
+      create: fields => call("containers.create", fields),
+      update: (id, changes) => call("containers.update", id, changes),
+      remove: id => call("containers.remove", id),
+      clear: id => call("containers.clear", id),
+      on: events("containers", ["change"]),
+    }),
+    window: Object.freeze({
+      // This window's container: its id, or null while it has none.
+      get container() {
+        return container;
+      },
+      setContainer: id => call("window.setContainer", id),
+      on: events("window", ["container"]),
     }),
     colorScheme: Object.freeze({
       get: () => colorScheme,

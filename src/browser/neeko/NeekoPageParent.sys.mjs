@@ -10,6 +10,7 @@
  */
 
 import { goTo, openTab } from "moz-src:///browser/neeko/NeekoAPI.sys.mjs";
+import { NeekoContainers } from "moz-src:///browser/neeko/NeekoContainers.sys.mjs";
 import { NeekoImport } from "moz-src:///browser/neeko/NeekoImport.sys.mjs";
 import { NeekoPages } from "moz-src:///browser/neeko/NeekoPages.sys.mjs";
 import { NeekoSettings } from "moz-src:///browser/neeko/NeekoSettings.sys.mjs";
@@ -80,6 +81,8 @@ function typed(input) {
 export class NeekoPageParent extends JSWindowActorParent {
   /** Stops sending the page settings changes. */
   #unwatch = null;
+  /** And container changes. */
+  #unwatchContainers = null;
 
   #allowed() {
     let context = this.browsingContext;
@@ -163,11 +166,28 @@ export class NeekoPageParent extends JSWindowActorParent {
         return undefined;
       case "import.fromFile":
         return NeekoImport.fromFile(data.kind, win);
+      case "containers.list":
+        return NeekoContainers.list();
+      case "containers.create":
+        return NeekoContainers.create(data.fields);
+      case "containers.update":
+        return NeekoContainers.update(data.id, data.changes);
+      // Like the import calls, only sent after a click in the page.
+      case "containers.remove":
+        return NeekoContainers.remove(data.id);
+      case "containers.clear":
+        return NeekoContainers.clear(data.id);
+      case "containers.listen":
+        this.#unwatchContainers ??= NeekoContainers.watch(containers =>
+          this.sendAsyncMessage("containers.change", { containers })
+        );
+        return undefined;
     }
     throw new Error(`Unknown message "${name}".`);
   }
 
   didDestroy() {
     this.#unwatch?.();
+    this.#unwatchContainers?.();
   }
 }
