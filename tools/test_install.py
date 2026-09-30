@@ -1,6 +1,7 @@
 """Check `make install` on Linux: what it puts in place, that it never makes
-the browser the default by itself, and that `make uninstall` removes it all
-but the profiles.
+the browser the default by itself, that installing again is a new version to
+the profiles (they drop their caches of the old code), and that `make
+uninstall` removes it all but the profiles.
 
     make install                     # or make build, then its stage-package
     python3 tools/test_install.py
@@ -8,14 +9,18 @@ but the profiles.
 Installs Neeko's demo app (tools/app.ts install, then uninstall) into a
 throwaway home: HOME and the XDG folders point into a temporary folder, with
 another browser installed "system-wide" there that nobody chose as the
-default, as on a fresh Ubuntu. Needs GLib's gio, as the installer does.
+default, as on a fresh Ubuntu. The installed browser is launched there too,
+without a display. Needs GLib's gio, as the installer does.
 """
 
+import glob
 import os
+import re
 import shutil
 import subprocess
 import sys
 import tempfile
+import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from builds import LINUX, ROOT  # noqa: E402
@@ -91,6 +96,36 @@ def main():
     desktop = os.path.join(data, "applications", OURS)
     icons = [os.path.join(data, f"icons/hicolor/{s}x{s}/apps/{APP_ID}.png") for s in (16, 256)]
     profiles = os.path.join(env["XDG_CONFIG_HOME"], "mozilla/neeko")
+    caches = os.path.join(env["XDG_CACHE_HOME"], "mozilla/neeko")
+
+    def build_id():
+        with open(os.path.join(program, "browser/application.ini")) as f:
+            match = re.search(r"^BuildID=(\d{14})$", f.read(), re.M)
+        return match and match.group(1)
+
+    def run_installed():
+        """Runs the installed browser the launcher's way, without a display,
+        until its profile says which version last ran it; returns that."""
+        browser = subprocess.Popen(
+            [launcher], env={**env, "MOZ_HEADLESS": "1"},
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+        wanted, seen = build_id(), None
+        deadline = time.time() + 90
+        while time.time() < deadline and not (seen and wanted in seen):
+            time.sleep(0.5)
+            for compat in glob.glob(os.path.join(profiles, "*", "compatibility.ini")):
+                with open(compat) as f:
+                    match = re.search(r"^LastVersion=(.+)$", f.read(), re.M)
+                seen = match and match.group(1)
+        browser.terminate()
+        try:
+            browser.wait(timeout=30)
+        except subprocess.TimeoutExpired:
+            browser.kill()
+        subprocess.run(["pkill", "-f", f"^{re.escape(program)}/"], check=False)
+        return seen
+
     try:
         check(
             all(default(t) == OTHER for t in MIME_TYPES),
@@ -137,15 +172,34 @@ def main():
         chosen = open(mimeapps).read() if os.path.exists(mimeapps) else ""
         check(f"x-scheme-handler/http={OTHER}" in chosen, "kept as the user's choice, in mimeapps.list")
 
+        # The installed browser runs, as the app, in a profile of its own.
+        first = build_id()
+        ran = run_installed()
+        check(
+            bool(first) and ran is not None and first in ran,
+            f"it runs, and its profile records this install's build ({first}: {ran})",
+        )
+        # A stand-in for its startup cache of this version's code.
+        marker = None
+        for profile in glob.glob(os.path.join(profiles, "*", "compatibility.ini")):
+            cache = os.path.join(caches, os.path.basename(os.path.dirname(profile)), "startupCache")
+            os.makedirs(cache, exist_ok=True)
+            marker = os.path.join(cache, "from-the-last-install")
+            open(marker, "w").close()
+
         # A default the user chose stays, through a reinstall.
         subprocess.run(["gio", "mime", "x-scheme-handler/http", OURS], env=env, capture_output=True)
-        os.makedirs(profiles)
-        with open(os.path.join(profiles, "profiles.ini"), "w") as f:
-            f.write("[General]\n")
         again = app_step("install")
         check(
             again.returncode == 0 and default("x-scheme-handler/http") == OURS,
             "a reinstall updates it and keeps a default the user chose",
+        )
+        second = build_id()
+        ran = run_installed()
+        check(
+            bool(second) and second > first and ran is not None and second in ran
+            and marker is not None and not os.path.exists(marker),
+            f"and is a new version to the profile, which drops its startup cache ({second}: {ran})",
         )
 
         removed = app_step("uninstall")
@@ -154,7 +208,10 @@ def main():
             and not any(os.path.exists(p) for p in (program, launcher, desktop, *icons)),
             "uninstall removes the program, launcher, desktop entry and icons",
         )
-        check(os.path.exists(os.path.join(profiles, "profiles.ini")), "and keeps the profiles")
+        check(
+            bool(glob.glob(os.path.join(profiles, "*", "compatibility.ini"))),
+            "and keeps the profiles",
+        )
     finally:
         shutil.rmtree(work, ignore_errors=True)
 
