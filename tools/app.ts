@@ -1088,8 +1088,9 @@ function writeOurs(path: string, contents: string, mode: number) {
  * RemotingName, the app id, which Firefox gives its windows, notifications,
  * media controls and D-Bus name. The launcher hands it to the program with
  * -app, which takes it from the browser/ folder, where the app's files are.
+ * Its BuildID is the install's (installBuildID).
  */
-function appIni(app: App, built: string): string {
+function appIni(app: App, built: string, buildID: string): string {
   let lines = built.split("\n");
   // Only the [App], [Gecko] and [XRE] sections: none for a crash reporter.
   let keep = false;
@@ -1100,7 +1101,7 @@ function appIni(app: App, built: string): string {
       keep = ["App", "Gecko", "XRE"].includes(section[1]);
     }
     if (keep && !/^RemotingName=/.test(line)) {
-      out.push(line);
+      out.push(/^BuildID=/.test(line) ? `BuildID=${buildID}` : line);
       if (section?.[1] == "App") {
         out.push(`RemotingName=${app.appId}`);
       }
@@ -1110,6 +1111,28 @@ function appIni(app: App, built: string): string {
     fail("the build's application.ini has no [App] Name.");
   }
   return out.join("\n").trimEnd() + "\n";
+}
+
+/**
+ * A BuildID for an install: when it happened, so every install is a new
+ * version to the app's profiles, which then drop their startup caches of the
+ * old one's code (compatibility.ini). The build's own only changes when the
+ * build is configured again, so an install over an old one would otherwise
+ * keep running the old chrome code in every existing profile. Later than
+ * the install before, even within a second.
+ */
+function installBuildID(previous: string | null): string {
+  let stamp = (d: Date) =>
+    [d.getFullYear(), d.getMonth() + 1, d.getDate(), d.getHours(), d.getMinutes(), d.getSeconds()]
+      .map((n, i) => String(n).padStart(i ? 2 : 4, "0"))
+      .join("");
+  let now = stamp(new Date());
+  let last = previous?.match(/^(\d{4})(\d\d)(\d\d)(\d\d)(\d\d)(\d\d)$/);
+  if (!last || previous! < now) {
+    return now;
+  }
+  let [year, month, day, hour, minute, second] = last.slice(1).map(Number);
+  return stamp(new Date(year, month - 1, day, hour, minute, second + 1));
 }
 
 /**
@@ -1139,9 +1162,12 @@ function install(app: App) {
   rmSync(old, { recursive: true, force: true });
   mkdirSync(dirname(paths.program), { recursive: true });
   run("cp", ["-a", source, fresh]);
+  let previous = existsSync(paths.appIni)
+    ? (read(paths.appIni).match(/^BuildID=(\d+)\s*$/m)?.[1] ?? null)
+    : null;
   writeFileSync(
     join(fresh, "browser/application.ini"),
-    appIni(app, read(join(fresh, "application.ini")))
+    appIni(app, read(join(fresh, "application.ini")), installBuildID(previous))
   );
   if (existsSync(paths.program)) {
     renameSync(paths.program, old);
