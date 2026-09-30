@@ -1181,6 +1181,15 @@ function install(app: App) {
     console.warn("neeko: the build has no window icons, so the desktop shows a generic one.");
   }
 
+  // Which app opens web links and pages now, before the desktop entry says
+  // this one can too (keepDefaults). Without GLib's gio to see that, the
+  // entry says nothing about them, so it can't move the default either.
+  let before = hasGio() ? new Map(MIME_TYPES.map(type => [type, defaultFor(type)])) : null;
+  if (!before) {
+    console.warn(
+      "neeko: no gio (GLib's), so the desktop won't offer the browser as a default browser."
+    );
+  }
   let exec = desktopExec(paths.launcher);
   writeOurs(
     paths.desktop,
@@ -1200,7 +1209,7 @@ function install(app: App) {
       `StartupWMClass=${app.appId}`,
       "Categories=Network;WebBrowser;",
       "Keywords=web;browser;internet;",
-      "MimeType=text/html;text/xml;application/xhtml+xml;x-scheme-handler/http;x-scheme-handler/https;",
+      ...(before ? [`MimeType=${MIME_TYPES.join(";")};`] : []),
       "Actions=new-window;new-private-window;",
       "",
       "[Desktop Action new-window]",
@@ -1215,6 +1224,9 @@ function install(app: App) {
     0o644
   );
   refreshDesktop(paths);
+  if (before) {
+    keepDefaults(app, before);
+  }
 
   console.log(
     `neeko: installed ${app.displayName} ${app.version} in ${paths.program}\n` +
@@ -1278,6 +1290,47 @@ function desktopExec(path: string): string {
  * icon, where it keeps caches of them. (GNOME notices new entries and icons
  * by itself.)
  */
+// What the desktop entry says the browser opens, so the system offers it as
+// a default browser (GNOME's Default Apps, neekoPage.defaultBrowser).
+const MIME_TYPES = [
+  "text/html",
+  "text/xml",
+  "application/xhtml+xml",
+  "x-scheme-handler/http",
+  "x-scheme-handler/https",
+];
+
+function hasGio(): boolean {
+  return spawnSync("gio", ["help"], { stdio: "ignore" }).status == 0;
+}
+
+/** The app (its desktop entry's id) that opens a type now, or null. */
+function defaultFor(type: string): string | null {
+  let result = spawnSync("gio", ["mime", type], {
+    encoding: "utf8",
+    env: { ...process.env, LC_ALL: "C" },
+  });
+  return result.stdout?.match(/^Default application for .*: (\S+\.desktop)\s*$/m)?.[1] ?? null;
+}
+
+/**
+ * Where nobody chose which app opens a type (no default in mimeapps.list,
+ * as on a fresh Ubuntu), the desktop takes the first app that says it can,
+ * the user's own entries first: a newly installed browser would become the
+ * default by itself. So wherever installing moved a type to this app, the
+ * app that had it is recorded as the default, as the user's choice (in
+ * ~/.config/mimeapps.list). Defaults the user did choose win anyway.
+ */
+function keepDefaults(app: App, before: Map<string, string | null>) {
+  let ours = `${app.appId}.desktop`;
+  for (let [type, was] of before) {
+    if (was && was != ours && defaultFor(type) == ours) {
+      run("gio", ["mime", type, was]);
+      console.log(`neeko: ${was} still opens ${type}, as before.`);
+    }
+  }
+}
+
 function refreshDesktop(paths: ReturnType<typeof installPaths>) {
   spawnSync("update-desktop-database", ["-q", dirname(paths.desktop)], { stdio: "ignore" });
   if (existsSync(join(paths.icons, "icon-theme.cache"))) {

@@ -193,6 +193,14 @@ Add to it whenever something costs you time.
 - **The build's `certutil` needs the build's NSS** on Linux:
   `LD_LIBRARY_PATH` at its folder, or it finds the system's older one
   (`NSS_3.117 not found`). macOS finds it next to the program.
+- **Declaring web types can make a browser the default by itself.** With no
+  default in any `mimeapps.list` (a fresh Ubuntu user has none), GIO and
+  `xdg-mime` take the first app that declares the type, and the user's own
+  `~/.local/share/applications` comes first. So installing a desktop entry
+  with `MimeType=x-scheme-handler/http;...` moved every link to the new
+  browser. The installer checks each type with `gio mime` before and after,
+  and where it moved, sets the old app with `gio mime <type> <app>`
+  (`tools/test_install.py`). `LC_ALL=C` keeps `gio`'s output parseable.
 - **Other browsers' data is under the home folder** on Linux
   (`ChromeMigrationUtils`: `Home/.config/google-chrome` and so on), not
   `ULibDir`, so the import test's fake stands in for `Home` there.

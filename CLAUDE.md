@@ -158,6 +158,10 @@ After `make build`:
 After `make release`: `python3 tools/test_release.py`, then both tests above
 with `--app dist/Neeko.app`.
 
+On Linux, after `make install`: `python3 tools/test_install.py` (the installer,
+in a throwaway home), and the API and privacy tests with
+`--app ~/.local/share/neeko/app`.
+
 Marionette has traps (focus, chrome context, its "recommended prefs"); see
 the testing section of [docs/lessons.md](docs/lessons.md).
 

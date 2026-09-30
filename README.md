@@ -141,7 +141,8 @@ update.
 
 On Linux the tests open real windows, so they need a display (an X server
 such as Xvfb will do), and `--app ~/.local/share/<name>/app` tests an
-installed browser.
+installed browser. After `make install`, `python3 tools/test_install.py`
+checks the installer in a throwaway home.
 
 After `make release` on macOS, `python3 tools/test_release.py` checks the packaged app
 is its own browser (its own name and profile folder, telemetry compiled out,

@@ -109,6 +109,7 @@ get added as it needs them.
   installs a browser for the user from the dev build, packaged, running as
   the app itself (`-app`): its own profiles, desktop entry, icons and window
   identity; the system's titlebar on Linux. Tried on Ubuntu 24.04 on arm64.
+  Installing leaves the default browser as it was (v0.20.1).
 
 ## API features, in order
 

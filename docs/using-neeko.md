@@ -210,7 +210,11 @@ without an archive), then it puts in place
 - a launcher, `~/.local/bin/<name>`;
 - a desktop entry, `~/.local/share/applications/<appId>.desktop`: the app in
   the desktop's app grid and "Open With" menus, with New Window and New
-  Private Window actions, and a browser the system can make the default;
+  Private Window actions, and a browser the system can make the default.
+  Installing never makes it the default by itself: where nobody chose a
+  default browser (as on a fresh Ubuntu), the desktop would take the newest
+  one, so the installer records the app that opened links before as the
+  user's choice (with GLib's `gio`, in `~/.config/mimeapps.list`);
 - the icons made from `branding/icon.png`, in `~/.local/share/icons/hicolor`.
 
 The program is Mozilla's prebuilt one, which has Firefox's identity compiled
@@ -234,7 +238,9 @@ reporter, which Neeko's builds leave out), with the app id as its
 
 Test an installed browser with `python3 neeko/tools/test_api.py --app
 ~/.local/share/<name>/app` (and `test_privacy.py`), which launch it the
-launcher's way. `make release` on Linux copies the full build's archive into
+launcher's way. `python3 neeko/tools/test_install.py` checks the installer
+itself in a throwaway home: what it installs, that the default browser
+stays, and what uninstalling leaves. `make release` on Linux copies the full build's archive into
 `dist/` as `<name>-<version>-linux-<arch>.tar.xz`, but that path is untested:
 the Linux machine Neeko was tried on can't hold a full build.
 
