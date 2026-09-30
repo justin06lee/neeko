@@ -98,7 +98,10 @@ def main():
         )
 
         installed = app_step("install")
-        check(installed.returncode == 0, f"installs ({(installed.stderr or installed.stdout).strip()[-300:]})")
+        check(
+            installed.returncode == 0,
+            "installs" + ("" if installed.returncode == 0 else f" ({installed.stderr.strip()[-300:]})"),
+        )
         with open(os.path.join(program, "browser/application.ini")) as f:
             ini = f.read()
         check(
@@ -117,7 +120,7 @@ def main():
         )
         if shutil.which("desktop-file-validate"):
             valid = subprocess.run(["desktop-file-validate", desktop], capture_output=True, text=True)
-            check(valid.returncode == 0, f"a valid desktop entry {valid.stdout.strip()}")
+            check(valid.returncode == 0, f"a valid desktop entry{valid.stdout.strip() and ' (' + valid.stdout.strip() + ')'}")
         else:
             check(os.path.exists(desktop), "a desktop entry")
         check(all(os.path.exists(icon) for icon in icons), "icons in the icon theme")
@@ -130,11 +133,9 @@ def main():
             all(app == OTHER for app in after.values()),
             f"but the other browser still opens them all ({after})",
         )
-        with open(os.path.join(env["XDG_CONFIG_HOME"], "mimeapps.list")) as f:
-            check(
-                f"x-scheme-handler/http={OTHER}" in f.read(),
-                "kept as the user's choice, in mimeapps.list",
-            )
+        mimeapps = os.path.join(env["XDG_CONFIG_HOME"], "mimeapps.list")
+        chosen = open(mimeapps).read() if os.path.exists(mimeapps) else ""
+        check(f"x-scheme-handler/http={OTHER}" in chosen, "kept as the user's choice, in mimeapps.list")
 
         # A default the user chose stays, through a reinstall.
         subprocess.run(["gio", "mime", "x-scheme-handler/http", OURS], env=env, capture_output=True)
