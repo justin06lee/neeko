@@ -483,14 +483,20 @@ def main():
             results += run_in(binary, containers_prefs, containers_script, timeout=180000)
             # And across launches of one profile, quitting normally between,
             # with Neeko's own defaults: none of Marionette's recommended prefs
-            # (they turn off some of Firefox's startup bars), just no check
-            # for the default browser, whose dialog would get in the way.
+            # (they turn off some of Firefox's startup bars), just the ones
+            # that would get in the way: the default browser check's dialog,
+            # and the app's first-run and What's New pages (an app's
+            # branding/prefs.js may have them), which open when a container
+            # is picked, instead of the New Tab page.
             with open(os.path.join(ROOT, "tools/test_relaunch.js")) as f:
                 relaunch_script = f.read().replace("__BASE__", base)
             relaunch_prefs = {
                 **containers_prefs,
                 "remote.prefs.recommended": False,
                 "browser.shell.checkDefaultBrowser": False,
+                "startup.homepage_welcome_url": "",
+                "startup.homepage_welcome_url.additional": "",
+                "browser.startup.homepage_override.mstone": "ignore",
             }
             results += run_in(
                 binary,
