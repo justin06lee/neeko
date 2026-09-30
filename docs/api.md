@@ -1000,7 +1000,9 @@ even where its UI has no controls yet.
 - **Notification bars.** Firefox's bars about the page (it blocked a
   pop-up, the page is slowing the browser down, and the like) show across
   the top of the page, which moves down to make room, as in Firefox. They
-  go when the page does, or when closed.
+  go when the page does, or when closed. Firefox's "Open previous tabs?"
+  bar at launch doesn't show: it points at Firefox's app menu, which your
+  UI hides.
 - **Error pages and crashed tabs.** Firefox's own error pages ("Hmm. We're
   having trouble finding that site.") and its crashed tab page show in the
   page area, with their buttons working, whether or not your UI reads a

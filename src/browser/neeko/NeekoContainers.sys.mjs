@@ -61,7 +61,8 @@ const START_PAGES = new Set([
 // The containers: null until first needed.
 let store = null;
 
-// Each window's state: { container, pending, restoring }.
+// Each window's state: { container, pending, restoring, restored }, restored
+// being the tabs session restore brought back.
 const windows = new WeakMap();
 
 // Called with (win, containerId) when a window's container changes, and with
@@ -511,7 +512,11 @@ function wrapTabbrowser(win) {
     // A tab moving in from another window (adoptTab checks it), or one
     // session restore brings back: it keeps its own.
     if (!state || params.eventDetail?.adoptedTab || state.restoring) {
-      return addTab.call(this, uri, params);
+      let tab = addTab.call(this, uri, params);
+      if (state?.restoring) {
+        state.restored.add(tab);
+      }
+      return tab;
     }
     let container = state.container && getStore().byId(state.container);
     if (!container) {
@@ -558,7 +563,11 @@ function wrapTabbrowser(win) {
 
   // Session restore brings a window's tabs back with their own user
   // contexts, then its saved values: the window's container is decided once
-  // it's done.
+  // it's done. Only if it brought tabs back: at a launch that doesn't restore
+  // the session, it still restores the first window's closed tabs and place
+  // (not its saved values), and that window's own blank tab would say "the
+  // default container". Nothing restored, the UI picks, as for any first
+  // window.
   win.addEventListener("SSWindowStateBusy", () => {
     windows.get(win).restoring = true;
   });
@@ -569,6 +578,14 @@ function wrapTabbrowser(win) {
       saveToSession(win);
       return;
     }
+    // (The restored tab to select can be the window's own blank one, reused
+    // when their containers match, which only SessionStore knows about.)
+    let restored = gBrowser.tabs.filter(
+      tab => state.restored.has(tab) || lazy.SessionStore.isTabRestoring(tab)
+    );
+    if (!restored.length) {
+      return;
+    }
     let s = getStore();
     let saved = null;
     try {
@@ -576,8 +593,8 @@ function wrapTabbrowser(win) {
     } catch (e) {
       // Nothing saved.
     }
-    let container =
-      s.byId(saved) ?? s.byUserContextId(gBrowser.selectedTab.userContextId ?? 0);
+    let tab = restored.includes(gBrowser.selectedTab) ? gBrowser.selectedTab : restored[0];
+    let container = s.byId(saved) ?? s.byUserContextId(tab.userContextId ?? 0);
     if (container && container.ephemeral == isPrivate(win)) {
       state.pending = [];
       bind(win, container);
@@ -618,7 +635,7 @@ export const NeekoContainers = {
     if (!enabled()) {
       return;
     }
-    let state = { container: null, pending: [], restoring: false };
+    let state = { container: null, pending: [], restoring: false, restored: new WeakSet() };
     windows.set(win, state);
     let container = containerFor(win);
     // A window without a UI to pick with (a pop-up, or no UI at all) gets its

@@ -607,6 +607,16 @@ Add to it whenever something costs you time.
   - Session restore creates a window's tabs before it restores its saved
     values (`extData`), between `SSWindowStateBusy` and
     `SSWindowStateReady`: the window's container is decided at Ready.
+  - At a launch that doesn't restore the session (Firefox's default),
+    SessionStore still restores the first window, with only its pinned and
+    closed tabs and its place, not its `extData`, and still sends Busy and
+    Ready. So Ready alone doesn't mean tabs came back: the window's own
+    blank tab (the default context) would pass for a restored one. Neeko
+    decides only for tabs restore brought back: added while restoring, or
+    `SessionStore.isTabRestoring` at Ready, which also catches the blank
+    tab when tabbrowser reuses it for a restored tab of the same context
+    (`createTabsForSessionRestore`). Fresh-profile tests never see this;
+    `tools/test_relaunch.js` relaunches one profile.
     `SessionStore.setCustomWindowValue` needs the window to be followed
     (`__SSi`), from the `browser-window-sessionstore-initialized` hook.
   - `Services.clearData.deleteDataFromOriginAttributesPattern({

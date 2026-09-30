@@ -389,15 +389,15 @@ def launch(binary, profile, prefs):
 
 def run_in(binary, prefs, script, timeout=120000):
     """Launches with a fresh profile, runs a script in the browser window,
-    quits, and returns the script's lines of results."""
-    port = free_port()
+    quits, and returns the script's lines of results. Given a list of
+    scripts, runs each in a launch of its own, of the same profile, quitting
+    normally in between, as a user would."""
     profile = tempfile.mkdtemp(prefix="neeko-api-test-")
     ui = os.path.join(profile, "test-ui")
     os.mkdir(ui)
     with open(os.path.join(ui, "index.html"), "w") as f:
         f.write(TEST_UI)
     prefs = {
-        "marionette.port": port,
         # Downloads go into the throwaway profile.
         "browser.download.dir": os.path.join(profile, "downloads"),
         "browser.download.folderList": 2,
@@ -415,25 +415,30 @@ def run_in(binary, prefs, script, timeout=120000):
         # The pages run in a content process: let its sandbox read them, and
         # Neeko's own files, which dev builds link to in src/ (see make run).
         prefs.update(sandbox_reads(os.path.join(ROOT, "src"), pages))
-    browser = launch(binary, profile, prefs)
+    scripts = script if isinstance(script, list) else [script]
+    results = []
+    browser = None
     try:
-        m = connect(port, browser)
-        m.send("WebDriver:SetTimeouts", {"script": timeout})
-        # The whole script is one Marionette command, so its reply can take
-        # longer than the socket's usual minute.
-        m.sock.settimeout(timeout / 1000 + 30)
-        started = time.time()
-        results = m.run(script)
-        print(f"(the checks took {time.time() - started:.0f} seconds)")
-        if isinstance(results, str):  # the script itself threw
-            results = [f"FAIL {results}"]
-        try:
-            m.send("Marionette:Quit", {"flags": ["eForceQuit"]})
-        except (OSError, RuntimeError):
-            pass
-        browser.wait(timeout=30)
+        for i, one in enumerate(scripts):
+            last = i == len(scripts) - 1
+            port = free_port()
+            browser = launch(binary, profile, {"marionette.port": port, **prefs})
+            m = connect(port, browser)
+            m.send("WebDriver:SetTimeouts", {"script": timeout})
+            # The whole script is one Marionette command, so its reply can take
+            # longer than the socket's usual minute.
+            m.sock.settimeout(timeout / 1000 + 30)
+            started = time.time()
+            ran = m.run(one)
+            print(f"(the checks took {time.time() - started:.0f} seconds)")
+            results += [f"FAIL {ran}"] if isinstance(ran, str) else ran  # str: it threw
+            try:
+                m.send("Marionette:Quit", {"flags": ["eForceQuit" if last else "eAttemptQuit"]})
+            except (OSError, RuntimeError, ValueError):
+                pass
+            browser.wait(timeout=60)
     finally:
-        if browser.poll() is None:
+        if browser and browser.poll() is None:
             browser.kill()
         shutil.rmtree(profile, ignore_errors=True)
     return results
@@ -476,6 +481,23 @@ def main():
                 **FIREFOX_PREFS,
             }
             results += run_in(binary, containers_prefs, containers_script, timeout=180000)
+            # And across launches of one profile, quitting normally between,
+            # with Neeko's own defaults: none of Marionette's recommended prefs
+            # (they turn off some of Firefox's startup bars), just no check
+            # for the default browser, whose dialog would get in the way.
+            with open(os.path.join(ROOT, "tools/test_relaunch.js")) as f:
+                relaunch_script = f.read().replace("__BASE__", base)
+            relaunch_prefs = {
+                **containers_prefs,
+                "remote.prefs.recommended": False,
+                "browser.shell.checkDefaultBrowser": False,
+            }
+            results += run_in(
+                binary,
+                relaunch_prefs,
+                [relaunch_script.replace("__LAUNCH__", str(n)) for n in (1, 2, 3)],
+                timeout=60000,
+            )
             # A dev build's content processes need to read Neeko's own files,
             # which it links to in src/ (see make run); packaged ones don't.
             bundled_prefs = {**NO_CONTAINERS}
