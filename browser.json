@@ -2,7 +2,7 @@
   "name": "Neeko",
   "vendor": "Neeko",
   "appId": "dev.neeko.demo",
-  "version": "0.20.3",
+  "version": "0.20.4",
   "theme": {
     "radius": 6,
     "dialogRadius": 10,
