@@ -206,7 +206,9 @@ without an archive), then it puts in place
 
 - the program, in `~/.local/share/<name>/app` (`<name>` is `browser.json`'s
   `name` in lower case). The next install replaces it, so `git pull && make
-  install` updates the browser in place;
+  install` updates the browser in place. Each install has a build id of its
+  own, so the browser's profiles see a new version at their next launch and
+  drop their caches of the old code;
 - a launcher, `~/.local/bin/<name>`;
 - a desktop entry, `~/.local/share/applications/<appId>.desktop`: the app in
   the desktop's app grid and "Open With" menus, with New Window and New

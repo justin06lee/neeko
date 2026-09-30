@@ -193,6 +193,18 @@ Add to it whenever something costs you time.
 - **The build's `certutil` needs the build's NSS** on Linux:
   `LD_LIBRARY_PATH` at its folder, or it finds the system's older one
   (`NSS_3.117 not found`). macOS finds it next to the program.
+- **A profile keeps running cached code until the build id changes.**
+  Firefox keeps chrome code in each profile's startup cache
+  (`~/.cache/mozilla/<name>/<profile>/startupCache`) and only drops it when
+  `compatibility.ini`'s `LastVersion` (version, app build id, platform build
+  id) no longer matches, or with `-purgecaches` (which `mach run` passes).
+  An artifact build's app build id only changes when the build is
+  configured again, so an install over an old one ran the old Neeko code in
+  every existing profile. The installer stamps each install's
+  `application.ini` with its own build id (the install time). Firefox only
+  compares major versions to spot a downgrade, so build ids can't trigger
+  its "older version" protection. `.purgecaches` in the app folder isn't
+  enough: Firefox deletes it at the first profile's launch.
 - **Declaring web types can make a browser the default by itself.** With no
   default in any `mimeapps.list` (a fresh Ubuntu user has none), GIO and
   `xdg-mime` take the first app that declares the type, and the user's own
