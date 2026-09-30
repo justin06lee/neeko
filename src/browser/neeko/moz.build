@@ -34,5 +34,8 @@ JAR_MANIFESTS += ["jar.mn"]
 # firefox-neeko.js).
 JS_PREFERENCE_FILES += [
     "firefox-neeko-privacy.js",
+]
+# Preprocessed, for its per-system defaults.
+JS_PREFERENCE_PP_FILES += [
     "firefox-neeko.js",
 ]
