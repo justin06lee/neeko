@@ -201,7 +201,8 @@ make uninstall   # remove it again; its profiles stay
 
 A full build takes hours and more memory than many Linux machines have, so
 on Linux `make install` installs the dev build instead: `make build`, then
-`mach package`, then it puts in place
+Firefox's packager (`stage-package`, which makes the program's folder
+without an archive), then it puts in place
 
 - the program, in `~/.local/share/<name>/app` (`<name>` is `browser.json`'s
   `name` in lower case). The next install replaces it, so `git pull && make

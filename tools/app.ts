@@ -8,7 +8,7 @@
  *                                     (after `surfer import`)
  *   bun tools/app.ts dist     <app>   copy a finished release into <app>/dist
  *   bun tools/app.ts install  <app>   Linux: install the packaged dev build for
- *                                     this user (after `mach package`)
+ *                                     this user (after its stage-package)
  *   bun tools/app.ts uninstall <app>  Linux: remove it again, but the profile
  *
  * An app folder holds:
@@ -1114,7 +1114,7 @@ function appIni(app: App, built: string): string {
 
 /**
  * Installs the app from the dev build, packaged (`make install` runs
- * `mach package` first), as the app: the launcher runs the prebuilt
+ * browser/installer's stage-package first), as the app: the launcher runs the prebuilt
  * program with the app's application.ini (appIni), so its profiles, windows
  * and everything it tells the desktop are the app's, never Firefox's.
  */

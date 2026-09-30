@@ -155,7 +155,7 @@ name and profile folder and has Firefox's telemetry, crash reporter and
 updater compiled out. `mach package` then makes the app and a disk image.
 
 **On Linux, `make install`** installs a browser for the user from the
-artifact build, packaged with `mach package`, since a full build is out of
+artifact build, packaged by Firefox's packager, since a full build is out of
 reach of many Linux machines. Its launcher runs the prebuilt program with
 `-app` and the app's own `application.ini`, which gives it the app's name,
 profile folder and desktop identity and no crash reporter, as a release's

@@ -44,7 +44,7 @@ import threading
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from builds import ROOT, LeaveNoTrace, command, dev_app, launch_env, program, sandbox_reads  # noqa: E402
+from builds import LINUX, ROOT, LeaveNoTrace, command, dev_app, launch_env, program, sandbox_reads  # noqa: E402
 from marionette import Marionette  # noqa: E402
 
 MITMPROXY = "mitmproxy==12.2.3"
@@ -311,9 +311,13 @@ def main():
         # A brand-new profile that trusts the proxy's certificate and sends
         # everything through the proxy. Nothing else is set but what the
         # test needs: the test is of Neeko's defaults.
-        subprocess.run([certutil, "-N", "-d", f"sql:{profile}", "--empty-password"], check=True)
+        # On Linux certutil needs the build's own NSS, next to it, not the
+        # system's.
+        certutil_env = {**os.environ, "LD_LIBRARY_PATH": os.path.dirname(certutil)} if LINUX else None
+        subprocess.run([certutil, "-N", "-d", f"sql:{profile}", "--empty-password"],
+                       check=True, env=certutil_env)
         subprocess.run([certutil, "-A", "-n", "neeko privacy test", "-t", "C,,",
-                        "-i", ca, "-d", f"sql:{profile}"], check=True)
+                        "-i", ca, "-d", f"sql:{profile}"], check=True, env=certutil_env)
         with open(os.path.join(profile, "user.js"), "w") as f:
             for name, value in [
                 ("network.proxy.type", 1),

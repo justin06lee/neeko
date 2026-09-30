@@ -78,8 +78,10 @@ release: configure
 # (~/.local/share/<name>/profile), a desktop entry and icons. Running it again
 # updates it in place, profile untouched; `make uninstall` removes all but the
 # profile.
+# The program is packaged (staged: no archive to compress), quietly: mach
+# would announce it on the desktop.
 install: $(if $(LINUX),build,linux-only)
-	cd $(ENGINE) && ./mach package
+	cd $(ENGINE) && MOZ_NOSPAM=1 ./mach build browser/installer/stage-package
 	bun tools/app.ts install $(APP)
 
 uninstall: $(if $(LINUX),,linux-only)
