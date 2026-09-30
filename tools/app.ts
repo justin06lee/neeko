@@ -42,6 +42,7 @@ import {
   readFileSync,
   readdirSync,
   renameSync,
+  rmdirSync,
   rmSync,
   statSync,
   writeFileSync,
@@ -1034,21 +1035,29 @@ const INSTALLED_BY = "Installed by Neeko's `make install`";
 
 /**
  * Where `make install` puts an app, for this user: the program (replaced by
- * each install), the profile (never touched), a launcher on the PATH, a
- * desktop entry and icons.
+ * each install), a launcher on the PATH, a desktop entry and icons. Its
+ * profiles are Firefox's to keep, in the app's own folder (profileRoot).
  */
 function installPaths(app: App) {
   let home = homedir();
-  let dataHome = process.env.XDG_DATA_HOME;
-  let data = dataHome?.startsWith("/") ? dataHome : join(home, ".local/share");
-  let dir = join(data, app.name.toLowerCase());
+  let xdg = (name: string, fallback: string) => {
+    let value = process.env[name];
+    return value?.startsWith("/") ? value : join(home, fallback);
+  };
+  let data = xdg("XDG_DATA_HOME", ".local/share");
+  let program = join(data, app.name.toLowerCase(), "app");
+  // Firefox's: ~/.<vendor>/<name> where that's there already, otherwise
+  // under XDG_CONFIG_HOME. The vendor is always Mozilla (see using-neeko.md).
+  let legacy = join(home, ".mozilla", app.name.toLowerCase());
   return {
-    dir,
-    program: join(dir, "app"),
-    profile: join(dir, "profile"),
+    program,
+    appIni: join(program, "browser/application.ini"),
     launcher: join(home, ".local/bin", app.name.toLowerCase()),
     desktop: join(data, "applications", `${app.appId}.desktop`),
     icons: join(data, "icons/hicolor"),
+    profileRoot: existsSync(legacy)
+      ? legacy
+      : join(xdg("XDG_CONFIG_HOME", ".config"), "mozilla", app.name.toLowerCase()),
   };
 }
 
@@ -1073,11 +1082,41 @@ function writeOurs(path: string, contents: string, mode: number) {
 }
 
 /**
+ * The app's identity for the prebuilt program, which carries Firefox's
+ * (name, profile folder, crash reporter): the build's own application.ini
+ * (the app's name, no crash reporter), named for the desktop by its
+ * RemotingName, the app id, which Firefox gives its windows, notifications,
+ * media controls and D-Bus name. The launcher hands it to the program with
+ * -app, which takes it from the browser/ folder, where the app's files are.
+ */
+function appIni(app: App, built: string): string {
+  let lines = built.split("\n");
+  // Only the [App], [Gecko] and [XRE] sections: none for a crash reporter.
+  let keep = false;
+  let out: string[] = [`; ${INSTALLED_BY}, from the build's application.ini.`];
+  for (let line of lines) {
+    let section = line.match(/^\[(.*)\]\s*$/);
+    if (section) {
+      keep = ["App", "Gecko", "XRE"].includes(section[1]);
+    }
+    if (keep && !/^RemotingName=/.test(line)) {
+      out.push(line);
+      if (section?.[1] == "App") {
+        out.push(`RemotingName=${app.appId}`);
+      }
+    }
+  }
+  if (!out.some(line => /^Name=/.test(line))) {
+    fail("the build's application.ini has no [App] Name.");
+  }
+  return out.join("\n").trimEnd() + "\n";
+}
+
+/**
  * Installs the app from the dev build, packaged (`make install` runs
- * `mach package` first). The prebuilt program in it carries Firefox's name,
- * and with it Firefox's profile folder, so it only ever runs through the
- * launcher, which gives it the app's own profile and names its windows
- * after the app, for the desktop to show them under the app's icon.
+ * `mach package` first), as the app: the launcher runs the prebuilt
+ * program with the app's application.ini (appIni), so its profiles, windows
+ * and everything it tells the desktop are the app's, never Firefox's.
  */
 function install(app: App) {
   checkLinux("make install");
@@ -1098,31 +1137,29 @@ function install(app: App) {
   let old = `${paths.program}.old`;
   rmSync(fresh, { recursive: true, force: true });
   rmSync(old, { recursive: true, force: true });
-  mkdirSync(paths.dir, { recursive: true });
+  mkdirSync(dirname(paths.program), { recursive: true });
   run("cp", ["-a", source, fresh]);
+  writeFileSync(
+    join(fresh, "browser/application.ini"),
+    appIni(app, read(join(fresh, "application.ini")))
+  );
   if (existsSync(paths.program)) {
     renameSync(paths.program, old);
   }
   renameSync(fresh, paths.program);
   rmSync(old, { recursive: true, force: true });
-  mkdirSync(paths.profile, { recursive: true, mode: 0o700 });
 
   writeOurs(
     paths.launcher,
     [
       "#!/bin/sh",
       `# ${INSTALLED_BY}, from ${app.dir}. Runs ${app.displayName}`,
-      "# with its own profile (the program inside carries Firefox's name, and",
-      "# would use Firefox's), its windows and notifications named after it for",
-      "# the desktop, this launcher as the command to open links with once it's",
-      "# the default browser, and no crash reporter (Neeko ships none; the",
-      "# program's own would keep its files in Firefox's folder).",
+      "# as itself (-app: its name, profiles and desktop identity, not the",
+      "# prebuilt program's Firefox ones), with this launcher as the command to",
+      "# open links with once it's the default browser.",
       `export MOZ_APP_LAUNCHER=${shellQuote(paths.launcher)}`,
-      `export MOZ_DESKTOP_FILE_NAME=${shellQuote(app.appId)}`,
-      "export MOZ_CRASHREPORTER_DISABLE=1",
-      `mkdir -p ${shellQuote(paths.profile)}`,
-      `exec ${shellQuote(join(paths.program, "firefox"))} --name ${shellQuote(app.appId)} ` +
-        `--class ${shellQuote(app.appId)} --profile ${shellQuote(paths.profile)} "$@"`,
+      `exec ${shellQuote(join(paths.program, "firefox"))} -app ${shellQuote(paths.appIni)} ` +
+        `--class ${shellQuote(app.appId)} "$@"`,
       "",
     ].join("\n"),
     0o755
@@ -1182,11 +1219,11 @@ function install(app: App) {
   console.log(
     `neeko: installed ${app.displayName} ${app.version} in ${paths.program}\n` +
       `neeko: open it from the desktop's apps, or run ${paths.launcher}\n` +
-      `neeko: its profile is ${paths.profile}`
+      `neeko: its profiles are in ${paths.profileRoot}`
   );
 }
 
-/** Removes what `make install` put in place, but the profile. */
+/** Removes what `make install` put in place, but the profiles. */
 function uninstall(app: App) {
   checkLinux("make uninstall");
   let paths = installPaths(app);
@@ -1195,6 +1232,11 @@ function uninstall(app: App) {
   }
   for (let dir of [paths.program, `${paths.program}.new`, `${paths.program}.old`]) {
     rmSync(dir, { recursive: true, force: true });
+  }
+  try {
+    rmdirSync(dirname(paths.program));
+  } catch (e) {
+    // Not empty: something else of the app's is in it.
   }
   for (let file of [paths.launcher, paths.desktop]) {
     if (isOurs(file)) {
@@ -1206,8 +1248,8 @@ function uninstall(app: App) {
   }
   refreshDesktop(paths);
   console.log(
-    `neeko: uninstalled ${app.displayName}. Its profile is still in ${paths.profile}: ` +
-      "delete it to remove its data too."
+    `neeko: uninstalled ${app.displayName}. Its profiles are still in ${paths.profileRoot}: ` +
+      "delete that folder to remove its data too."
   );
 }
 

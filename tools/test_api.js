@@ -1478,7 +1478,9 @@ let tidy = popup => {
 };
 let hiddenMenu = id => document.getElementById(id).hidden;
 check(
-  !hiddenMenu("file-menu") && !hiddenMenu("edit-menu") && !hiddenMenu("windowMenu") &&
+  !hiddenMenu("file-menu") && !hiddenMenu("edit-menu") &&
+    // Only macOS has a Window menu.
+    (Services.appinfo.OS != "Darwin" || !hiddenMenu("windowMenu")) &&
     hiddenMenu("view-menu") && hiddenMenu("history-menu") && hiddenMenu("tools-menu"),
   "the menu bar has only the app's menus"
 );

@@ -43,11 +43,16 @@ def program(app):
     return path
 
 
+def command(app):
+    """How to start a build: its program, and for an app installed on Linux
+    (make install), the app's application.ini, as its launcher does."""
+    ini = os.path.join(app, "browser/application.ini")
+    return [program(app), *(["-app", ini] if LINUX and os.path.exists(ini) else [])]
+
+
 def launch_env():
     """The environment to launch a build in. On Linux, without the crash
-    reporter, as `mach run` and installed apps' launchers do: the prebuilt
-    program carries Firefox's name, so its crash reporter would keep its
-    folders in Firefox's own, the user's real Firefox's."""
+    reporter, as `mach run` does (an installed app has none)."""
     return {**os.environ, "MOZ_CRASHREPORTER_DISABLE": "1"} if LINUX else None
 
 

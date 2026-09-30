@@ -44,7 +44,7 @@ import threading
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from builds import ROOT, LeaveNoTrace, dev_app, launch_env, program, sandbox_reads  # noqa: E402
+from builds import ROOT, LeaveNoTrace, command, dev_app, launch_env, program, sandbox_reads  # noqa: E402
 from marionette import Marionette  # noqa: E402
 
 MITMPROXY = "mitmproxy==12.2.3"
@@ -188,9 +188,9 @@ class DirectConnectionWatch(threading.Thread):
             time.sleep(1)
 
 
-def launch(app, profile, urls=()):
+def launch(cmd, profile, urls=()):
     return subprocess.Popen(
-        [app, "-no-remote", "-marionette", "-remote-allow-system-access",
+        [*cmd, "-no-remote", "-marionette", "-remote-allow-system-access",
          "-profile", profile, *urls],
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
         env=launch_env(),
@@ -275,6 +275,7 @@ def main():
     bundle = os.path.abspath(args.app) if args.app else dev_app()
     tidy = LeaveNoTrace(bundle)
     app = program(bundle)
+    cmd = command(bundle)
     app_dir = os.path.dirname(app)
     # Packaged apps don't ship NSS's certutil; the dev build's is the same
     # version.
@@ -342,7 +343,7 @@ def main():
         # First launch, idle, then quit normally.
         print(f"First launch, idle for {args.idle} seconds...")
         start = time.time()
-        browser = launch(app, profile)
+        browser = launch(cmd, profile)
         time.sleep(args.idle)
         clean = quit_normally(connect(marionette_port, browser), browser)
         time.sleep(5)  # anything sent at or after quitting
@@ -352,7 +353,7 @@ def main():
         # Second launch: a few ordinary websites.
         print(f"Second launch, on {len(SITES)} websites for {args.browse} seconds...")
         start = time.time()
-        browser = launch(app, profile, SITES)
+        browser = launch(cmd, profile, SITES)
         time.sleep(args.browse)
         quit_normally(connect(marionette_port, browser), browser)
         time.sleep(5)
@@ -363,7 +364,7 @@ def main():
         proxy.terminate()
         proxy.wait(timeout=30)
         print("Checking about:telemetry and about:glean...")
-        browser = launch(app, profile)
+        browser = launch(cmd, profile)
         m = connect(marionette_port, browser)
         m.send("WebDriver:SetTimeouts", {"script": 60000})
         final = m.run(FINAL_CHECK)
