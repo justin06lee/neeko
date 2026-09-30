@@ -148,10 +148,8 @@ check(
     uiOf(replacement)?.neeko?.window.container == "private",
   "with a private one, in that container"
 );
-check(
-  [replacement.screenX, replacement.screenY, replacement.outerWidth, replacement.outerHeight].join() == place,
-  `at the same place and size (${place})`
-);
+let replacedAt = [replacement.screenX, replacement.screenY, replacement.outerWidth, replacement.outerHeight].join();
+check(replacedAt == place, `at the same place and size (${place}; ${replacedAt})`);
 await closed(replacement);
 
 // Tabs of another container can't move in.

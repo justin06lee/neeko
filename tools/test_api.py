@@ -27,7 +27,7 @@ import time
 import zlib
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from builds import ROOT, LeaveNoTrace, dev_app, program, sandbox_reads  # noqa: E402
+from builds import ROOT, LeaveNoTrace, dev_app, launch_env, program, sandbox_reads  # noqa: E402
 from marionette import Marionette  # noqa: E402
 
 # A UI with nothing but a content slot, away from the window's corner so the
@@ -383,6 +383,7 @@ def launch(binary, profile, prefs):
          "-profile", profile],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
+        env=launch_env(),
     )
 
 

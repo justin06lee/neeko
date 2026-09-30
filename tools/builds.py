@@ -43,6 +43,14 @@ def program(app):
     return path
 
 
+def launch_env():
+    """The environment to launch a build in. On Linux, without the crash
+    reporter, as `mach run` and installed apps' launchers do: the prebuilt
+    program carries Firefox's name, so its crash reporter would keep its
+    folders in Firefox's own, the user's real Firefox's."""
+    return {**os.environ, "MOZ_CRASHREPORTER_DISABLE": "1"} if LINUX else None
+
+
 def sandbox_reads(*folders):
     """The prefs that let content processes read these folders too (a dev
     build's src/, which it links to, and pages outside the app). Each system's

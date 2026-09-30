@@ -44,7 +44,7 @@ import threading
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from builds import ROOT, LeaveNoTrace, dev_app, program, sandbox_reads  # noqa: E402
+from builds import ROOT, LeaveNoTrace, dev_app, launch_env, program, sandbox_reads  # noqa: E402
 from marionette import Marionette  # noqa: E402
 
 MITMPROXY = "mitmproxy==12.2.3"
@@ -193,6 +193,7 @@ def launch(app, profile, urls=()):
         [app, "-no-remote", "-marionette", "-remote-allow-system-access",
          "-profile", profile, *urls],
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        env=launch_env(),
     )
 
 
