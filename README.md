@@ -36,12 +36,15 @@ looks, a bar for permission prompts, bookmarks and downloads lists, and a
 layout that steps aside for fullscreen videos; `pages/start.html` is its
 New Tab page. A browser built on Neeko keeps Neeko as a
 submodule and brings its own UI, name and icon, and `make release` turns it
-into a packaged app with its own identity.
+into a packaged app with its own identity. It runs on macOS and Linux, where
+`make install` installs the browser for you.
 
 ## Requirements
 
-- macOS on Apple Silicon (Linux and Windows builds are untested so far)
-- Xcode, [bun](https://bun.sh), and GNU tar (`brew install gnu-tar`)
+- macOS on Apple Silicon, with Xcode and GNU tar (`brew install gnu-tar`), or
+  Linux (tried on Ubuntu 24.04 on arm64), with ImageMagick for the app's
+  icons (`apt install imagemagick`). Windows builds are untested so far.
+- [bun](https://bun.sh) and Python 3
 - [uv](https://docs.astral.sh/uv/), only for the privacy test
 - About 10 GB of free disk for the Firefox source and build
 
@@ -56,12 +59,14 @@ The first run installs dependencies, downloads the Firefox source into
 dev profile. That takes about 15 minutes, mostly unpacking Firefox and
 snapshotting it into git. After that, a rebuild takes under a minute.
 
-| Command        | What it does                                             |
-| -------------- | -------------------------------------------------------- |
-| `make`         | Set up if needed, build, and launch                      |
-| `make build`   | Build only                                               |
-| `make update`  | Quit a running dev build, rebuild, and relaunch it       |
-| `make release` | Full build from source, packaged into `dist/` (hours)    |
+| Command          | What it does                                          |
+| ---------------- | ----------------------------------------------------- |
+| `make`           | Set up if needed, build, and launch                   |
+| `make build`     | Build only                                            |
+| `make update`    | Quit a running dev build, rebuild, and relaunch it    |
+| `make release`   | Full build from source, packaged into `dist/` (hours) |
+| `make install`   | Linux: install it for you, in the desktop's apps      |
+| `make uninstall` | Linux: remove it again (its profiles stay)            |
 
 ## Starting a browser
 
@@ -134,7 +139,11 @@ The privacy test runs the browser through mitmproxy (fetched by `uvx`, so
 anything reaches an endpoint Neeko turns off. Run it after every Firefox
 update.
 
-After `make release`, `python3 tools/test_release.py` checks the packaged app
+On Linux the tests open real windows, so they need a display (an X server
+such as Xvfb will do), and `--app ~/.local/share/<name>/app` tests an
+installed browser.
+
+After `make release` on macOS, `python3 tools/test_release.py` checks the packaged app
 is its own browser (its own name and profile folder, telemetry compiled out,
 Neeko's prefs packaged), and both tests above take `--app dist/Neeko.app` to
 run against it. Release builds want 16 GB of memory or more for full

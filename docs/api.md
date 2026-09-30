@@ -746,7 +746,7 @@ let theme = await neekoPage.settings.get("theme");
 | `neekoPage.containers.remove(id)` / `clear(id)` | The same. Need a click. |
 | `neekoPage.containers.on("change", listener)` | Calls `listener({ containers })` when they change. Returns a function that stops it. |
 | `neekoPage.defaultBrowser.isDefault()` | Whether your browser is the system's default browser. Cheap: ask again when your page gets the focus back, say. |
-| `neekoPage.defaultBrowser.setDefault()` | Asks the system to make your browser the default, and resolves once the user has answered: whether it is now. On macOS the system asks in a dialog of its own (so it can take a while), and nothing changes until the user agrees. Needs a click (see below). |
+| `neekoPage.defaultBrowser.setDefault()` | Asks the system to make your browser the default, and resolves once the user has answered: whether it is now. On macOS the system asks in a dialog of its own (so it can take a while), and nothing changes until the user agrees. On Linux it changes at once, and only a browser installed with `make install` should be made the default: a dev build would register its bare program, which runs as Firefox. Needs a click (see below). |
 
 ### Importing from other browsers
 

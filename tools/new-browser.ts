@@ -99,7 +99,7 @@ let files: Record<string, string> = {
 
 NEEKO := $(MAKE) -C neeko APP=$(CURDIR)
 
-.PHONY: all build run release update stop
+.PHONY: all build run release install uninstall update stop
 
 # Build and launch with a throwaway dev profile.
 all: neeko/Makefile
@@ -107,7 +107,8 @@ all: neeko/Makefile
 
 # build: build only. run: launch. update: quit, rebuild, relaunch.
 # stop: quit the dev build. release: a full build, packaged into dist/.
-build run release update stop: neeko/Makefile
+# install, uninstall (Linux): install it for this user, or remove it.
+build run release install uninstall update stop: neeko/Makefile
 	$(NEEKO) $@
 
 # A clone made without --recursive has an empty neeko/ folder.

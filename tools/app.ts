@@ -7,6 +7,9 @@
  *   bun tools/app.ts branding <app>   write the app's Firefox branding folder
  *                                     (after `surfer import`)
  *   bun tools/app.ts dist     <app>   copy a finished release into <app>/dist
+ *   bun tools/app.ts install  <app>   Linux: install the packaged dev build for
+ *                                     this user (after its stage-package)
+ *   bun tools/app.ts uninstall <app>  Linux: remove it again, but the profile
  *
  * An app folder holds:
  *
@@ -31,16 +34,20 @@ import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
   appendFileSync,
+  chmodSync,
   cpSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
   readdirSync,
+  renameSync,
+  rmdirSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 // Neeko's names for Firefox's menus and their items (plain data).
 import { CONTEXT, MENUBAR } from "../src/browser/neeko/NeekoMenuNames.sys.mjs";
@@ -580,11 +587,14 @@ function copyBrandingFiles(app: App, out: string) {
   }
 }
 
-// Files made from the app's icon.
+// Files made from the app's icon: the macOS app icon (on macOS), window
+// icons (Linux takes them from the app; `make install` puts them in the icon
+// theme too), and the logo on Firefox's own pages.
+const MAC_ICON_FILES = ["firefox.icns", "Assets.car"];
+const ICON_SIZES = [16, 22, 24, 32, 48, 64, 128, 256];
 const ICON_FILES = [
-  "firefox.icns",
-  "Assets.car",
-  ...[16, 22, 24, 32, 48, 64, 128, 256].map(size => `default${size}.png`),
+  ...(process.platform == "darwin" ? MAC_ICON_FILES : []),
+  ...ICON_SIZES.map(size => `default${size}.png`),
   "content/about-logo.png",
   "content/about-logo@2x.png",
   "content/about-logo.svg",
@@ -597,6 +607,7 @@ const ICON_CACHE = join(ENGINE, ".neeko-cache/icons");
  * Makes the app icon (macOS app icon, window icons, the logo on Firefox's
  * own pages) from branding/icon.png, a square PNG of at least 1024 pixels.
  * branding/icon.svg, if there, is used where Firefox wants an SVG logo.
+ * macOS has the tools for it; on Linux, ImageMagick does the resizing.
  */
 function writeIcons(app: App, out: string) {
   let png = join(app.dir, "branding/icon.png");
@@ -610,53 +621,51 @@ function writeIcons(app: App, out: string) {
     .digest("hex");
   let cache = join(ICON_CACHE, hash);
   if (!ICON_FILES.every(file => existsSync(join(cache, file)))) {
-    if (process.platform != "darwin") {
-      console.warn("neeko: app icons are only generated on macOS for now; keeping Firefox's.");
+    let resize = resizer(png);
+    if (!resize) {
+      console.warn(
+        process.platform == "linux"
+          ? "neeko: install ImageMagick (apt install imagemagick) for the app's icons; keeping Firefox's."
+          : "neeko: app icons are only made on macOS and Linux; keeping Firefox's."
+      );
       return;
     }
     rmSync(ICON_CACHE, { recursive: true, force: true });
-    makeIcons(png, svg, cache);
+    makeIcons(resize, png, svg, cache);
   }
   for (let file of ICON_FILES) {
     cpSync(join(cache, file), join(out, file));
   }
 }
 
-function makeIcons(png: string, svg: string, out: string) {
+type Resize = (size: number, to: string) => void;
+
+/**
+ * What resizes the app's icon here: macOS's sips, or ImageMagick (its
+ * `magick` or, before version 7, `convert`). Null if there's none.
+ */
+function resizer(png: string): Resize | null {
+  if (process.platform == "darwin") {
+    return (size, to) => run("sips", ["-z", `${size}`, `${size}`, png, "--out", to]);
+  }
+  let magick = ["magick", "convert"].find(
+    tool => spawnSync(tool, ["-version"], { stdio: "ignore" }).status == 0
+  );
+  if (process.platform != "linux" || !magick) {
+    return null;
+  }
+  // PNG32: full color with transparency, whatever the source's format.
+  return (size, to) => run(magick, [png, "-resize", `${size}x${size}`, "-strip", `PNG32:${to}`]);
+}
+
+function makeIcons(resize: Resize, png: string, svg: string, out: string) {
   let work = mkdtempSync(join(tmpdir(), "neeko-icon-"));
   mkdirSync(join(out, "content"), { recursive: true });
   try {
-    let resize = (size: number, to: string) =>
-      run("sips", ["-z", `${size}`, `${size}`, png, "--out", to]);
-
-    // firefox.icns (older macOS) and Assets.car (current macOS, which looks
-    // for the "AppIcon" in it first).
-    let iconset = join(work, "icon.iconset");
-    let appiconset = join(work, "Icon.xcassets/AppIcon.appiconset");
-    mkdirSync(iconset, { recursive: true });
-    mkdirSync(appiconset, { recursive: true });
-    let images = [];
-    for (let size of [16, 32, 128, 256, 512]) {
-      for (let scale of [1, 2]) {
-        let name = `icon_${size}x${size}${scale == 2 ? "@2x" : ""}.png`;
-        resize(size * scale, join(iconset, name));
-        cpSync(join(iconset, name), join(appiconset, name));
-        images.push({ idiom: "mac", size: `${size}x${size}`, scale: `${scale}x`, filename: name });
-      }
+    if (process.platform == "darwin") {
+      makeMacIcons(resize, work, out);
     }
-    let info = { version: 1, author: "neeko" };
-    writeFileSync(join(appiconset, "Contents.json"), JSON.stringify({ images, info }));
-    writeFileSync(join(work, "Icon.xcassets/Contents.json"), JSON.stringify({ info }));
-    run("iconutil", ["-c", "icns", iconset, "-o", join(out, "firefox.icns")]);
-    run("xcrun", [
-      "actool", "--compile", work, "--platform", "macosx",
-      "--minimum-deployment-target", "10.15", "--app-icon", "AppIcon",
-      "--output-partial-info-plist", join(work, "partial.plist"),
-      join(work, "Icon.xcassets"),
-    ]);
-    cpSync(join(work, "Assets.car"), join(out, "Assets.car"));
-
-    for (let size of [16, 22, 24, 32, 48, 64, 128, 256]) {
+    for (let size of ICON_SIZES) {
       resize(size, join(out, `default${size}.png`));
     }
     resize(192, join(out, "content/about-logo.png"));
@@ -677,6 +686,37 @@ function makeIcons(png: string, svg: string, out: string) {
   } finally {
     rmSync(work, { recursive: true, force: true });
   }
+}
+
+/**
+ * firefox.icns (older macOS) and Assets.car (current macOS, which looks for
+ * the "AppIcon" in it first).
+ */
+function makeMacIcons(resize: Resize, work: string, out: string) {
+  let iconset = join(work, "icon.iconset");
+  let appiconset = join(work, "Icon.xcassets/AppIcon.appiconset");
+  mkdirSync(iconset, { recursive: true });
+  mkdirSync(appiconset, { recursive: true });
+  let images = [];
+  for (let size of [16, 32, 128, 256, 512]) {
+    for (let scale of [1, 2]) {
+      let name = `icon_${size}x${size}${scale == 2 ? "@2x" : ""}.png`;
+      resize(size * scale, join(iconset, name));
+      cpSync(join(iconset, name), join(appiconset, name));
+      images.push({ idiom: "mac", size: `${size}x${size}`, scale: `${scale}x`, filename: name });
+    }
+  }
+  let info = { version: 1, author: "neeko" };
+  writeFileSync(join(appiconset, "Contents.json"), JSON.stringify({ images, info }));
+  writeFileSync(join(work, "Icon.xcassets/Contents.json"), JSON.stringify({ info }));
+  run("iconutil", ["-c", "icns", iconset, "-o", join(out, "firefox.icns")]);
+  run("xcrun", [
+    "actool", "--compile", work, "--platform", "macosx",
+    "--minimum-deployment-target", "10.15", "--app-icon", "AppIcon",
+    "--output-partial-info-plist", join(work, "partial.plist"),
+    join(work, "Icon.xcassets"),
+  ]);
+  cpSync(join(work, "Assets.car"), join(out, "Assets.car"));
 }
 
 /**
@@ -935,8 +975,15 @@ function writeBranding(app: App) {
 // ---------------------------------------------------------------------------
 // dist: <app>/dist/
 
-/** Copies the packaged release build into <app>/dist, named after the app. */
+/**
+ * Copies the packaged release build into <app>/dist, named after the app: a
+ * .app and a disk image on macOS, the program's archive on Linux.
+ */
 function copyRelease(app: App) {
+  if (process.platform == "linux") {
+    copyLinuxRelease(app);
+    return;
+  }
   let dist = join(ENGINE, "obj-release/dist");
   let apps = existsSync(join(dist, "firefox"))
     ? readdirSync(join(dist, "firefox")).filter(name => name.endsWith(".app"))
@@ -956,11 +1003,293 @@ function copyRelease(app: App) {
   console.log(`neeko: ${relative(process.cwd(), bundle)}\nneeko: ${relative(process.cwd(), image)}`);
 }
 
+function copyLinuxRelease(app: App) {
+  let dist = join(ENGINE, "obj-release/dist");
+  let archives = existsSync(dist)
+    ? readdirSync(dist).filter(name => /^firefox-.*\.tar\.(xz|bz2)$/.test(name))
+    : [];
+  if (archives.length != 1) {
+    fail(`expected one packaged archive in ${dist}; run \`make release\`.`);
+  }
+  let target = join(app.dir, "dist");
+  mkdirSync(target, { recursive: true });
+  let archive = join(
+    target,
+    `${app.name}-${app.version}-linux-${machine()}.${archives[0].replace(/.*\.(tar\.\w+)$/, "$1")}`
+  );
+  cpSync(join(dist, archives[0]), archive);
+  console.log(`neeko: ${relative(process.cwd(), archive)}`);
+}
+
+/** This computer's architecture, as Linux names it. */
+function machine(): string {
+  return { arm64: "aarch64", x64: "x86_64" }[process.arch as string] ?? process.arch;
+}
+
+// ---------------------------------------------------------------------------
+// install, uninstall: the app for this user, on Linux
+
+// The first line of what the installer writes, so it only ever replaces or
+// removes its own files.
+const INSTALLED_BY = "Installed by Neeko's `make install`";
+
+/**
+ * Where `make install` puts an app, for this user: the program (replaced by
+ * each install), a launcher on the PATH, a desktop entry and icons. Its
+ * profiles are Firefox's to keep, in the app's own folder (profileRoot).
+ */
+function installPaths(app: App) {
+  let home = homedir();
+  let xdg = (name: string, fallback: string) => {
+    let value = process.env[name];
+    return value?.startsWith("/") ? value : join(home, fallback);
+  };
+  let data = xdg("XDG_DATA_HOME", ".local/share");
+  let program = join(data, app.name.toLowerCase(), "app");
+  // Firefox's: ~/.<vendor>/<name> where that's there already, otherwise
+  // under XDG_CONFIG_HOME. The vendor is always Mozilla (see using-neeko.md).
+  let legacy = join(home, ".mozilla", app.name.toLowerCase());
+  return {
+    program,
+    appIni: join(program, "browser/application.ini"),
+    launcher: join(home, ".local/bin", app.name.toLowerCase()),
+    desktop: join(data, "applications", `${app.appId}.desktop`),
+    icons: join(data, "icons/hicolor"),
+    profileRoot: existsSync(legacy)
+      ? legacy
+      : join(xdg("XDG_CONFIG_HOME", ".config"), "mozilla", app.name.toLowerCase()),
+  };
+}
+
+function checkLinux(what: string) {
+  if (process.platform != "linux") {
+    fail(`${what} is for Linux. On macOS, \`make release\` makes the app in dist/.`);
+  }
+}
+
+/** A file the installer wrote, which it may replace or remove. */
+function isOurs(path: string): boolean {
+  return existsSync(path) && read(path).split("\n", 3).some(line => line.includes(INSTALLED_BY));
+}
+
+function writeOurs(path: string, contents: string, mode: number) {
+  if (existsSync(path) && !isOurs(path)) {
+    fail(`${path} is there already, and not from \`make install\`: move it away first.`);
+  }
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, contents, { mode });
+  chmodSync(path, mode);
+}
+
+/**
+ * The app's identity for the prebuilt program, which carries Firefox's
+ * (name, profile folder, crash reporter): the build's own application.ini
+ * (the app's name, no crash reporter), named for the desktop by its
+ * RemotingName, the app id, which Firefox gives its windows, notifications,
+ * media controls and D-Bus name. The launcher hands it to the program with
+ * -app, which takes it from the browser/ folder, where the app's files are.
+ */
+function appIni(app: App, built: string): string {
+  let lines = built.split("\n");
+  // Only the [App], [Gecko] and [XRE] sections: none for a crash reporter.
+  let keep = false;
+  let out: string[] = [`; ${INSTALLED_BY}, from the build's application.ini.`];
+  for (let line of lines) {
+    let section = line.match(/^\[(.*)\]\s*$/);
+    if (section) {
+      keep = ["App", "Gecko", "XRE"].includes(section[1]);
+    }
+    if (keep && !/^RemotingName=/.test(line)) {
+      out.push(line);
+      if (section?.[1] == "App") {
+        out.push(`RemotingName=${app.appId}`);
+      }
+    }
+  }
+  if (!out.some(line => /^Name=/.test(line))) {
+    fail("the build's application.ini has no [App] Name.");
+  }
+  return out.join("\n").trimEnd() + "\n";
+}
+
+/**
+ * Installs the app from the dev build, packaged (`make install` runs
+ * browser/installer's stage-package first), as the app: the launcher runs the prebuilt
+ * program with the app's application.ini (appIni), so its profiles, windows
+ * and everything it tells the desktop are the app's, never Firefox's.
+ */
+function install(app: App) {
+  checkLinux("make install");
+  let packages = globDirs(ENGINE, /^obj-(?!release$)/, "dist/firefox").filter(dir =>
+    existsSync(join(dir, "firefox"))
+  );
+  if (!packages.length) {
+    fail("no packaged build in engine/obj-*/dist/firefox: run `make install`, not this script.");
+  }
+  let source = packages.sort((a, b) => statSync(b).mtimeMs - statSync(a).mtimeMs)[0];
+  let paths = installPaths(app);
+  if (isRunning(paths.program)) {
+    console.warn(`neeko: ${app.displayName} is running: restart it for the new version.`);
+  }
+
+  // The program: copied next to the old one, then swapped in.
+  let fresh = `${paths.program}.new`;
+  let old = `${paths.program}.old`;
+  rmSync(fresh, { recursive: true, force: true });
+  rmSync(old, { recursive: true, force: true });
+  mkdirSync(dirname(paths.program), { recursive: true });
+  run("cp", ["-a", source, fresh]);
+  writeFileSync(
+    join(fresh, "browser/application.ini"),
+    appIni(app, read(join(fresh, "application.ini")))
+  );
+  if (existsSync(paths.program)) {
+    renameSync(paths.program, old);
+  }
+  renameSync(fresh, paths.program);
+  rmSync(old, { recursive: true, force: true });
+
+  writeOurs(
+    paths.launcher,
+    [
+      "#!/bin/sh",
+      `# ${INSTALLED_BY}, from ${app.dir}. Runs ${app.displayName}`,
+      "# as itself (-app: its name, profiles and desktop identity, not the",
+      "# prebuilt program's Firefox ones), with this launcher as the command to",
+      "# open links with once it's the default browser.",
+      `export MOZ_APP_LAUNCHER=${shellQuote(paths.launcher)}`,
+      `exec ${shellQuote(join(paths.program, "firefox"))} -app ${shellQuote(paths.appIni)} ` +
+        `--class ${shellQuote(app.appId)} "$@"`,
+      "",
+    ].join("\n"),
+    0o755
+  );
+
+  // The icons Firefox shows on the app's windows (writeIcons), in the icon
+  // theme for the desktop.
+  let icons = 0;
+  for (let size of ICON_SIZES) {
+    let icon = join(BRANDING, `default${size}.png`);
+    if (existsSync(icon)) {
+      let to = join(paths.icons, `${size}x${size}/apps/${app.appId}.png`);
+      mkdirSync(dirname(to), { recursive: true });
+      cpSync(icon, to);
+      icons++;
+    }
+  }
+  if (!icons) {
+    console.warn("neeko: the build has no window icons, so the desktop shows a generic one.");
+  }
+
+  let exec = desktopExec(paths.launcher);
+  writeOurs(
+    paths.desktop,
+    [
+      `# ${INSTALLED_BY}.`,
+      "[Desktop Entry]",
+      "Type=Application",
+      "Version=1.5",
+      `Name=${app.displayName}`,
+      "GenericName=Web Browser",
+      "Comment=Browse the web",
+      `Exec=${exec} %u`,
+      `TryExec=${exec}`,
+      `Icon=${app.appId}`,
+      "Terminal=false",
+      "StartupNotify=true",
+      `StartupWMClass=${app.appId}`,
+      "Categories=Network;WebBrowser;",
+      "Keywords=web;browser;internet;",
+      "MimeType=text/html;text/xml;application/xhtml+xml;x-scheme-handler/http;x-scheme-handler/https;",
+      "Actions=new-window;new-private-window;",
+      "",
+      "[Desktop Action new-window]",
+      "Name=New Window",
+      `Exec=${exec} --new-window`,
+      "",
+      "[Desktop Action new-private-window]",
+      "Name=New Private Window",
+      `Exec=${exec} --private-window`,
+      "",
+    ].join("\n"),
+    0o644
+  );
+  refreshDesktop(paths);
+
+  console.log(
+    `neeko: installed ${app.displayName} ${app.version} in ${paths.program}\n` +
+      `neeko: open it from the desktop's apps, or run ${paths.launcher}\n` +
+      `neeko: its profiles are in ${paths.profileRoot}`
+  );
+}
+
+/** Removes what `make install` put in place, but the profiles. */
+function uninstall(app: App) {
+  checkLinux("make uninstall");
+  let paths = installPaths(app);
+  if (isRunning(paths.program)) {
+    fail(`${app.displayName} is running: quit it first.`);
+  }
+  for (let dir of [paths.program, `${paths.program}.new`, `${paths.program}.old`]) {
+    rmSync(dir, { recursive: true, force: true });
+  }
+  try {
+    rmdirSync(dirname(paths.program));
+  } catch (e) {
+    // Not empty: something else of the app's is in it.
+  }
+  for (let file of [paths.launcher, paths.desktop]) {
+    if (isOurs(file)) {
+      rmSync(file);
+    }
+  }
+  for (let size of ICON_SIZES) {
+    rmSync(join(paths.icons, `${size}x${size}/apps/${app.appId}.png`), { force: true });
+  }
+  refreshDesktop(paths);
+  console.log(
+    `neeko: uninstalled ${app.displayName}. Its profiles are still in ${paths.profileRoot}: ` +
+      "delete that folder to remove its data too."
+  );
+}
+
+/** The folders <root>/<name>/<under> for the names matching a pattern. */
+function globDirs(root: string, pattern: RegExp, under: string): string[] {
+  return readdirSync(root)
+    .filter(name => pattern.test(name))
+    .map(name => join(root, name, under))
+    .filter(dir => existsSync(dir));
+}
+
+function isRunning(program: string): boolean {
+  return spawnSync("pgrep", ["-f", `^${program}/`], { stdio: "ignore" }).status == 0;
+}
+
+/** A path as a desktop entry's Exec key takes it. */
+function desktopExec(path: string): string {
+  if (/["`$\\]/.test(path)) {
+    fail(`${path}: a desktop entry can't run a path with quotes, $ or backslashes.`);
+  }
+  return /\s/.test(path) ? `"${path}"` : path;
+}
+
+/**
+ * Lets the desktop see a changed desktop entry's file types, and a changed
+ * icon, where it keeps caches of them. (GNOME notices new entries and icons
+ * by itself.)
+ */
+function refreshDesktop(paths: ReturnType<typeof installPaths>) {
+  spawnSync("update-desktop-database", ["-q", dirname(paths.desktop)], { stdio: "ignore" });
+  if (existsSync(join(paths.icons, "icon-theme.cache"))) {
+    spawnSync("gtk-update-icon-cache", ["-q", "-t", "-f", paths.icons], { stdio: "ignore" });
+  }
+}
+
 // ---------------------------------------------------------------------------
 
 let [command, appDir] = process.argv.slice(2);
 if (!appDir) {
-  fail("usage: bun tools/app.ts config|branding|dist <app folder>");
+  fail("usage: bun tools/app.ts config|branding|dist|install|uninstall <app folder>");
 }
 let app = readApp(resolve(appDir));
 switch (command) {
@@ -972,6 +1301,12 @@ switch (command) {
     break;
   case "dist":
     copyRelease(app);
+    break;
+  case "install":
+    install(app);
+    break;
+  case "uninstall":
+    uninstall(app);
     break;
   default:
     fail(`unknown command "${command}"`);

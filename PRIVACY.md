@@ -48,8 +48,10 @@ a website.
 - **Searching** sends what you searched for to your search engine.
   Suggestions as you type are only fetched if this browser's address bar
   asks for them.
-- **Your location**, only when you allow a website to see it, through
-  macOS's location services.
+- **Your location**, only when you allow a website to see it, through the
+  system's location service (macOS's, or GeoClue on Linux). When that has
+  no answer within a few seconds, Firefox asks its network location
+  service instead (`geo.provider.network.url`, Google's).
 - **Streaming video with DRM** (Netflix, Spotify): the first time a site
   needs it, the browser asks whether to turn DRM on. If you say yes, it asks
   Mozilla's update server (`aus5.mozilla.org`) which version of Google's
@@ -98,7 +100,9 @@ profile behind a proxy that sees every request, leaves it idle for four
 minutes, visits a few ordinary websites, and fails if anything goes to an
 address on the "never" list above, or if anything new shows up while the
 browser sits idle. It also checks that Firefox's own telemetry pages say
-nothing is uploaded. It runs after every Firefox update.
+nothing is uploaded. It runs after every Firefox update, on macOS, and it
+passes on Linux too (tried on Ubuntu 24.04 on arm64, with a browser
+installed by `make install`: the same three kept hosts while idle).
 
 The details, with every setting and the Firefox source behind it, are in
 [docs/privacy/](docs/privacy/implementation.md).

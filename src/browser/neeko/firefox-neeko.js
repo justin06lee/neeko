@@ -18,3 +18,11 @@ pref("neeko.ui.path", "");
 // them after its own brand, so run those processes in plugin-container instead.
 pref("layers.gpu-process-executable.enabled", false);
 pref("media.plugin_helper_process.enabled", false);
+
+// Linux: the system's titlebar, with its window buttons. On GNOME Firefox
+// would draw its own instead, in the tab strip Neeko hides, and leave the
+// window with none. (A UI can only draw window buttons on macOS so far:
+// [data-neeko-window-buttons].)
+#ifdef MOZ_WIDGET_GTK
+pref("browser.tabs.inTitlebar", 0);
+#endif

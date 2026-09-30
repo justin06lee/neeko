@@ -44,7 +44,7 @@ import threading
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from builds import ROOT, LeaveNoTrace, dev_app, program  # noqa: E402
+from builds import LINUX, ROOT, LeaveNoTrace, command, dev_app, launch_env, program, sandbox_reads  # noqa: E402
 from marionette import Marionette  # noqa: E402
 
 MITMPROXY = "mitmproxy==12.2.3"
@@ -188,11 +188,12 @@ class DirectConnectionWatch(threading.Thread):
             time.sleep(1)
 
 
-def launch(app, profile, urls=()):
+def launch(cmd, profile, urls=()):
     return subprocess.Popen(
-        [app, "-no-remote", "-marionette", "-remote-allow-system-access",
+        [*cmd, "-no-remote", "-marionette", "-remote-allow-system-access",
          "-profile", profile, *urls],
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        env=launch_env(),
     )
 
 
@@ -262,7 +263,9 @@ def main():
     parser.add_argument("--idle", type=int, default=240, help="seconds idle on first launch")
     parser.add_argument("--browse", type=int, default=60, help="seconds on the websites")
     parser.add_argument("--keep", action="store_true", help="keep the temp folder")
-    parser.add_argument("--app", help="a .app to test (default: the dev build)")
+    parser.add_argument(
+        "--app", help="a .app (on Linux, the program's folder) to test (default: the dev build)"
+    )
     parser.add_argument(
         "--pref", action="append", default=[], metavar="NAME=VALUE",
         help="set a pref for the whole run, e.g. to check the test catches a leak",
@@ -272,6 +275,7 @@ def main():
     bundle = os.path.abspath(args.app) if args.app else dev_app()
     tidy = LeaveNoTrace(bundle)
     app = program(bundle)
+    cmd = command(bundle)
     app_dir = os.path.dirname(app)
     # Packaged apps don't ship NSS's certutil; the dev build's is the same
     # version.
@@ -307,9 +311,13 @@ def main():
         # A brand-new profile that trusts the proxy's certificate and sends
         # everything through the proxy. Nothing else is set but what the
         # test needs: the test is of Neeko's defaults.
-        subprocess.run([certutil, "-N", "-d", f"sql:{profile}", "--empty-password"], check=True)
+        # On Linux certutil needs the build's own NSS, next to it, not the
+        # system's.
+        certutil_env = {**os.environ, "LD_LIBRARY_PATH": os.path.dirname(certutil)} if LINUX else None
+        subprocess.run([certutil, "-N", "-d", f"sql:{profile}", "--empty-password"],
+                       check=True, env=certutil_env)
         subprocess.run([certutil, "-A", "-n", "neeko privacy test", "-t", "C,,",
-                        "-i", ca, "-d", f"sql:{profile}"], check=True)
+                        "-i", ca, "-d", f"sql:{profile}"], check=True, env=certutil_env)
         with open(os.path.join(profile, "user.js"), "w") as f:
             for name, value in [
                 ("network.proxy.type", 1),
@@ -329,10 +337,7 @@ def main():
                 # A dev build's content processes need to read Neeko's own
                 # files, which it links to in src/, for the app's start page
                 # (see make run). Packaged builds carry them inside the app.
-                *([] if args.app else [(
-                    "security.sandbox.content.mac.testing_read_path1",
-                    os.path.realpath(os.path.join(ROOT, "src")),
-                )]),
+                *([] if args.app else sandbox_reads(os.path.join(ROOT, "src")).items()),
                 *[(p.split("=", 1)[0], json.loads(p.split("=", 1)[1])) for p in args.pref],
             ]:
                 f.write(f"user_pref({json.dumps(name)}, {json.dumps(value)});\n")
@@ -342,7 +347,7 @@ def main():
         # First launch, idle, then quit normally.
         print(f"First launch, idle for {args.idle} seconds...")
         start = time.time()
-        browser = launch(app, profile)
+        browser = launch(cmd, profile)
         time.sleep(args.idle)
         clean = quit_normally(connect(marionette_port, browser), browser)
         time.sleep(5)  # anything sent at or after quitting
@@ -352,7 +357,7 @@ def main():
         # Second launch: a few ordinary websites.
         print(f"Second launch, on {len(SITES)} websites for {args.browse} seconds...")
         start = time.time()
-        browser = launch(app, profile, SITES)
+        browser = launch(cmd, profile, SITES)
         time.sleep(args.browse)
         quit_normally(connect(marionette_port, browser), browser)
         time.sleep(5)
@@ -363,7 +368,7 @@ def main():
         proxy.terminate()
         proxy.wait(timeout=30)
         print("Checking about:telemetry and about:glean...")
-        browser = launch(app, profile)
+        browser = launch(cmd, profile)
         m = connect(marionette_port, browser)
         m.send("WebDriver:SetTimeouts", {"script": 60000})
         final = m.run(FINAL_CHECK)

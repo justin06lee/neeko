@@ -1158,17 +1158,22 @@ try {
   ShellService.isDefaultBrowser = realIsDefault;
 }
 // Importing from other browsers, with Firefox's importers. Firefox looks for
-// other browsers in the Library folder: here, a fake one with a Chrome
-// profile, so this computer's own browsers are never read.
+// other browsers in the Library folder (on Linux, in the home folder's
+// .config): here, a fake one with a Chrome profile, so this computer's own
+// browsers are never read.
 let { MigrationUtils } = ChromeUtils.importESModule("resource:///modules/MigrationUtils.sys.mjs");
 let clickPage = () =>
   gBrowser.selectedBrowser.messageManager.loadFrameScript(
     "data:,content.document.notifyUserGestureActivation(); content.document.body.click();",
     false
   );
-let realLibrary = Services.dirsvc.get("ULibDir", Ci.nsIFile);
+let [libraryKey, chromeFolder] =
+  Services.appinfo.OS == "Linux"
+    ? ["Home", [".config", "google-chrome"]]
+    : ["ULibDir", ["Application Support", "Google", "Chrome"]];
+let realLibrary = Services.dirsvc.get(libraryKey, Ci.nsIFile);
 let fakeLibrary = PathUtils.join(PathUtils.profileDir, "fake-library");
-let fakeChrome = PathUtils.join(fakeLibrary, "Application Support", "Google", "Chrome");
+let fakeChrome = PathUtils.join(fakeLibrary, ...chromeFolder);
 let importedURL = `${BASE}/one?from-chrome`;
 await IOUtils.makeDirectory(PathUtils.join(fakeChrome, "Default"));
 let chromeBookmarks = url => ({
@@ -1191,8 +1196,8 @@ await IOUtils.writeJSON(PathUtils.join(fakeChrome, "Local State"), {
   profile: { info_cache: { Default: { name: "Neeko Tester" }, "Profile 1": { name: "Work Tester" } } },
 });
 let useLibrary = path => {
-  Services.dirsvc.undefine("ULibDir");
-  Services.dirsvc.set("ULibDir", typeof path == "string" ? new FileUtils.File(path) : path);
+  Services.dirsvc.undefine(libraryKey);
+  Services.dirsvc.set(libraryKey, typeof path == "string" ? new FileUtils.File(path) : path);
   // Firefox's importers keep what they found.
   MigrationUtils.finishMigration();
 };
@@ -1473,7 +1478,9 @@ let tidy = popup => {
 };
 let hiddenMenu = id => document.getElementById(id).hidden;
 check(
-  !hiddenMenu("file-menu") && !hiddenMenu("edit-menu") && !hiddenMenu("windowMenu") &&
+  !hiddenMenu("file-menu") && !hiddenMenu("edit-menu") &&
+    // Only macOS has a Window menu.
+    (Services.appinfo.OS != "Darwin" || !hiddenMenu("windowMenu")) &&
     hiddenMenu("view-menu") && hiddenMenu("history-menu") && hiddenMenu("tools-menu"),
   "the menu bar has only the app's menus"
 );

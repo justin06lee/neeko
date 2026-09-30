@@ -148,10 +148,12 @@ check(
     uiOf(replacement)?.neeko?.window.container == "private",
   "with a private one, in that container"
 );
-check(
-  [replacement.screenX, replacement.screenY, replacement.outerWidth, replacement.outerHeight].join() == place,
-  `at the same place and size (${place})`
-);
+// (The window manager may take a moment to follow.)
+let replacedAt = () => [replacement.screenX, replacement.screenY, replacement.outerWidth, replacement.outerHeight].join();
+await waitFor(() => replacedAt() == place, `at the same place and size (${place})`, 5000);
+if (replacedAt() != place) {
+  check(false, `(it's at ${replacedAt()})`);
+}
 await closed(replacement);
 
 // Tabs of another container can't move in.

@@ -127,6 +127,76 @@ Add to it whenever something costs you time.
   tools remove them afterwards if they were new and are still empty
   (`LeaveNoTrace` in `tools/builds.py`).
 
+## Linux
+
+- **Linux's content sandbox reads extra folders from one pref,**
+  `security.sandbox.content.read_path_whitelist`: a comma-separated list,
+  folders ending in `/` (without it a path is one file). macOS's are
+  `security.sandbox.content.mac.testing_read_path1` and `2`. `mach run`
+  lets content read `engine/` (`MOZ_DEVELOPER_REPO_DIR`), but Neeko's `src/`
+  and an app's `pages/` are outside it (`make run`,
+  `tools/builds.py`'s `sandbox_reads`).
+- **The prebuilt program is Firefox, and on Linux Firefox's folder is the
+  user's real Firefox's:** `~/.config/mozilla/firefox` (or
+  `~/.mozilla/firefox`). Even with its own `-profile`, every launch makes
+  `Crash Reports/` (with `events/` and an empty `crash_helper_server.log`)
+  and `Pending Pings/` there: the crash reporter sets those folders up
+  whenever the compiled app data turns it on, and `MOZ_CRASHREPORTER_DISABLE`
+  only stops the handler and the crash helper, not the folders. They're
+  empty, and a Firefox makes them itself; macOS dev builds do the same in
+  `~/Library/Application Support/Firefox`. The test tools launch Linux dev
+  builds with `MOZ_CRASHREPORTER_DISABLE`, as `mach run` does.
+- **`-app <application.ini>` runs the prebuilt program as another app**
+  (`browser/app/nsBrowserApp.cpp`). It must be the first argument, and the
+  file's folder becomes the app folder, so the file goes in `browser/`,
+  next to the app's `omni.ja`. The build writes one (`dist/bin/application.ini`,
+  unused otherwise) with the app's name and no `[Crash Reporter]` section,
+  since Neeko's builds leave the crash reporter out. With it the profiles
+  are in the app's own folder and no crash reporter starts at all. Firefox
+  clears `XUL_APP_FILE` once it has started (keeping it for its own
+  restarts), so programs it opens don't inherit it. `make install`'s
+  launcher uses it.
+- **`RemotingName` is the app's name to the desktop:** Firefox's program
+  name for GTK (`g_set_prgname`, and the X11 class GDK makes from it), its
+  D-Bus service (`org.mozilla.<name>.<profile>`), the `desktop-entry` of its
+  notifications (unless `MOZ_DESKTOP_FILE_NAME` says otherwise) and of its
+  media controls. The build's is `firefox`. `--class` sets the X11 class
+  exactly; GTK takes it (and `--name`) off the command line before Firefox
+  forwards a command line to a running copy. A browser window's X11 name is
+  `Navigator`, from its `windowtype`.
+- **A second launch with the same profile joins the running one** (the
+  command line goes over D-Bus, keyed by the profile's path), so launching
+  an installed browser again opens a window in it, and different profiles
+  never meet: an installed browser never talks to the user's Firefox.
+- **The default browser, on GNOME** (`nsGNOMEShellService`): the browser is
+  the default while the http handler's program is `MOZ_APP_LAUNCHER` (or
+  else its own binary), and `setDefaultBrowser` picks the desktop entry
+  whose `Exec` program is that. Firefox unsets `MOZ_APP_LAUNCHER` for the
+  programs it opens. So an installed browser's launcher sets it to itself,
+  and its desktop entry runs the launcher.
+- **On GNOME, Firefox draws its own titlebar** (`browser.tabs.inTitlebar`'s
+  default, 2): no system frame (`_MOTIF_WM_HINTS` decorations 0), and its
+  window buttons in the tab strip, which Neeko hides, so the window had
+  none. `firefox-neeko.js` (preprocessed) sets 0 with GTK: the system's
+  titlebar.
+- **Artifact builds package fine** (`mach package`), but compressing the
+  archive took five minutes on a small arm64 machine, and installing only
+  needs the program's folder: `mach build browser/installer/stage-package`
+  makes `dist/firefox` alone, in seconds once it has been made. mach tells
+  the desktop when a long step ends; `MOZ_NOSPAM=1` stops it. Staging warns
+  that `libonnxruntime.so` is missing: the artifacts don't have Firefox's
+  local AI runtime.
+- **Linux window managers place new windows themselves,** and size their
+  frames their own way, so `window.open`'s `left`, `top`, `outerWidth` and
+  `outerHeight` don't stick; `moveTo` and `resizeTo` once the window is
+  shown do (`replaceWindow`). (Wayland lets no program place windows.)
+- **The build's `certutil` needs the build's NSS** on Linux:
+  `LD_LIBRARY_PATH` at its folder, or it finds the system's older one
+  (`NSS_3.117 not found`). macOS finds it next to the program.
+- **Other browsers' data is under the home folder** on Linux
+  (`ChromeMigrationUtils`: `Home/.config/google-chrome` and so on), not
+  `ULibDir`, so the import test's fake stands in for `Home` there.
+
 ## Surfer quirks
 
 - It needs `src/` to exist.
