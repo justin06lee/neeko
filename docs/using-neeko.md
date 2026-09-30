@@ -240,9 +240,10 @@ reporter, which Neeko's builds leave out), with the app id as its
 
 Test an installed browser with `python3 neeko/tools/test_api.py --app
 ~/.local/share/<name>/app` (and `test_privacy.py`), which launch it the
-launcher's way. `python3 neeko/tools/test_install.py` checks the installer
-itself in a throwaway home: what it installs, that the default browser
-stays, and what uninstalling leaves. `make release` on Linux copies the full build's archive into
+launcher's way. `python3 neeko/tools/test_install.py .`, from the browser's
+folder after `make install`, checks the installer itself in a throwaway
+home: what it installs, that the default browser stays, that installing
+again makes profiles drop their caches, and what uninstalling leaves. `make release` on Linux copies the full build's archive into
 `dist/` as `<name>-<version>-linux-<arch>.tar.xz`, but that path is untested:
 the Linux machine Neeko was tried on can't hold a full build.
 
