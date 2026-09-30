@@ -179,6 +179,20 @@ Add to it whenever something costs you time.
   window buttons in the tab strip, which Neeko hides, so the window had
   none. `firefox-neeko.js` (preprocessed) sets 0 with GTK: the system's
   titlebar.
+- **Artifact builds package fine** (`mach package`), but compressing the
+  archive took five minutes on a small arm64 machine, and installing only
+  needs the program's folder: `mach build browser/installer/stage-package`
+  makes `dist/firefox` alone, in seconds once it has been made. mach tells
+  the desktop when a long step ends; `MOZ_NOSPAM=1` stops it. Staging warns
+  that `libonnxruntime.so` is missing: the artifacts don't have Firefox's
+  local AI runtime.
+- **Linux window managers place new windows themselves,** and size their
+  frames their own way, so `window.open`'s `left`, `top`, `outerWidth` and
+  `outerHeight` don't stick; `moveTo` and `resizeTo` once the window is
+  shown do (`replaceWindow`). (Wayland lets no program place windows.)
+- **The build's `certutil` needs the build's NSS** on Linux:
+  `LD_LIBRARY_PATH` at its folder, or it finds the system's older one
+  (`NSS_3.117 not found`). macOS finds it next to the program.
 - **Other browsers' data is under the home folder** on Linux
   (`ChromeMigrationUtils`: `Home/.config/google-chrome` and so on), not
   `ULibDir`, so the import test's fake stands in for `Home` there.

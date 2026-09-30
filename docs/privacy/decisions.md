@@ -71,7 +71,7 @@ Not tracking and not security, but each one sends something somewhere.
 | 38 | Search suggestions and trending | **Off in Firefox's hidden address bar** | The Neeko API will fetch suggestions only when a custom UI asks (roadmap). |
 | 40–41 | Translations and AI features | **Off** | Their UI is hidden anyway. They can come back through the Neeko API as explicit opt-ins. |
 | 42 | Accounts, Sync, Relay | **Off** | There's no UI to sign in yet. |
-| 18 | Geolocation for websites | **Keep** | Only happens when you allow a site, through macOS location services. |
+| 18 | Geolocation for websites | **Keep** | Only happens when you allow a site, through the system's location service (macOS's, or GeoClue on Linux), with Firefox's network location service (Google's) when that has no answer. |
 | — | Remote debugging (not a connection) | **Off in shipped builds, on in dev builds** | Dev builds need it for Firefox's Browser Toolbox. |
 
 ## How it's implemented (privacy step 3)
