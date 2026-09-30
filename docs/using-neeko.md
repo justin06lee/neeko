@@ -58,7 +58,8 @@ itself while Neeko has no remote.
 launches it with its own UI and a throwaway dev profile, exactly like Neeko's
 own `make`. The browser's Makefile just runs `make -C neeko APP=$(CURDIR)`,
 and `make build`, `make update`, `make stop` and `make release` pass through
-the same way.
+the same way, as do `make install` and `make uninstall` on Linux
+([Installing on Linux](#installing-on-linux)).
 
 **Updating Neeko** (including Firefox updates, which Neeko pins):
 `git -C neeko fetch --tags && git -C neeko checkout v0.3.0`, then commit the
@@ -190,6 +191,55 @@ machine above took about six hours; see [lessons.md](lessons.md) for why.
 The packages aren't signed or notarized yet; that needs the browser's own
 Apple Developer ID and belongs with distribution (updates, crash reports) in
 the roadmap.
+
+## Installing on Linux
+
+```sh
+make install     # build, package and install the browser for you
+make uninstall   # remove it again; its profiles stay
+```
+
+A full build takes hours and more memory than many Linux machines have, so
+on Linux `make install` installs the dev build instead: `make build`, then
+`mach package`, then it puts in place
+
+- the program, in `~/.local/share/<name>/app` (`<name>` is `browser.json`'s
+  `name` in lower case). The next install replaces it, so `git pull && make
+  install` updates the browser in place;
+- a launcher, `~/.local/bin/<name>`;
+- a desktop entry, `~/.local/share/applications/<appId>.desktop`: the app in
+  the desktop's app grid and "Open With" menus, with New Window and New
+  Private Window actions, and a browser the system can make the default;
+- the icons made from `branding/icon.png`, in `~/.local/share/icons/hicolor`.
+
+The program is Mozilla's prebuilt one, which has Firefox's identity compiled
+in: its name, its profile folder (the user's real Firefox profiles) and a
+crash reporter. The launcher never runs it as Firefox. It passes `-app` with
+the app's own `application.ini`: the build's (the app's name, and no crash
+reporter, which Neeko's builds leave out), with the app id as its
+`RemotingName`. So the installed browser is the app everywhere:
+
+- **Its profiles** are its own, managed by Firefox as a release's are, in
+  `~/.config/mozilla/<name>` (or `~/.mozilla/<name>`, if that's there
+  already). A full Linux build of the app would use the same folder, so a
+  later move to one keeps them.
+- **The desktop knows it by its app id**, the name Firefox gives its
+  windows, notifications, media controls and D-Bus service; the desktop
+  entry matches it, so the windows show under the app's icon.
+- **As the default browser,** it opens links through the launcher
+  (`MOZ_APP_LAUNCHER`), so `neekoPage.defaultBrowser` works as on macOS.
+  Only make an installed browser the default: a dev build would register
+  the bare program, which runs as Firefox.
+
+Test an installed browser with `python3 neeko/tools/test_api.py --app
+~/.local/share/<name>/app` (and `test_privacy.py`), which launch it the
+launcher's way. `make release` on Linux copies the full build's archive into
+`dist/` as `<name>-<version>-linux-<arch>.tar.xz`, but that path is untested:
+the Linux machine Neeko was tried on can't hold a full build.
+
+On Linux, Neeko keeps the system's titlebar and its window buttons
+(`browser.tabs.inTitlebar` 0): a UI can only place window buttons of its own
+on macOS so far.
 
 ## Versions
 

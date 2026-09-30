@@ -54,7 +54,8 @@ UI marks elements with `data-neeko-overlay` (menus, a sliding sidebar): while
 one overlaps the page, the UI goes above the page, clipped to everything but
 the page plus those elements, so they're drawn over it and the rest of the
 page stays visible and live. On macOS, the window's close, minimize and zoom
-buttons go wherever the page puts `data-neeko-window-buttons`.
+buttons go wherever the page puts `data-neeko-window-buttons`; on Linux the
+window keeps the system's titlebar.
 
 The page gets one global, `neeko`, before any of its scripts run. It's the
 only way the UI talks to Firefox ([docs/api.md](docs/api.md)). Web pages
@@ -153,6 +154,13 @@ own build folder. That takes hours, but the result carries the browser's own
 name and profile folder and has Firefox's telemetry, crash reporter and
 updater compiled out. `mach package` then makes the app and a disk image.
 
+**On Linux, `make install`** installs a browser for the user from the
+artifact build, packaged with `mach package`, since a full build is out of
+reach of many Linux machines. Its launcher runs the prebuilt program with
+`-app` and the app's own `application.ini`, which gives it the app's name,
+profile folder and desktop identity and no crash reporter, as a release's
+would ([docs/using-neeko.md](docs/using-neeko.md#installing-on-linux)).
+
 ## How things flow
 
 **A window opens.** Firefox calls `NeekoWindow.init` before the first paint.
@@ -246,7 +254,8 @@ neeko/
 ├── tools/            app.ts (the app step), new-browser.ts (the starter),
 │                     tests (test_api, test_privacy, test_release), marionette.py
 ├── docs/             API, using Neeko in a browser, privacy research, lessons
-├── Makefile          make, make build, make update, make stop, make release
+├── Makefile          make, make build, make update, make stop, make release,
+│                     make install and make uninstall (Linux)
 ├── engine/           Firefox's source and builds (not committed)
 └── dist/             Release packages (not committed)
 ```

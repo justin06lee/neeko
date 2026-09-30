@@ -464,10 +464,11 @@ function whenStarted(win) {
  */
 async function replaceWindow(win, container, urls) {
   let maximized = win.windowState == win.STATE_MAXIMIZED;
+  let place = [win.screenX, win.screenY, win.outerWidth, win.outerHeight];
   let features =
     win.windowState == win.STATE_FULLSCREEN
       ? undefined
-      : `left=${win.screenX},top=${win.screenY},outerWidth=${win.outerWidth},outerHeight=${win.outerHeight},suppressanimation`;
+      : `left=${place[0]},top=${place[1]},outerWidth=${place[2]},outerHeight=${place[3]},suppressanimation`;
   let first = urls[0] ?? win.BROWSER_NEW_TAB_URL;
   let replacement = lazy.BrowserWindowTracker.openWindow({
     private: container.ephemeral,
@@ -480,6 +481,12 @@ async function replaceWindow(win, container, urls) {
     });
   }
   await whenStarted(replacement);
+  // Linux window managers place a new window where they like, and size its
+  // frame their own way, but follow a move once it's shown.
+  if (features && !maximized) {
+    replacement.moveTo(place[0], place[1]);
+    replacement.resizeTo(place[2], place[3]);
+  }
   for (let url of urls.slice(1)) {
     replacement.gBrowser.addTrustedTab(url, { inBackground: true });
   }

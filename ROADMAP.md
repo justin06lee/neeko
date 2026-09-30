@@ -105,6 +105,11 @@ get added as it needs them.
   listens for `settings` `request`. Fallback: Firefox's whole menus and
   settings.
 
+- [x] **Linux** (v0.20.0): dev builds, the tests and `make install`, which
+  installs a browser for the user from the dev build, packaged, running as
+  the app itself (`-app`): its own profiles, desktop entry, icons and window
+  identity; the system's titlebar on Linux. Tried on Ubuntu 24.04 on arm64.
+
 ## API features, in order
 
 1. [ ] **Camera, microphone, passwords and add-on installs.** Permission
@@ -158,7 +163,12 @@ get added as it needs them.
   today).
 - [ ] **Safe Browsing** with the browser's own Google API key, if wanted
   (off today: no key, so no phishing and malware warnings).
-- [ ] **Linux and Windows builds** (untested so far).
+- [ ] **Windows builds** (untested so far), and **full Linux builds**
+  (`make release` on Linux is written but untried: the Linux machine tried
+  can't hold one).
+- [ ] **Window buttons in the UI on Linux,** as `data-neeko-window-buttons`
+  places them on macOS, so a UI can draw into the titlebar there too
+  (Linux keeps the system's titlebar today).
 
 ## Open decisions (the user's)
 

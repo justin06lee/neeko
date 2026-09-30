@@ -75,23 +75,44 @@ def sandbox_reads(*folders):
 class LeaveNoTrace:
     """Removes the empty folders a release build creates in the user's
     Library when it starts (~/Library/Application Support/<name> and
-    ~/Library/Caches/<name>), even with a throwaway -profile. Only folders
-    that didn't exist before, and only while empty: a real profile in them is
-    never touched. Dev builds use Firefox's own folders, which are left alone.
+    ~/Library/Caches/<name>), even with a throwaway -profile, or on Linux an
+    installed app (~/.config/<vendor>/<name> and ~/.cache/<vendor>/<name>).
+    Only folders that didn't exist before, and only while empty: a real
+    profile in them is never touched. Dev builds use Firefox's own folders,
+    which are left alone.
     """
 
     def __init__(self, app):
-        ini = os.path.join(app, "Contents/Resources/application.ini")
-        name = None
+        ini = os.path.join(
+            app, "browser/application.ini" if LINUX else "Contents/Resources/application.ini"
+        )
+        name = vendor = None
         if os.path.exists(ini):
             with open(ini) as f:
-                match = re.search(r"^Name=(.+)$", f.read(), re.M)
-                name = match and match.group(1).strip()
-        library = os.path.expanduser("~/Library")
-        self.folders = [] if not name or name == "Firefox" else [
-            os.path.join(library, "Application Support", name),
-            os.path.join(library, "Caches", name),
-        ]
+                text = f.read()
+            name, vendor = (
+                (match.group(1).strip() if match else None)
+                for match in (re.search(rf"^{key}=(.+)$", text, re.M) for key in ("Name", "Vendor"))
+            )
+        if not name or name == "Firefox":
+            self.folders = []
+        elif LINUX:
+            home = os.path.expanduser("~")
+            self.folders = [
+                os.path.join(
+                    os.environ.get(variable, "").startswith("/") and os.environ[variable]
+                    or os.path.join(home, fallback),
+                    (vendor or "mozilla").lower(),
+                    name.lower(),
+                )
+                for variable, fallback in (("XDG_CONFIG_HOME", ".config"), ("XDG_CACHE_HOME", ".cache"))
+            ]
+        else:
+            library = os.path.expanduser("~/Library")
+            self.folders = [
+                os.path.join(library, "Application Support", name),
+                os.path.join(library, "Caches", name),
+            ]
         self.new = [f for f in self.folders if not os.path.exists(f)]
 
     def __enter__(self):
