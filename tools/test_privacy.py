@@ -44,7 +44,7 @@ import threading
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from builds import ROOT, LeaveNoTrace, dev_app, program  # noqa: E402
+from builds import ROOT, LeaveNoTrace, dev_app, program, sandbox_reads  # noqa: E402
 from marionette import Marionette  # noqa: E402
 
 MITMPROXY = "mitmproxy==12.2.3"
@@ -262,7 +262,9 @@ def main():
     parser.add_argument("--idle", type=int, default=240, help="seconds idle on first launch")
     parser.add_argument("--browse", type=int, default=60, help="seconds on the websites")
     parser.add_argument("--keep", action="store_true", help="keep the temp folder")
-    parser.add_argument("--app", help="a .app to test (default: the dev build)")
+    parser.add_argument(
+        "--app", help="a .app (on Linux, the program's folder) to test (default: the dev build)"
+    )
     parser.add_argument(
         "--pref", action="append", default=[], metavar="NAME=VALUE",
         help="set a pref for the whole run, e.g. to check the test catches a leak",
@@ -329,10 +331,7 @@ def main():
                 # A dev build's content processes need to read Neeko's own
                 # files, which it links to in src/, for the app's start page
                 # (see make run). Packaged builds carry them inside the app.
-                *([] if args.app else [(
-                    "security.sandbox.content.mac.testing_read_path1",
-                    os.path.realpath(os.path.join(ROOT, "src")),
-                )]),
+                *([] if args.app else sandbox_reads(os.path.join(ROOT, "src")).items()),
                 *[(p.split("=", 1)[0], json.loads(p.split("=", 1)[1])) for p in args.pref],
             ]:
                 f.write(f"user_pref({json.dumps(name)}, {json.dumps(value)});\n")

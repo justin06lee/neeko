@@ -79,6 +79,12 @@ def find_app(argv):
 
 
 def main():
+    if sys.platform.startswith("linux"):
+        sys.exit(
+            "test_release.py checks a macOS release. On Linux, run test_api.py and "
+            "test_privacy.py with --app on an installed app's program folder "
+            "(~/.local/share/<name>/app, from make install)."
+        )
     app = find_app(sys.argv)
     app_folder = (
         os.path.abspath(sys.argv[2]) if len(sys.argv) > 2

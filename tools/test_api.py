@@ -27,7 +27,7 @@ import time
 import zlib
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from builds import ROOT, LeaveNoTrace, dev_app, program  # noqa: E402
+from builds import ROOT, LeaveNoTrace, dev_app, program, sandbox_reads  # noqa: E402
 from marionette import Marionette  # noqa: E402
 
 # A UI with nothing but a content slot, away from the window's corner so the
@@ -413,10 +413,7 @@ def run_in(binary, prefs, script, timeout=120000):
         prefs["neeko.pages.path"] = pages
         # The pages run in a content process: let its sandbox read them, and
         # Neeko's own files, which dev builds link to in src/ (see make run).
-        prefs["security.sandbox.content.mac.testing_read_path1"] = os.path.realpath(
-            os.path.join(ROOT, "src")
-        )
-        prefs["security.sandbox.content.mac.testing_read_path2"] = pages
+        prefs.update(sandbox_reads(os.path.join(ROOT, "src"), pages))
     browser = launch(binary, profile, prefs)
     try:
         m = connect(port, browser)
@@ -443,7 +440,9 @@ def run_in(binary, prefs, script, timeout=120000):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    parser.add_argument("--app", help="a .app to test (default: the dev build)")
+    parser.add_argument(
+        "--app", help="a .app (on Linux, the program's folder) to test (default: the dev build)"
+    )
     args = parser.parse_args()
     app = os.path.abspath(args.app) if args.app else dev_app()
     binary = program(app)
@@ -480,9 +479,7 @@ def main():
             # which it links to in src/ (see make run); packaged ones don't.
             bundled_prefs = {**NO_CONTAINERS}
             if not args.app:
-                bundled_prefs["security.sandbox.content.mac.testing_read_path1"] = (
-                    os.path.realpath(os.path.join(ROOT, "src"))
-                )
+                bundled_prefs.update(sandbox_reads(os.path.join(ROOT, "src")))
             results += run_in(binary, bundled_prefs, BUNDLED_CHECK, timeout=30000)
     finally:
         server.shutdown()

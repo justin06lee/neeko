@@ -1,9 +1,12 @@
 """Where the browser builds are, for the test tools.
 
-- The dev build: `make build` puts it in engine/obj-<platform>/dist/, named
-  after the app (Neeko.app for Neeko's demo app).
+- The dev build: `make build` puts it in engine/obj-<platform>/dist/: on
+  macOS a .app named after the app (Neeko.app for Neeko's demo app), on Linux
+  the dist/bin folder.
 - A release: `make release` builds in engine/obj-release and copies the
-  packaged app into the app's dist/ folder. Test it by passing its path.
+  packaged app into the app's dist/ folder. Test it by passing its path: a
+  .app on macOS, on Linux the folder with the program in it (an installed
+  app's, say: ~/.local/share/<name>/app).
 """
 
 import glob
@@ -12,13 +15,16 @@ import re
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+LINUX = sys.platform.startswith("linux")
 
 
 def dev_app():
-    """The dev build's .app, or exit with a hint if there isn't one."""
+    """The dev build (its .app, or on Linux its folder), or exit with a hint
+    if there isn't one."""
+    pattern = "engine/obj-*/dist/bin" if LINUX else "engine/obj-*/dist/*.app"
     apps = [
         app
-        for app in glob.glob(os.path.join(ROOT, "engine/obj-*/dist/*.app"))
+        for app in glob.glob(os.path.join(ROOT, pattern))
         if "/obj-release/" not in app
     ]
     if not apps:
@@ -28,11 +34,29 @@ def dev_app():
 
 
 def program(app):
-    """The program inside a .app bundle."""
-    path = os.path.join(app, "Contents/MacOS/firefox")
+    """The program in a build: inside a .app bundle, or on Linux in the
+    folder."""
+    inside = "firefox" if LINUX else "Contents/MacOS/firefox"
+    path = os.path.join(app, inside)
     if not os.path.exists(path):
-        sys.exit(f"{app} doesn't look like a Neeko build (no Contents/MacOS/firefox).")
+        sys.exit(f"{app} doesn't look like a Neeko build (no {inside}).")
     return path
+
+
+def sandbox_reads(*folders):
+    """The prefs that let content processes read these folders too (a dev
+    build's src/, which it links to, and pages outside the app). Each system's
+    sandbox has its own: on Linux one list, folders ending in a slash."""
+    folders = [os.path.realpath(folder) for folder in folders]
+    if LINUX:
+        return {
+            "security.sandbox.content.read_path_whitelist":
+                ",".join(folder + "/" for folder in folders),
+        }
+    return {
+        f"security.sandbox.content.mac.testing_read_path{i}": folder
+        for i, folder in enumerate(folders, 1)
+    }
 
 
 class LeaveNoTrace:
