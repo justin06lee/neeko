@@ -74,12 +74,11 @@ release: configure
 
 # Linux: installs the app for this user from the dev build, packaged (no
 # hours-long full build): the program in ~/.local/share/<name>/app, a launcher
-# in ~/.local/bin that always gives it the app's own profile
-# (~/.local/share/<name>/profile), a desktop entry and icons. Running it again
-# updates it in place, profile untouched; `make uninstall` removes all but the
-# profile.
-# The program is packaged (staged: no archive to compress), quietly: mach
-# would announce it on the desktop.
+# in ~/.local/bin that runs it as the app (its own profiles, in
+# ~/.config/mozilla/<name>), a desktop entry and icons. Running it again
+# updates it in place, profiles untouched; `make uninstall` removes all but
+# the profiles. The program is packaged (staged: no archive to compress),
+# quietly: mach would announce it on the desktop.
 install: $(if $(LINUX),build,linux-only)
 	cd $(ENGINE) && MOZ_NOSPAM=1 ./mach build browser/installer/stage-package
 	bun tools/app.ts install $(APP)

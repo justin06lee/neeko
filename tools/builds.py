@@ -86,14 +86,16 @@ class LeaveNoTrace:
         ini = os.path.join(
             app, "browser/application.ini" if LINUX else "Contents/Resources/application.ini"
         )
-        name = vendor = None
+        text = ""
         if os.path.exists(ini):
             with open(ini) as f:
                 text = f.read()
-            name, vendor = (
-                (match.group(1).strip() if match else None)
-                for match in (re.search(rf"^{key}=(.+)$", text, re.M) for key in ("Name", "Vendor"))
-            )
+
+        def field(key):
+            match = re.search(rf"^{key}=(.+)$", text, re.M)
+            return match.group(1).strip() if match else None
+
+        name, vendor = field("Name"), field("Vendor")
         if not name or name == "Firefox":
             self.folders = []
         elif LINUX:
