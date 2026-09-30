@@ -4,9 +4,11 @@ the profiles (they drop their caches of the old code), and that `make
 uninstall` removes it all but the profiles.
 
     make install                     # or make build, then its stage-package
-    python3 tools/test_install.py
+    python3 tools/test_install.py    # Neeko's demo app
+    python3 neeko/tools/test_install.py .   # from a browser's folder: its app
 
-Installs Neeko's demo app (tools/app.ts install, then uninstall) into a
+Installs the app whose build is packaged in engine/ (tools/app.ts install,
+then uninstall; by default Neeko's demo app, or the app folder given) into a
 throwaway home: HOME and the XDG folders point into a temporary folder, with
 another browser installed "system-wide" there that nobody chose as the
 default, as on a fresh Ubuntu. The installed browser is launched there too,
@@ -14,6 +16,7 @@ without a display. Needs GLib's gio, as the installer does.
 """
 
 import glob
+import json
 import os
 import re
 import shutil
@@ -25,8 +28,6 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from builds import LINUX, ROOT  # noqa: E402
 
-APP_ID = "dev.neeko.demo"
-OURS = f"{APP_ID}.desktop"
 OTHER = "other-browser.desktop"
 MIME_TYPES = [
     "text/html",
@@ -48,6 +49,27 @@ def main():
         sys.exit("test_install.py checks make install, which is for Linux.")
     if shutil.which("gio") is None:
         sys.exit("test_install.py needs GLib's gio (apt install libglib2.0-bin).")
+    app = os.path.abspath(sys.argv[1]) if len(sys.argv) > 1 else ROOT
+    with open(os.path.join(app, "browser.json")) as f:
+        identity = json.load(f)
+    name, app_id = identity["name"].lower(), identity["appId"]
+    ours = f"{app_id}.desktop"
+    # The installer installs the packaged build, which is whichever app was
+    # built last: it has to be this one.
+    packaged = sorted(
+        (ini for ini in glob.glob(os.path.join(ROOT, "engine/obj-*/dist/firefox/application.ini"))
+         if "/obj-release/" not in ini),
+        key=os.path.getmtime,
+    )
+    if not packaged:
+        sys.exit("No packaged build: run `make install` first.")
+    with open(packaged[-1]) as f:
+        built = re.search(r"^Name=(.+)$", f.read(), re.M).group(1).strip()
+    if built.lower() != name:
+        sys.exit(
+            f"The packaged build is {built}'s, not {identity['name']}'s: pass its app "
+            f"folder (python3 tools/test_install.py <folder>), or install {identity['name']} first."
+        )
 
     work = tempfile.mkdtemp(prefix="neeko-install-test-")
     home = os.path.join(work, "home")
@@ -87,16 +109,16 @@ def main():
 
     def app_step(step):
         return subprocess.run(
-            ["bun", os.path.join(ROOT, "tools/app.ts"), step, ROOT],
+            ["bun", os.path.join(ROOT, "tools/app.ts"), step, app],
             env=env, capture_output=True, text=True,
         )
 
-    launcher = os.path.join(home, ".local/bin/neeko")
-    program = os.path.join(data, "neeko/app")
-    desktop = os.path.join(data, "applications", OURS)
-    icons = [os.path.join(data, f"icons/hicolor/{s}x{s}/apps/{APP_ID}.png") for s in (16, 256)]
-    profiles = os.path.join(env["XDG_CONFIG_HOME"], "mozilla/neeko")
-    caches = os.path.join(env["XDG_CACHE_HOME"], "mozilla/neeko")
+    launcher = os.path.join(home, ".local/bin", name)
+    program = os.path.join(data, name, "app")
+    desktop = os.path.join(data, "applications", ours)
+    icons = [os.path.join(data, f"icons/hicolor/{s}x{s}/apps/{app_id}.png") for s in (16, 256)]
+    profiles = os.path.join(env["XDG_CONFIG_HOME"], "mozilla", name)
+    caches = os.path.join(env["XDG_CACHE_HOME"], "mozilla", name)
 
     def build_id():
         with open(os.path.join(program, "browser/application.ini")) as f:
@@ -141,7 +163,7 @@ def main():
             ini = f.read()
         check(
             os.access(os.path.join(program, "firefox"), os.X_OK)
-            and f"RemotingName={APP_ID}" in ini
+            and f"RemotingName={app_id}" in ini
             and "[Crash Reporter]" not in ini,
             "the program, with the app's application.ini",
         )
@@ -160,7 +182,7 @@ def main():
             check(os.path.exists(desktop), "a desktop entry")
         check(all(os.path.exists(icon) for icon in icons), "icons in the icon theme")
         check(
-            OURS in gio_mime("x-scheme-handler/http"),
+            ours in gio_mime("x-scheme-handler/http"),
             "the desktop offers it for web links",
         )
         after = {t: default(t) for t in MIME_TYPES}
@@ -188,10 +210,10 @@ def main():
             open(marker, "w").close()
 
         # A default the user chose stays, through a reinstall.
-        subprocess.run(["gio", "mime", "x-scheme-handler/http", OURS], env=env, capture_output=True)
+        subprocess.run(["gio", "mime", "x-scheme-handler/http", ours], env=env, capture_output=True)
         again = app_step("install")
         check(
-            again.returncode == 0 and default("x-scheme-handler/http") == OURS,
+            again.returncode == 0 and default("x-scheme-handler/http") == ours,
             "a reinstall updates it and keeps a default the user chose",
         )
         second = build_id()
