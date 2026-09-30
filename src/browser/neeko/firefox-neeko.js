@@ -26,3 +26,7 @@ pref("media.plugin_helper_process.enabled", false);
 #ifdef MOZ_WIDGET_GTK
 pref("browser.tabs.inTitlebar", 0);
 #endif
+
+// No "Open previous tabs?" bar at launch: it points at Firefox's app menu,
+// which a custom UI hides. (Below 0 means never.)
+pref("browser.startup.couldRestoreSession.count", -1);
