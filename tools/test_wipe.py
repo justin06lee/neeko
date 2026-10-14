@@ -137,10 +137,10 @@ def main():
                 f"refuses an app named {name} ({app_id}), and deletes nothing",
             )
 
-        # Not while the app runs: its dev build (a program in its
+        # Not while the app runs: its dev build (the browser in its
         # engine/obj-*/dist/, as far as the process list says), or on Linux
         # the installed app.
-        programs = [os.path.join(builds[0], "dist/sleep")]
+        programs = [os.path.join(builds[0], "dist/bin/firefox")]
         if not MACOS:
             programs.append(os.path.join(home, ".local/share", NAME.lower(), "app/firefox"))
         for program in programs:
@@ -153,6 +153,23 @@ def main():
             sleeper.kill()
             sleeper.wait()
             sleeper = None
+
+        # A build running there isn't the app: its compilers name dist/ in
+        # their arguments, and packaging runs tools from it.
+        busy = [
+            subprocess.Popen(
+                [sys.executable, "-c", "import time; time.sleep(60)", "-I" + os.path.join(builds[0], "dist/include")]
+            ),
+            subprocess.Popen([os.path.join(builds[0], "dist/bin/xpcshell"), "60"], executable="/bin/sleep"),
+        ]
+        building = wipe(app)
+        for process in busy:
+            process.kill()
+            process.wait()
+        check(
+            building.returncode == 0 and "Delete it?" in building.stdout and everything(ours),
+            "a build's compilers and tools there don't count as the app running",
+        )
 
         # It asks first; with nobody to answer, nothing goes.
         asked = wipe(app, make=True)
