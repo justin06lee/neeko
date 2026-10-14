@@ -141,6 +141,9 @@ function onDocumentCreated(doc) {
     "chrome://neeko/content/neeko-ui.css",
     uiWin.windowUtils.AGENT_SHEET
   );
+  // The UI's -moz-window-dragging: drag areas move the window, as a title
+  // bar does. Firefox only allows them in a window's top document.
+  uiWin.docShell.windowDraggingAllowed = true;
   let win = frame.ownerDocument.defaultView;
   connectAPI(win, uiWin);
   doc.addEventListener("DOMContentLoaded", () => trackContentSlot(win, frame), {

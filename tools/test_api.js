@@ -38,6 +38,47 @@ async function rejects(promise, pattern, what) {
   }
 }
 
+// Whether a mouse down at a point of a macOS window (CSS pixels from its top
+// left) can move it: Firefox covers the rest of its view with views that say
+// no (nsCocoaWindow::UpdateWindowDraggingRegion), read here through libobjc.
+function macWindowDragging(win) {
+  let { ctypes } = ChromeUtils.importESModule("resource://gre/modules/ctypes.sys.mjs");
+  let objc = ctypes.open("/usr/lib/libobjc.A.dylib");
+  let id = ctypes.voidptr_t;
+  let NSRect = new ctypes.StructType("NSRect", [
+    { x: ctypes.double },
+    { y: ctypes.double },
+    { width: ctypes.double },
+    { height: ctypes.double },
+  ]);
+  let sel = objc.declare("sel_registerName", ctypes.default_abi, id, ctypes.char.ptr);
+  let send = objc.declare("objc_msgSend", ctypes.default_abi, id, id, id);
+  let sendCount = objc.declare("objc_msgSend", ctypes.default_abi, ctypes.unsigned_long, id, id);
+  let sendIndex = objc.declare("objc_msgSend", ctypes.default_abi, id, id, id, ctypes.unsigned_long);
+  let sendRect = objc.declare(
+    Services.appinfo.XPCOMABI.startsWith("x86_64") ? "objc_msgSend_stret" : "objc_msgSend",
+    ctypes.default_abi,
+    NSRect,
+    id,
+    id
+  );
+  let handle = win.docShell.treeOwner.QueryInterface(Ci.nsIBaseWindow).nativeHandle;
+  let nsWindow = ctypes.voidptr_t(ctypes.UInt64(handle));
+  // ChildView is flipped, so its subviews' frames count from the top left.
+  let container = send(send(nsWindow, sel("mainChildView")), sel("nonDraggableViewsContainer"));
+  return (x, y) => {
+    let views = send(container, sel("subviews"));
+    let count = sendCount(views, sel("count"));
+    for (let i = 0; i < count; i++) {
+      let r = sendRect(sendIndex(views, sel("objectAtIndex:"), i), sel("frame"));
+      if (x >= r.x && x < r.x + r.width && y >= r.y && y < r.y + r.height) {
+        return false;
+      }
+    }
+    return x >= 0 && y >= 0 && x < win.outerWidth && y < win.outerHeight;
+  };
+}
+
 let frame = document.getElementById("neeko-ui");
 let neeko = await waitFor(() => frame.contentWindow.neeko, "the UI's neeko");
 if (!neeko) {
@@ -409,6 +450,31 @@ await waitFor(uiOverPage, "back over the page");
 menu.hidden = true;
 await waitFor(() => !uiOverPage() && !frame.style.clipPath, "hidden, it leaves the page on top");
 check(hit(450, 150) == "page", "and the page takes the pointer again");
+
+// Areas the UI marks -moz-window-dragging: drag move the window, as a title
+// bar does, but not from its controls or the page. On macOS this reads what
+// the window got: views where a click can't move it.
+check(frame.contentWindow.docShell.windowDraggingAllowed, "the UI may mark areas that move the window");
+if (platform == "macos") {
+  let uiDoc = frame.contentDocument;
+  let bar = uiDoc.createElement("div");
+  bar.style.cssText = "position: fixed; top: 0; left: 200px; width: 300px; height: 40px; -moz-window-dragging: drag";
+  let barButton = uiDoc.createElement("button");
+  barButton.style.cssText = "position: absolute; top: 5px; left: 100px; width: 50px; height: 30px";
+  bar.append(barButton);
+  // And one under the page: a UI's whole background, say.
+  let underPage = uiDoc.createElement("div");
+  underPage.style.cssText = "position: fixed; inset: 40px 0 0 160px; -moz-window-dragging: drag";
+  uiDoc.body.append(bar, underPage);
+  let movesWindow = macWindowDragging(window);
+  await waitFor(() => movesWindow(250, 20), "a drag area of the UI moves the window");
+  check(!movesWindow(325, 20), "a button in it doesn't");
+  check(!movesWindow(80, 300), "the rest of the UI doesn't");
+  check(!movesWindow(800, 400), "and the page doesn't, even over a drag area");
+  bar.remove();
+  underPage.remove();
+  await waitFor(() => !movesWindow(250, 20), "unmarked again, it doesn't");
+}
 
 // The pointer at the page's edges, which the UI never sees over the page.
 let edges = [];

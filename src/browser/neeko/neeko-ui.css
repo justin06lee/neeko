@@ -7,3 +7,9 @@
   appearance: auto;
   -moz-default-appearance: -moz-window-button-box;
 }
+
+/* Controls in an area marked -moz-window-dragging: drag (a title bar) stay
+   clickable instead of moving the window. */
+:is(button, input, select, textarea, a[href]) {
+  -moz-window-dragging: no-drag;
+}

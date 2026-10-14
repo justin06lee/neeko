@@ -102,7 +102,8 @@ browsers use.
   `data-neeko-overlay`. While one overlaps the page, it's drawn over it and
   takes the pointer there, and the rest of the page stays live.
 - On macOS, the window's close, minimize and zoom buttons appear wherever you
-  put an element with `data-neeko-window-buttons`.
+  put an element with `data-neeko-window-buttons`, and areas you mark
+  `-moz-window-dragging: drag` move the window, as a title bar does.
 - Your scripts get a global `neeko` object, the Neeko API: list, open, close,
   switch, move, duplicate, mute and group tabs (with their icons), navigate, answer
   sites' permission requests, lay out fullscreen, follow and manage

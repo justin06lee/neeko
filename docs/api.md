@@ -7,7 +7,7 @@ else. Web pages never get it.
 So far it covers tabs and tab groups, navigation, permission prompts, fullscreen,
 downloads, bookmarks, your UI's settings and the color scheme, containers
 (one per window), find in page,
-links and loading status, drawing over the page, the pointer at the page's edges, and your browser's own pages
+links and loading status, drawing over the page, the pointer at the page's edges, moving the window, and your browser's own pages
 (which get a small API of their own, `neekoPage`). And Firefox's own UI,
 where it still shows, can take your browser's look (see
 [Firefox's own UI, in your look](#firefoxs-own-ui-in-your-look)). Features get
@@ -859,6 +859,37 @@ out, say) counts as leaving the band: from there your UI hears it itself.
 Only the pointer's moves are watched, and only while you watch some edge;
 nothing runs in the web page for it.
 
+## Moving the window
+
+On macOS your UI draws the whole window, title bar included. Mark the areas
+that move the window when dragged, as a title bar does, in CSS. No script
+needed:
+
+```css
+header { -moz-window-dragging: drag; }
+header .tab { -moz-window-dragging: no-drag; }
+```
+
+- **Controls stay clickable.** Buttons, inputs, selects, text areas and
+  links are `no-drag` unless your CSS says otherwise. Mark anything else
+  that's clicked or dragged inside a drag area `no-drag` (tabs, say).
+- **Double-clicking a drag area** zooms the window, or minimizes it, as the
+  system's setting for title bars says (Desktop & Dock, "Double-click a
+  window's title bar to"). A UI that handles that double-click itself calls
+  `preventDefault()` on its second `mouseup`.
+- **The page never moves the window**, even where it covers a drag area
+  (your UI's whole background, say).
+- **Mark areas in your stylesheet.** Firefox doesn't redo an element's
+  area when nothing but `-moz-window-dragging` changes on it: changed on an
+  element that's showing, it applies when the element is next shown or laid
+  out. Showing and hiding elements that carry it works at once.
+- **On Linux** the window keeps the system's title bar, which moves it.
+  Drag areas move it there too (not tried yet), but double-clicking them
+  does nothing.
+
+The window buttons (close, minimize, zoom) go wherever your UI puts an
+element with `data-neeko-window-buttons`, on macOS.
+
 ## Firefox's own UI, in your look
 
 Some things Firefox still draws itself: a page's dialogs (`alert()`,
@@ -986,6 +1017,10 @@ even where its UI has no controls yet.
   window, with every bookmark.
 - **Drawing over the page.** Without elements marked `data-neeko-overlay`,
   the page stays on top of your UI everywhere in its slot.
+- **Moving the window.** Without areas marked `-moz-window-dragging: drag`,
+  the mouse can't move the window on macOS; macOS's own Move & Resize and
+  tiling, in the Window menu, still can (unless `menus` drops that menu).
+  On Linux the system's title bar always can.
 - **The status bubble.** Without `status` listeners, Firefox's bubble at
   the bottom left of the page shows the link the pointer is over and what
   a loading page waits for, in your `theme` if you have one.
