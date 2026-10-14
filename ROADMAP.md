@@ -110,6 +110,12 @@ get added as it needs them.
   the app itself (`-app`): its own profiles, desktop entry, icons and window
   identity; the system's titlebar on Linux. Tried on Ubuntu 24.04 on arm64.
   Installing leaves the default browser as it was (v0.20.1).
+- [x] **Moving the window by the UI's title bar** (v0.21.0): areas a UI
+  marks `-moz-window-dragging: drag` move the window on macOS, and
+  double-clicking them zooms or minimizes; controls and the page never do.
+  Fallback: macOS's Move & Resize in the Window menu.
+- [x] **`make wipe`** (v0.21.0): deletes all of the app's data for the
+  user, so its next launch is a first launch.
 
 ## API features, in order
 
