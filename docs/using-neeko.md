@@ -57,9 +57,20 @@ itself while Neeko has no remote.
 **Day to day.** `make` builds the browser with Neeko's fast artifact build and
 launches it with its own UI and a throwaway dev profile, exactly like Neeko's
 own `make`. The browser's Makefile just runs `make -C neeko APP=$(CURDIR)`,
-and `make build`, `make update`, `make stop` and `make release` pass through
-the same way, as do `make install` and `make uninstall` on Linux
-([Installing on Linux](#installing-on-linux)).
+and `make build`, `make update`, `make stop`, `make release` and `make wipe`
+pass through the same way, as do `make install` and `make uninstall` on
+Linux ([Installing on Linux](#installing-on-linux)).
+
+**Starting afresh.** `make wipe` deletes all of the browser's data for you,
+so its next launch is a first launch (its welcome page, say): its profiles
+and their caches (on macOS `~/Library/Application Support/<name>` and
+`~/Library/Caches/<name>`, on Linux `~/.config/mozilla/<name>` and
+`~/.cache/mozilla/<name>`), what macOS keeps for its app id (its
+preferences and saved window state), and the dev build's profile, which
+`make` reuses. It lists them and asks first (`make wipe YES=1` doesn't),
+refuses while the browser runs, and never touches Firefox's own data: a
+browser can't be named Firefox, or have an `org.mozilla.` app id.
+`python3 neeko/tools/test_wipe.py` checks it in a throwaway home.
 
 **Updating Neeko** (including Firefox updates, which Neeko pins):
 `git -C neeko fetch --tags && git -C neeko checkout v0.3.0`, then commit the

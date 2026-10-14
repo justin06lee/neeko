@@ -162,6 +162,10 @@ On Linux, after `make install`: `python3 tools/test_install.py` (the installer,
 in a throwaway home), and the API and privacy tests with
 `--app ~/.local/share/neeko/app`.
 
+`python3 tools/test_wipe.py` checks `make wipe` in a throwaway home, on
+either system, with no build needed. Never run a real `make wipe` without
+the user's OK: it deletes the app's data on this machine.
+
 Marionette has traps (focus, chrome context, its "recommended prefs"); see
 the testing section of [docs/lessons.md](docs/lessons.md).
 

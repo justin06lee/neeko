@@ -67,6 +67,7 @@ snapshotting it into git. After that, a rebuild takes under a minute.
 | `make release`   | Full build from source, packaged into `dist/` (hours) |
 | `make install`   | Linux: install it for you, in the desktop's apps      |
 | `make uninstall` | Linux: remove it again (its profiles stay)            |
+| `make wipe`      | Delete all its data, so it starts afresh (asks first) |
 
 ## Starting a browser
 

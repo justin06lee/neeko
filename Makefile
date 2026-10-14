@@ -32,7 +32,7 @@ RUST_LTO ?= $(shell test $(MEM_GB) -ge 16 && echo 1 || echo 0)
 # cargo_rustc_flags is where Firefox's config/makefiles/rust.mk adds -Clto.
 NO_RUST_LTO := MAKEFLAGS=" -- cargo_rustc_flags="
 
-.PHONY: all build run release install uninstall linux-only update stop deps config firefox import configure
+.PHONY: all build run release install uninstall linux-only wipe update stop deps config firefox import configure
 
 all: build run
 
@@ -89,6 +89,13 @@ uninstall: $(if $(LINUX),,linux-only)
 linux-only:
 	@echo "neeko: make install is for Linux. On macOS, make release makes the app in dist/." >&2
 	@false
+
+# Deletes all of the app's data for this user, so its next launch is a first
+# launch: its profiles and caches, what macOS keeps for it, and the dev
+# build's profile, which `make` reuses. Never while it runs. It asks first;
+# YES=1 doesn't.
+wipe:
+	bun tools/app.ts wipe $(APP) $(if $(YES),--yes)
 
 # Quit a running dev build, rebuild, and relaunch it.
 update: stop build run
