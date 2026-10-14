@@ -10,6 +10,7 @@
  *   bun tools/app.ts install  <app>   Linux: install the packaged dev build for
  *                                     this user (after its stage-package)
  *   bun tools/app.ts uninstall <app>  Linux: remove it again, but the profile
+ *   bun tools/app.ts wipe <app> [--yes]  delete the app's data for this user
  *
  * An app folder holds:
  *
@@ -134,6 +135,8 @@ function read(path: string): string {
  *
  * - name: letters and digits. It names the program's profile folder
  *   (~/Library/Application Support/<name>) and its system integration.
+ *   Never Firefox's (nor appId's org.mozilla.): its profiles would be
+ *   Firefox's.
  * - displayName (optional, defaults to name): what users see, spaces allowed.
  * - vendor: who makes it, as users see it. (Firefox's build fixes the
  *   internal vendor, part of the profile path on Windows and Linux, to
@@ -163,16 +166,23 @@ function readApp(dir: string): App {
   };
   let name = field("name", /^[A-Za-z][A-Za-z0-9]{0,39}$/, "letters and digits, starting with a letter");
   let plain = /^[^"'`$\\\n]{1,64}$/;
+  let appId = field(
+    "appId",
+    /^[A-Za-z][A-Za-z0-9-]*(\.[A-Za-z][A-Za-z0-9-]*)+$/,
+    "a reverse-DNS id such as com.example.browser"
+  );
+  // Firefox's own folders (Firefox's, and on macOS the Mozilla folder its
+  // apps share) and bundle ids: the app would use Firefox's profiles, and
+  // `make wipe` would delete them.
+  if (/^(firefox|mozilla)$/i.test(name) || /^org\.mozilla\./i.test(appId)) {
+    fail(`${file}: "name" and "appId" can't be Firefox's`);
+  }
   return {
     dir,
     name,
     displayName: field("displayName", plain, "a name without quotes or backslashes", name),
     vendor: field("vendor", plain, "a name without quotes or backslashes"),
-    appId: field(
-      "appId",
-      /^[A-Za-z][A-Za-z0-9-]*(\.[A-Za-z][A-Za-z0-9-]*)+$/,
-      "a reverse-DNS id such as com.example.browser"
-    ),
+    appId,
     version: field(
       "version",
       /^\d+\.\d+(\.\d+)?([-+][0-9A-Za-z.-]+)?$/,
@@ -1365,10 +1375,101 @@ function refreshDesktop(paths: ReturnType<typeof installPaths>) {
 }
 
 // ---------------------------------------------------------------------------
+// wipe: everything the app keeps, so its next launch is a first launch
 
-let [command, appDir] = process.argv.slice(2);
+/**
+ * The app's data for this user, where there is some: its profiles and their
+ * caches (Firefox's folders for the app's name), what macOS keeps for its
+ * bundle id, and the dev build's profile (mach run's, which every `make`
+ * reuses), if the dev build is this app's. Never Firefox's own: readApp
+ * refuses Firefox's names and ids.
+ */
+function appData(app: App): string[] {
+  let home = homedir();
+  let paths: string[] = [];
+  if (process.platform == "darwin") {
+    let library = join(home, "Library");
+    paths.push(
+      join(library, "Application Support", app.name),
+      join(library, "Caches", app.name),
+      join(library, "Preferences", `${app.appId}.plist`),
+      join(library, "Saved Application State", `${app.appId}.savedState`)
+    );
+  } else {
+    let xdg = (name: string, fallback: string) => {
+      let value = process.env[name];
+      return value?.startsWith("/") ? value : join(home, fallback);
+    };
+    let name = app.name.toLowerCase();
+    // Profiles in ~/.mozilla/<name> where that was there first (installPaths).
+    paths.push(
+      join(home, ".mozilla", name),
+      join(xdg("XDG_CONFIG_HOME", ".config"), "mozilla", name),
+      join(xdg("XDG_CACHE_HOME", ".cache"), "mozilla", name)
+    );
+  }
+  if (existsSync(ENGINE)) {
+    for (let obj of globDirs(ENGINE, /^obj-/, "")) {
+      let ini = join(obj, "dist/bin/application.ini");
+      if (existsSync(ini) && read(ini).match(/^Name=(.*)$/m)?.[1].trim() == app.name) {
+        paths.push(join(obj, "tmp/profile-default"));
+      }
+    }
+  }
+  return paths.filter(path => existsSync(path));
+}
+
+/** Whether the app runs now: any copy of it on macOS, or its builds here. */
+function appRunning(app: App): boolean {
+  let pattern = `^${ENGINE}/obj-[^/]*/dist/`;
+  if (process.platform == "darwin") {
+    let found = spawnSync("lsappinfo", ["find", `bundleid=${app.appId}`], { encoding: "utf8" });
+    if (found.stdout?.trim()) {
+      return true;
+    }
+  } else if (isRunning(installPaths(app).program)) {
+    return true;
+  }
+  return spawnSync("pgrep", ["-f", pattern], { stdio: "ignore" }).status == 0;
+}
+
+/**
+ * Deletes the app's data (appData), after asking, unless `yes`. Not while
+ * the app runs: it would write some of it back as it quits.
+ */
+function wipe(app: App, yes: boolean) {
+  if (appRunning(app)) {
+    fail(`${app.displayName} is running: quit it first (\`make stop\` quits the dev build).`);
+  }
+  let paths = appData(app);
+  if (!paths.length) {
+    console.log(`neeko: ${app.displayName} has no data here to wipe.`);
+    return;
+  }
+  console.log(
+    `neeko: this deletes all of ${app.displayName}'s data (profiles, bookmarks, ` +
+      `history, passwords, settings):\n${paths.map(path => `  ${path}`).join("\n")}`
+  );
+  if (!yes && !confirm("Delete it?")) {
+    console.log("neeko: nothing deleted. (`make wipe YES=1` doesn't ask.)");
+    return;
+  }
+  for (let path of paths) {
+    // macOS caches an app's preferences (cfprefsd): emptied through it first,
+    // by the file's path, they don't come back.
+    if (path.endsWith(".plist")) {
+      spawnSync("defaults", ["delete", path.slice(0, -".plist".length)], { stdio: "ignore" });
+    }
+    rmSync(path, { recursive: true, force: true });
+  }
+  console.log(`neeko: wiped. ${app.displayName}'s next launch is a first launch.`);
+}
+
+// ---------------------------------------------------------------------------
+
+let [command, appDir, ...flags] = process.argv.slice(2);
 if (!appDir) {
-  fail("usage: bun tools/app.ts config|branding|dist|install|uninstall <app folder>");
+  fail("usage: bun tools/app.ts config|branding|dist|install|uninstall|wipe <app folder>");
 }
 let app = readApp(resolve(appDir));
 switch (command) {
@@ -1386,6 +1487,9 @@ switch (command) {
     break;
   case "uninstall":
     uninstall(app);
+    break;
+  case "wipe":
+    wipe(app, flags.includes("--yes"));
     break;
   default:
     fail(`unknown command "${command}"`);
