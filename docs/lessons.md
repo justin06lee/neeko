@@ -851,6 +851,15 @@ Add to it whenever something costs you time.
   `CLAUDECODE` and others). `./mach build --verbose` shows everything.
 - **The user has another Firefox build project (`toji`) on this machine.**
   Only ever kill processes under `/neeko/engine/obj-…` (as `make stop` does).
+- **Match a build's programs from the start of the command line, and only
+  the browser's.** `make stop` once matched `<checkout>/engine/obj-*/dist/`
+  anywhere in a command line, and a running build's clang and rustc jobs
+  carry `-I…/engine/obj-release/dist/include`: `make stop` during `make
+  release` killed them, failing the release 69 minutes in (Toji found it).
+  Packaging also runs tools from `dist/` (xpcshell, in `dist/bin` and in
+  the `.app`). So `make stop` and `make wipe` match `^…/dist/<Name>.app/
+  Contents/MacOS/firefox` (and its helper `.app`s) or `^…/dist/bin/firefox`
+  (and `plugin-container`).
 - **The privacy test** (`tools/test_privacy.py`) runs mitmproxy through
   `uvx` (pinned version, nothing installed), trusts its fresh certificate in
   a brand-new profile with NSS's `certutil` (the dev build's, since packaged

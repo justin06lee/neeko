@@ -1421,7 +1421,11 @@ function appData(app: App): string[] {
 
 /** Whether the app runs now: any copy of it on macOS, or its builds here. */
 function appRunning(app: App): boolean {
-  let pattern = `^${ENGINE}/obj-[^/]*/dist/`;
+  // A dev build's browser and its child processes, as `make stop` matches
+  // them: not a build's compilers or the tools packaging runs from dist/.
+  let pattern =
+    `^${ENGINE}/obj-[^/]*/dist/` +
+    "([^/]*\\.app/Contents/MacOS/(firefox|[^/]*\\.app/)|bin/(firefox|plugin-container))";
   if (process.platform == "darwin") {
     let found = spawnSync("lsappinfo", ["find", `bundleid=${app.appId}`], { encoding: "utf8" });
     if (found.stdout?.trim()) {

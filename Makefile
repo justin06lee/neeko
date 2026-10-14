@@ -100,9 +100,14 @@ wipe:
 # Quit a running dev build, rebuild, and relaunch it.
 update: stop build run
 
-# The [e] keeps pkill from matching this shell's own command line.
+# Quits this checkout's dev build: the browser and its child processes, run
+# from engine/obj-*/dist/ (its .app on macOS, bin/firefox on Linux). Only
+# command lines that start with them: a running build's compilers name
+# dist/include in theirs, and packaging runs other tools from dist/
+# (xpcshell). tools/app.ts (appRunning) matches the same.
+DEV_BUILD := ^$(CURDIR)/engine/obj-[^/]*/dist/([^/]*\.app/Contents/MacOS/(firefox|[^/]*\.app/)|bin/(firefox|plugin-container))
 stop:
-	-pkill -f '$(CURDIR)/[e]ngine/obj-[^/]*/dist/'
+	-pkill -f '$(DEV_BUILD)'
 
 # The app's branding folder, then Surfer's mozconfig. Surfer's own build step
 # only writes the mozconfig here (SURFER_MOZCONFIG_ONLY); mach does the build.
