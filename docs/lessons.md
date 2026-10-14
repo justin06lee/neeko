@@ -247,6 +247,27 @@ Add to it whenever something costs you time.
 - **macOS window buttons** render wherever an element with
   `-moz-default-appearance: -moz-window-button-box` sits. Neeko exposes that as
   `[data-neeko-window-buttons]`.
+- **`-moz-window-dragging` only counts in a window's top chrome document.**
+  `nsDocShell::GetWindowDraggingAllowed` is true for a top-level chrome
+  docshell and false for frames, so the display list drops the UI frame's
+  drag areas (`nsDisplayListBuilder::AdjustWindowDraggingRegion`) and the
+  window couldn't be dragged at all. The scriptable
+  `docShell.windowDraggingAllowed = true` on the UI's docshell lets them
+  through (NeekoWindow sets it for every UI document). Double-click to zoom
+  or minimize then comes free: the macOS widget does it on a second mouseup
+  in the drag region (`AppleActionOnDoubleClick`).
+- **Changing only `-moz-window-dragging` doesn't redo the drag region.** Its
+  style change is just `nsChangeHint_SchedulePaint`, and retained display
+  lists keep the frame's old area until the frame is rebuilt (shown, moved,
+  restyled otherwise). Elements added or shown with it count at once.
+- **The drag region ignores what's on top.** A UI marking its whole
+  background `drag` would make the page above it drag the window too, so
+  neeko.css makes the page area `no-drag`.
+- **Reading the drag region in a test:** on macOS, nsCocoaWindow covers
+  everything that isn't draggable with `NonDraggableView`s inside
+  `[[window mainChildView] nonDraggableViewsContainer]`; their `hitTest:`
+  returns nil, so hit-testing can't tell. `tools/test_api.js` reads their
+  frames through ctypes and libobjc (`macWindowDragging`).
 - **Hit-testing checks out:** the UI background gets UI clicks, and the slot
   gets the remote page.
 - **An iframe takes the pointer over its whole box,** transparent or not

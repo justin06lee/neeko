@@ -54,8 +54,11 @@ UI marks elements with `data-neeko-overlay` (menus, a sliding sidebar): while
 one overlaps the page, the UI goes above the page, clipped to everything but
 the page plus those elements, so they're drawn over it and the rest of the
 page stays visible and live. On macOS, the window's close, minimize and zoom
-buttons go wherever the page puts `data-neeko-window-buttons`; on Linux the
-window keeps the system's titlebar.
+buttons go wherever the page puts `data-neeko-window-buttons`, and the
+page's `-moz-window-dragging: drag` areas move the window (NeekoWindow allows
+them in the UI frame, which Firefox only does for a window's top document;
+the page area is always `no-drag`); on Linux the window keeps the system's
+titlebar.
 
 The page gets one global, `neeko`, before any of its scripts run. It's the
 only way the UI talks to Firefox ([docs/api.md](docs/api.md)). Web pages

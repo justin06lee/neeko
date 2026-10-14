@@ -59,7 +59,9 @@
 
 /* The web page sits on top of the UI. NeekoWindow sets its position and size
    to match the UI's content slot; until then it has no size. Firefox's
-   notification bars, if any, take the top of it. */
+   notification bars, if any, take the top of it. A drag area of the UI
+   under it (a UI's whole background, say) never moves the window from the
+   page. */
 :root[neeko] #tabbrowser-tabbox {
   position: fixed;
   z-index: 2;
@@ -69,6 +71,7 @@
   padding-top: var(--neeko-notifications-height, 0);
   overflow: clip;
   anchor-name: --neeko-page;
+  -moz-window-dragging: no-drag;
 }
 
 /* While an element the UI marks with data-neeko-overlay (a menu, say)

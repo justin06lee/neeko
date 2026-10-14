@@ -74,8 +74,7 @@ body {
   left: 14px;
 }
 
-button,
-input,
+/* Controls are no-drag already (Neeko's neeko-ui.css); the tabs aren't. */
 #tabs li {
   -moz-window-dragging: no-drag;
 }
