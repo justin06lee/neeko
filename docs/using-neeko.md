@@ -107,6 +107,46 @@ browser again.
 | `containers` | Optional. The containers (profiles, say) a new profile starts with, one per window: each keeps its own cookies and site data. See [the API docs](api.md#containers-one-per-window). |
 | `menus` | Optional. Which of Firefox's menus and menu items to keep, in the menu bar and the page's context menu. See [the API docs](api.md#firefoxs-menus-trimmed). |
 | `theme` | Optional. Your browser's look (a font, a few colors, corner radii) for what Firefox still draws itself: a page's dialogs, Firefox's panels and bars, the find bar. See [the API docs](api.md#firefoxs-own-ui-in-your-look). |
+| `helpers` | Optional. Programs of your browser's own that Neeko starts when they're first needed and passes the UI's and pages' requests to. See [Helpers](#helpers). |
+
+### Helpers
+
+A helper is a program of the browser's own, a local server say: a script
+with a shebang line, or a compiled program (one made with
+`bun build --compile`, for example). Neeko starts it the first time the UI
+or one of the browser's pages asks it something, and passes their requests
+on; how it's started and spoken to is in
+[the API docs](api.md#helpers). `browser.json` names each helper's program
+for each platform it runs on, as a path in the browser's folder:
+
+```json
+"helpers": {
+  "hello": {
+    "bin": {
+      "darwin-arm64": "helpers/hello-darwin-arm64",
+      "linux-x64": "helpers/hello-linux-x64"
+    }
+  }
+}
+```
+
+- **Names** are up to 32 lowercase letters, digits and `-`, starting with a
+  letter. **Platforms** are `darwin-arm64`, `darwin-x64`, `linux-arm64` and
+  `linux-x64` (Node's `process.platform`-`process.arch`).
+- **The build puts this platform's program in the app**, at
+  `neeko-helpers/<name>` next to the browser's own program (in
+  `<Name>.app/Contents/MacOS/` on macOS). It must be there and executable
+  when the build runs, so build helpers first (in the browser's Makefile,
+  before it hands over to `neeko/`). A helper without a program for this
+  platform is left out with a warning, and requests to it fail.
+- **Dev builds** (`make build`) link to the program in the browser's
+  folder, so a rebuilt helper needs no new build of the browser.
+- **Releases** copy it in: `make release` into the `.app` and its disk
+  image, `make install` on Linux into the installed program's folder. On
+  macOS a compiled helper is signed like the rest of the app (ad hoc, for
+  now), with the entitlements a JavaScript engine that compiles code as it
+  runs needs once the app is signed for real
+  (`configs/macos/helper.entitlements`, Bun's list); scripts aren't signed.
 
 ## branding/
 
@@ -158,6 +198,10 @@ Surfer and Firefox's build need. Firefox's own files stay untouched.
    builds already include. Its two pref files need Firefox's package list
    (`browser/installer/package-manifest.in`) to name them, which is Neeko's
    second, three-line patch: `src/browser/installer/package-manifest-in.patch`.
+6. **Helpers** (`browser.json`'s `helpers`) go in after mach, which knows
+   nothing of them: `make build` links them into the dev build each time
+   (mach makes its `.app` afresh on every build), and releases and
+   installs copy them in ([Helpers](#helpers)).
 
 ## Release builds
 
@@ -172,7 +216,9 @@ Artifact builds stay the everyday dev loop. `make release` compiles
 everything from source (`NEEKO_FULL_BUILD=1`), in its own build folder
 (`engine/obj-release`) so the dev build is left alone, then runs
 `mach package` and copies the result into the app's `dist/` folder as
-`<Name>.app` and `<name>-<version>.dmg`. The full build compiles the launcher
+`<Name>.app` and `<name>-<version>.dmg`, with the app's helpers in both
+(the disk image is made again from the finished `.app` then, as
+`mach package` makes it). The full build compiles the launcher
 with the browser's own name, so its profile folder is its own, and compiles
 Firefox's telemetry upload, crash reporter and updater out entirely instead
 of only switching them off. It belongs on a build machine or CI, not in the
@@ -181,7 +227,8 @@ edit loop.
 `tools/test_release.py` launches the packaged app with a throwaway profile
 and checks it is its own browser: program name and profile folder, bundle
 id, versions, telemetry, crash reporter and updater compiled out, Neeko's
-prefs packaged, and the bundled UI running with the API. Then the API and
+prefs packaged, the bundled UI running with the API, and the app's helpers
+in it. Then the API and
 privacy tests run against the same app with `--app`.
 
 **Verified on 2026-09-23** with Neeko's demo app, on an 8 GB M1:
@@ -216,7 +263,8 @@ Firefox's packager (`stage-package`, which makes the program's folder
 without an archive), then it puts in place
 
 - the program, in `~/.local/share/<name>/app` (`<name>` is `browser.json`'s
-  `name` in lower case). The next install replaces it, so `git pull && make
+  `name` in lower case), with the app's helpers in its `neeko-helpers/`
+  folder. The next install replaces it, so `git pull && make
   install` updates the browser in place. Each install has a build id of its
   own, so the browser's profiles see a new version at their next launch and
   drop their caches of the old code;
@@ -255,7 +303,8 @@ launcher's way. `python3 neeko/tools/test_install.py .`, from the browser's
 folder after `make install`, checks the installer itself in a throwaway
 home: what it installs, that the default browser stays, that installing
 again makes profiles drop their caches, and what uninstalling leaves. `make release` on Linux copies the full build's archive into
-`dist/` as `<name>-<version>-linux-<arch>.tar.xz`, but that path is untested:
+`dist/` as `<name>-<version>-linux-<arch>.tar.xz` (packed again with the
+app's helpers in it, if it has any), but that path is untested:
 the Linux machine Neeko was tried on can't hold a full build.
 
 On Linux, Neeko keeps the system's titlebar and its window buttons

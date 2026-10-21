@@ -27,7 +27,10 @@ import { NeekoSettings } from "moz-src:///browser/neeko/NeekoSettings.sys.mjs";
 const lazy = {};
 ChromeUtils.defineESModuleGetters(lazy, {
   AboutNewTab: "resource:///modules/AboutNewTab.sys.mjs",
+  HelperStreams: "moz-src:///browser/neeko/NeekoHelpers.sys.mjs",
+  NeekoHelpers: "moz-src:///browser/neeko/NeekoHelpers.sys.mjs",
   NetUtil: "resource://gre/modules/NetUtil.sys.mjs",
+  PrivateBrowsingUtils: "resource://gre/modules/PrivateBrowsingUtils.sys.mjs",
   SessionStore:
     "moz-src:///browser/components/sessionstore/SessionStore.sys.mjs",
 });
@@ -845,6 +848,37 @@ const METHODS = {
     }
     this.watchEdges(depths);
   },
+
+  /**
+   * The app's helpers this build has (NeekoHelpers): [{ name, running }].
+   */
+  "helper.list"() {
+    return lazy.NeekoHelpers.list();
+  },
+
+  /**
+   * Sends a request to one of the app's helpers, starting it if it isn't
+   * running. neeko-api.js picks the request's id; the answer's body comes
+   * after as helper.chunk and helper.end messages with that id. Option
+   * `tabId`: whose container the helper is told about (by default, the
+   * window's).
+   */
+  "helper.fetch"(id, name, path, options) {
+    let { tabId, ...request } = options ?? {};
+    return this.helperStreams().fetch(id, name, path, request, this.helperCaller(tabId));
+  },
+
+  "helper.cancel"(id) {
+    this.helperStreams().cancel(id);
+  },
+
+  /**
+   * Stops a helper (the user turned its feature off, say). The next request
+   * starts it again.
+   */
+  "helper.stop"(name) {
+    return lazy.NeekoHelpers.stop(name);
+  },
 };
 
 export class NeekoAPI {
@@ -881,6 +915,8 @@ export class NeekoAPI {
   #link = "";
   /** Each tab's status message the UI last heard. */
   #messages = new WeakMap();
+  /** The UI's requests to the app's helpers, from its first. */
+  #helperStreams = null;
   /** The tabs whose find highlights every match (find.highlight). */
   #highlighting = new WeakSet();
   /** The pages (window globals) where Firefox's finder does that now. */
@@ -980,6 +1016,7 @@ export class NeekoAPI {
       this.win.removeEventListener(type, this, true);
     }
     this.#downloads?.destroy();
+    this.#helperStreams?.destroy();
     for (let type of TAB_EVENTS) {
       this.gBrowser.tabContainer.removeEventListener(type, this);
     }
@@ -1159,6 +1196,37 @@ export class NeekoAPI {
       this.#emit(event, data)
     );
     return this.#downloads;
+  }
+
+  /**
+   * The UI's requests to the app's helpers. Their answers' bodies go to the
+   * UI as helper.chunk and helper.end messages, which it doesn't listen for:
+   * they belong to its calls.
+   */
+  helperStreams() {
+    this.#helperStreams ??= new lazy.HelperStreams((type, data) => {
+      if (!this.#destroyed) {
+        this.#send({ event: `helper.${type}`, data });
+      }
+    });
+    return this.#helperStreams;
+  }
+
+  /**
+   * Who asks a helper, for the helper: the UI, in this window's container
+   * (or a tab's), private or not.
+   */
+  helperCaller(tabId) {
+    let isPrivate = lazy.PrivateBrowsingUtils.isWindowPrivate(this.win);
+    if (tabId !== undefined) {
+      return { caller: "ui", userContextId: this.findTab(tabId).userContextId, private: isPrivate };
+    }
+    let container = NeekoContainers.containerOf(this.win);
+    return {
+      caller: "ui",
+      userContextId: (container && NeekoContainers.userContextIdOf(container)) ?? 0,
+      private: isPrivate,
+    };
   }
 
   /**

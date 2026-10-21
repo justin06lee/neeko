@@ -14,13 +14,16 @@ app with a throwaway profile, and checks:
 - its bundle id, name and versions;
 - telemetry upload, the crash reporter and the updater are compiled out;
 - Neeko's prefs made it into the package, and the bundled UI loads with the
-  API.
+  API;
+- each of the app's helpers (browser.json's "helpers") for this Mac is in
+  it, an executable file of its own, signed if it's compiled.
 
 Then run tools/test_api.py and tools/test_privacy.py with --app on it too.
 """
 
 import json
 import os
+import platform
 import plistlib
 import shutil
 import socket
@@ -60,6 +63,30 @@ return {
   ui: !!frame?.contentWindow?.neeko,
 };
 """
+
+
+# The first four bytes of a Mach-O program (tools/app.ts, isMachO).
+MACH_O = {"cffaedfe", "cefaedfe", "feedfacf", "feedface", "cafebabe", "cafebabf"}
+
+
+def helper_checks(app, expected):
+    """Each of the app's helpers for this Mac is in the .app, at
+    Contents/MacOS/neeko-helpers/<name>: a file, not a link to the app
+    folder's, executable, and signed if it's a Mach-O program."""
+    arch = "arm64" if platform.machine() == "arm64" else "x64"
+    checks = []
+    for name, helper in expected.get("helpers", {}).items():
+        if f"darwin-{arch}" not in helper.get("bin", {}):
+            continue
+        path = os.path.join(app, "Contents/MacOS/neeko-helpers", name)
+        ok = os.path.isfile(path) and not os.path.islink(path) and os.access(path, os.X_OK)
+        if ok:
+            with open(path, "rb") as f:
+                if f.read(4).hex() in MACH_O:
+                    ok = subprocess.run(["codesign", "--verify", path],
+                                        capture_output=True).returncode == 0
+        checks.append((ok, f"helper {name} is in the app, executable"))
+    return checks
 
 
 def free_port():
@@ -152,6 +179,7 @@ def main():
         (got["uploadDefault"] is False, "Neeko's privacy prefs are in the package"),
         (got["uiPathDefault"] == "", "Neeko's own prefs are in the package"),
         (got["ui"], "the bundled UI loads with the API"),
+        *helper_checks(app, expected),
     ]
     for ok, what in checks:
         print(f"{'ok  ' if ok else 'FAIL'} {what}")

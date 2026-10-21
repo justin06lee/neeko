@@ -1747,6 +1747,155 @@ await waitFor(
 synthesizeMouseEvent("mousemove", hoverRect.left + 400, hoverRect.top + 300, {});
 await neeko.tabs.close(hoverTab.id);
 
+// Helpers: the app's own programs (here the test's "echo"), started on the
+// first request and never before, with an environment of Neeko's, a token
+// the caller never sees and who asks, streaming both ways.
+let helperList = await neeko.helper.list();
+check(
+  JSON.stringify(helperList) == '[{"name":"echo","running":false}]',
+  `the build's helpers, none running before a request (${JSON.stringify(helperList)})`
+);
+let echoed = await (
+  await neeko.helper.fetch("echo", "/echo?x=1", {
+    method: "POST",
+    headers: { "X-Test": "ui", "Content-Type": "text/plain" },
+    body: "héllo",
+  })
+).json();
+check(
+  echoed.method == "POST" && echoed.path == "/echo?x=1" && echoed.body == "héllo" &&
+    echoed.headers["x-test"] == "ui" && echoed.headers["content-type"] == "text/plain",
+  `a request reaches it as sent (${echoed.method} ${echoed.path} ${echoed.body})`
+);
+check((await neeko.helper.list())[0].running, "it runs once asked");
+let who = ["x-neeko-caller", "x-neeko-container", "x-neeko-private"].map(h => echoed.headers[h]);
+check(JSON.stringify(who) == '["ui","0","0"]', `with who asks (${JSON.stringify(who)})`);
+check(
+  !echoed.headers.cookie && !echoed.headers.referer,
+  `and nothing of the browser's (${Object.keys(echoed.headers)})`
+);
+let helperEnv =
+  /^(HOME|USER|LOGNAME|SHELL|TMPDIR|TZ|LANG|LANGUAGE|LC_[A-Z]+|XDG_[A-Z_]+|SSL_CERT_FILE|SSL_CERT_DIR|NODE_EXTRA_CA_CERTS|REQUESTS_CA_BUNDLE|CURL_CA_BUNDLE|(HTTP|HTTPS|ALL|NO)_PROXY|(http|https|all|no)_proxy|PATH|NEEKO_(HELPER_NAME|HELPER_TOKEN|HELPER_DATA|PARENT_PID|PLATFORM)|__CF_USER_TEXT_ENCODING)$/;
+check(
+  echoed.env.includes("NEEKO_HELPER_TOKEN") && echoed.env.includes("NEEKO_HELPER_DATA") &&
+    echoed.env.every(k => helperEnv.test(k)),
+  `its environment is what Neeko allows, none of the browser's own (${echoed.env})`
+);
+let helperPath = echoed.envPath.split(":");
+check(
+  [PathUtils.join(Services.env.get("HOME"), ".local", "bin"), "/usr/bin", "/bin", "/usr/sbin", "/sbin"]
+    .every(dir => helperPath.includes(dir)) && new Set(helperPath).size == helperPath.length,
+  `its PATH: the login shell's, the usual tool folders, the system's (${echoed.envPath})`
+);
+check(
+  echoed.dataDir == PathUtils.join(PathUtils.profileDir, "neeko-helpers", "echo") &&
+    echoed.cwd.endsWith("/neeko-helpers/echo") && echoed.mode == "0o700",
+  `it works in a folder of its own in the profile, the user's only (${echoed.dataDir}, ${echoed.mode})`
+);
+let streamed = await neeko.helper.fetch("echo", "/stream?n=3");
+let streamReader = streamed.body.getReader();
+let streamParts = [];
+for (;;) {
+  let { done, value } = await streamReader.read();
+  if (done) {
+    break;
+  }
+  streamParts.push(new TextDecoder().decode(value));
+}
+check(
+  streamParts.join("") == "chunk 0\nchunk 1\nchunk 2\n" && streamParts.length >= 2,
+  `an answer streams in as the helper sends it (${streamParts.length} pieces)`
+);
+check(
+  streamed.status == 200 && streamed.headers.get("x-helper") == "echo" &&
+    streamed.headers.get("content-type") == "text/plain",
+  "with its status and headers"
+);
+let echoedBytes = await (
+  await neeko.helper.fetch("echo", "/echo", { method: "PUT", body: new Uint8Array([0, 1, 254, 255]) })
+).json();
+check(echoedBytes.bodyHex == "0001feff", `bytes go as they are (${echoedBytes.bodyHex})`);
+let noContent = await neeko.helper.fetch("echo", "/status/204");
+check(noContent.status == 204 && noContent.body === null, "an answer without a body");
+let helperAbort = new AbortController();
+let forever = await neeko.helper.fetch("echo", "/forever", { signal: helperAbort.signal });
+let foreverReader = forever.body.getReader();
+await foreverReader.read();
+helperAbort.abort();
+await rejects(foreverReader.read(), /abort/i, "cancelling a request ends its answer");
+await waitFor(
+  async () => (await (await neeko.helper.fetch("echo", "/cancelled")).json()) === true,
+  "and the helper sees its connection close"
+);
+let earlyAbort = new AbortController();
+let early = neeko.helper.fetch("echo", "/stream?n=20", { signal: earlyAbort.signal });
+earlyAbort.abort();
+await rejects(early, /abort/i, "cancelling before the answer starts");
+await rejects(neeko.helper.fetch("nope", "/"), /no helper named "nope"/, "a helper the build doesn't have");
+await rejects(neeko.helper.fetch("echo", "//elsewhere.example/"), /path on the helper/, "a path off the helper");
+await rejects(neeko.helper.fetch("echo", "/\\elsewhere.example/"), /path on the helper/, "a path off the helper, with a backslash");
+for (let header of ["X-Neeko-Private", "X-Neeko-Container", "x-neeko-secret-key", "Authorization", "Host"]) {
+  await rejects(
+    neeko.helper.fetch("echo", "/echo", { headers: { [header]: "1" } }),
+    /can't set/,
+    `callers can't set ${header}`
+  );
+}
+await rejects(neeko.helper.fetch("echo", "/echo", { body: "x" }), /GET request has no body/, "a GET with a body");
+await rejects(neeko.helper.fetch("echo", "/echo", { surprise: 1 }), /Unknown option/, "an unknown option");
+
+let helperPage = await pageTest("helper", t => t.startsWith("helper") || t.startsWith("refused"), "neekoPage.helper.fetch()");
+check(
+  helperPage.title == 'helper ["from a page","page","page:start","0"]',
+  `a page's request, and who asks (${helperPage.title})`
+);
+await neeko.tabs.close(helperPage.tab.id);
+let helperStreamPage = await pageTest("helper-stream", t => t.startsWith("streamed") || t.startsWith("refused"), "a page's answer");
+check(
+  /^streamed [23] "chunk 0\\nchunk 1\\nchunk 2\\n"$/.test(helperStreamPage.title ?? ""),
+  `streams in (${helperStreamPage.title})`
+);
+await neeko.tabs.close(helperStreamPage.tab.id);
+let helperReservedPage = await pageTest("helper-reserved", t => t == "sent" || t.startsWith("refused"), "a page setting Neeko's headers");
+check(helperReservedPage.title?.startsWith("refused"), `is refused (${helperReservedPage.title})`);
+await neeko.tabs.close(helperReservedPage.tab.id);
+let helperCancelPage = await pageTest("helper-cancel", t => t.includes("cancelled") || t.startsWith("refused"), "a page cancelling");
+check(helperCancelPage.title == "cancelled AbortError", `its request (${helperCancelPage.title})`);
+await neeko.tabs.close(helperCancelPage.tab.id);
+
+let privateHelperWin = OpenBrowserWindow({ private: true });
+let privateNeeko = await waitFor(
+  () => privateHelperWin.document.getElementById("neeko-ui")?.contentWindow?.neeko,
+  "a private window's neeko"
+);
+let privateEcho = privateNeeko && (await (await privateNeeko.helper.fetch("echo", "/echo")).json());
+check(privateEcho?.headers["x-neeko-private"] == "1", "a private window's requests say so");
+privateHelperWin.close();
+window.focus();
+await waitFor(() => Services.focus.activeWindow == window, "this window, active again", 30000);
+
+let beforeCrash = await (await neeko.helper.fetch("echo", "/echo")).json();
+await neeko.helper.fetch("echo", "/exit");
+await waitFor(async () => !(await neeko.helper.list())[0].running, "a helper that exits by itself");
+let afterCrash = await waitFor(
+  async () =>
+    (await neeko.helper.list())[0].running && (await (await neeko.helper.fetch("echo", "/echo")).json()),
+  "starts again by itself",
+  15000
+);
+check(
+  afterCrash && afterCrash.pid != beforeCrash.pid && afterCrash.tokenHash != beforeCrash.tokenHash,
+  `as a new process, with a new token (${beforeCrash.pid}, then ${afterCrash?.pid})`
+);
+await neeko.helper.stop("echo");
+check(!(await neeko.helper.list())[0].running, "stopping a helper ends it");
+check(
+  await fetch(`http://127.0.0.1:${afterCrash?.port}/echo`).then(() => false, () => true),
+  "and nothing listens on its port"
+);
+let helperAfterStop = await (await neeko.helper.fetch("echo", "/echo")).json();
+check(helperAfterStop.pid != afterCrash?.pid, "the next request starts it again");
+
 // Neeko sends only the events the UI listens for.
 let heardSelect = 0;
 let stopSelect = neeko.tabs.on("select", () => heardSelect++);

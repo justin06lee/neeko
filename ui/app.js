@@ -604,6 +604,8 @@ const menuCommands = {
   // Web pages, Firefox's own pages and this UI (style.css) follow it.
   colorScheme: button => neeko.colorScheme.set(button.dataset.scheme),
   fullscreen: toggleWindowFullscreen,
+  askHelper: () => askHelper(),
+  stopHelper: () => stopHelper(),
 };
 
 const tabsSide = () => neeko.settings.get("tabs") ?? "left";
@@ -657,6 +659,59 @@ neeko.settings.on("change", ({ key, value }) => {
     followTabsEdge();
   }
 });
+
+// The demo app's helper (helpers/hello.py, browser.json's "helpers"): a
+// program of the app's that Neeko starts on the first request, never at
+// startup. "Ask the helper" streams its greeting, a word at a time (as
+// server-sent events), into the tab list; asking again cancels the answer
+// under way. "Stop the helper" ends the program. Builds without it show
+// neither.
+const helperSection = document.getElementById("helper");
+const helperText = helperSection.querySelector("p");
+let helperRequest = null;
+
+neeko.helper.list().then(helpers => {
+  let has = helpers.some(helper => helper.name == "hello");
+  for (let item of menu.querySelectorAll("[data-helper]")) {
+    item.hidden = !has;
+  }
+});
+
+async function askHelper() {
+  helperRequest?.abort();
+  let request = (helperRequest = new AbortController());
+  helperSection.hidden = false;
+  helperText.textContent = "…";
+  try {
+    let answer = await neeko.helper.fetch("hello", "/hello", { signal: request.signal });
+    helperText.textContent = "";
+    let pending = "";
+    for await (let chunk of answer.body.pipeThrough(new TextDecoderStream())) {
+      pending += chunk;
+      let events = pending.split("\n\n");
+      pending = events.pop();
+      for (let event of events) {
+        let name = /^event: (.*)$/m.exec(event)?.[1];
+        let data = JSON.parse(/^data: (.*)$/m.exec(event)?.[1] ?? "null");
+        if (name == "word") {
+          helperText.textContent += (helperText.textContent ? " " : "") + data;
+        } else if (name == "caller") {
+          helperText.textContent += ` (Neeko told it: ${data.caller}, container ${data.container}${data.private ? ", private" : ""}.)`;
+        }
+      }
+    }
+  } catch (e) {
+    if (e.name != "AbortError") {
+      helperText.textContent = e.message;
+    }
+  }
+}
+
+async function stopHelper() {
+  helperRequest?.abort();
+  helperSection.hidden = true;
+  await neeko.helper.stop("hello");
+}
 
 // Containers: each window is in one (neeko.window.container), with its own
 // cookies and site data. A new window has none, and loads nothing, until the
