@@ -9,6 +9,7 @@ helper's contract (docs/api.md, "Helpers"), and tells the checks what it got:
   /forever       chunks until the caller cancels; /cancelled says if it did
   /status/204    an answer with no body
   /exit          answers, then exits, as a crash would
+  /die-mid       starts a streamed answer, then exits halfway through it
 """
 
 import hashlib
@@ -95,6 +96,14 @@ class Echo(http.server.BaseHTTPRequestHandler):
             self.answer(200, json.dumps(cancelled.is_set()).encode())
         elif url.path == "/status/204":
             self.answer(204)
+        elif url.path == "/die-mid":
+            self.send_response(200)
+            self.send_header("Content-Type", "text/plain")
+            self.send_header("Transfer-Encoding", "chunked")
+            self.end_headers()
+            self.chunk(b"half an answer\n")
+            time.sleep(0.3)
+            os._exit(4)
         elif url.path == "/exit":
             self.answer(200, b"{}")
             threading.Timer(0.2, lambda: os._exit(3)).start()

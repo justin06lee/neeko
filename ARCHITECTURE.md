@@ -119,6 +119,11 @@ official startup hooks (`Neeko.manifest`):
   page first asks one something, with an environment of Neeko's choosing,
   and carries the requests to it over 127.0.0.1, streaming the answers
   back as messages. The helper's token stays in this module.
+- **`NeekoSecrets.sys.mjs`** keeps an app's secrets (API keys, say) in the
+  system's keychain, through js-ctypes calls to macOS's Security framework
+  or libsecret on a thread of their own (`NeekoSecrets.worker.js`). The UI
+  and pages keep, delete and check for them; only NeekoHelpers reads one,
+  to send it to a helper in a header.
 - **`NeekoMenus.sys.mjs`** trims Firefox's menu bar and context menu to
   what the app keeps (`browser.json`'s `menus`), in Neeko's names for them
   (`NeekoMenuNames.sys.mjs`, which the build reads too).

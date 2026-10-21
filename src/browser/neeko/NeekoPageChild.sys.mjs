@@ -17,6 +17,8 @@
  *   neekoPage.containers.list() / create(fields) / update(id, changes)
  *     / remove(id) / clear(id) / on("change", fn)
  *   neekoPage.helper.list() / fetch(name, path, options) / stop(name)
+ *   neekoPage.secrets.has(name) / set(name, value) / delete(name)
+ *     / on("change", fn)
  *
  * Every method returns a promise; docs/api.md documents them. Those that
  * change something outside the browser, or wipe what the user kept, need a
@@ -68,6 +70,8 @@ export class NeekoPageChild extends JSWindowActorChild {
   #listeners = new Set();
   /** And for container changes. */
   #containerListeners = new Set();
+  /** And for secrets kept or deleted. */
+  #secretListeners = new Set();
   /**
    * The page's requests to the app's helpers, by id: the controllers of
    * their answers' bodies (page objects), which arrive as messages.
@@ -109,10 +113,13 @@ export class NeekoPageChild extends JSWindowActorChild {
       }
       return;
     }
-    if (name == "settings.change" || name == "containers.change") {
+    if (name == "settings.change" || name == "containers.change" || name == "secrets.change") {
       let win = this.contentWindow;
-      let listeners =
-        name == "settings.change" ? this.#listeners : this.#containerListeners;
+      let listeners = {
+        "settings.change": this.#listeners,
+        "containers.change": this.#containerListeners,
+        "secrets.change": this.#secretListeners,
+      }[name];
       for (let listener of listeners) {
         try {
           listener(Cu.cloneInto(data, win));
@@ -127,17 +134,17 @@ export class NeekoPageChild extends JSWindowActorChild {
    * neekoPage.helper.fetch(): a request to one of the app's helpers, as
    * fetch() would send it to a server, resolving with a Response of the
    * page's once the answer starts, its body streaming in. Options: method,
-   * headers, body, signal.
+   * headers, body, signal, secrets.
    */
   async #helperFetch(win, name, path, options) {
     let request = {};
     let signal = null;
     if (options !== undefined && options !== null) {
       if (typeof options != "object") {
-        throw new TypeError("Expected options: { method, headers, body, signal }.");
+        throw new TypeError("Expected options: { method, headers, body, signal, secrets }.");
       }
       for (let key of Object.keys(options)) {
-        if (!["method", "headers", "body", "signal"].includes(key)) {
+        if (!["method", "headers", "body", "signal", "secrets"].includes(key)) {
           throw new TypeError(`Unknown option "${key}".`);
         }
       }
@@ -152,6 +159,12 @@ export class NeekoPageChild extends JSWindowActorChild {
       }
       if (options.body !== undefined && options.body !== null) {
         request.body = await bodyBytes(options.body);
+      }
+      if (options.secrets !== undefined) {
+        if (!Array.isArray(options.secrets)) {
+          throw new TypeError("Expected secrets as a list of secret names.");
+        }
+        request.secrets = Array.from(options.secrets, String);
       }
       if (options.signal !== undefined && options.signal !== null) {
         if (Cu.getClassName(options.signal, true) != "AbortSignal") {
@@ -328,7 +341,24 @@ export class NeekoPageChild extends JSWindowActorChild {
       })
     );
 
-    for (let object of [settings, search, defaultBrowser, imports, containers, helper, api]) {
+    // Never a value back: only a helper request that names a secret gets it.
+    // Keeping or deleting one takes a click, one call per click.
+    let secrets = Cu.createObjectIn(api, { defineAs: "secrets" });
+    define(secrets, "has", name => ask("secrets.has", { name }));
+    define(secrets, "set", (name, value) => askAfterClick("secrets.set", { name, value }));
+    define(secrets, "delete", name => askAfterClick("secrets.delete", { name }));
+    define(secrets, "on", (type, listener) => {
+      if (type != "change" || typeof listener != "function") {
+        throw new win.TypeError('Expected "change" and a listener.');
+      }
+      if (!this.#secretListeners.size) {
+        this.sendAsyncMessage("secrets.listen");
+      }
+      this.#secretListeners.add(listener);
+      return Cu.exportFunction(() => this.#secretListeners.delete(listener), win);
+    });
+
+    for (let object of [settings, search, defaultBrowser, imports, containers, helper, secrets, api]) {
       Cu.waiveXrays(win).Object.freeze(Cu.waiveXrays(object));
     }
   }

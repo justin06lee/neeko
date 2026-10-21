@@ -22,6 +22,7 @@ import { NeekoBookmarks } from "moz-src:///browser/neeko/NeekoBookmarks.sys.mjs"
 import { NeekoContainers } from "moz-src:///browser/neeko/NeekoContainers.sys.mjs";
 import { NeekoDownloads } from "moz-src:///browser/neeko/NeekoDownloads.sys.mjs";
 import { NeekoPanels } from "moz-src:///browser/neeko/NeekoPanels.sys.mjs";
+import { NeekoSecrets } from "moz-src:///browser/neeko/NeekoSecrets.sys.mjs";
 import { NeekoSettings } from "moz-src:///browser/neeko/NeekoSettings.sys.mjs";
 
 const lazy = {};
@@ -237,6 +238,7 @@ const EVENTS = [
   "status.message",
   "containers.change",
   "window.container",
+  "secrets.change",
 ];
 
 // What Firefox's find reports (nsITypeAheadFind), as the API says it.
@@ -879,6 +881,25 @@ const METHODS = {
   "helper.stop"(name) {
     return lazy.NeekoHelpers.stop(name);
   },
+
+  /**
+   * Whether the profile has a secret of that name. Nothing returns a
+   * secret's value: a helper request that names it carries it to the
+   * helper (helper.fetch's `secrets`).
+   */
+  "secrets.has"(name) {
+    return NeekoSecrets.has(name);
+  },
+
+  /** Keeps a secret in the system's keychain, in place of one of that name. */
+  "secrets.set"(name, value) {
+    return NeekoSecrets.set(name, value);
+  },
+
+  /** Deletes a secret, if there is one. */
+  "secrets.delete"(name) {
+    return NeekoSecrets.delete(name);
+  },
 };
 
 export class NeekoAPI {
@@ -972,6 +993,9 @@ export class NeekoAPI {
       }),
       NeekoContainers.watch(containers =>
         this.#emit("containers.change", { containers })
+      ),
+      NeekoSecrets.watch((name, present) =>
+        this.#emit("secrets.change", { name, present })
       )
     );
   }

@@ -12,7 +12,8 @@ It keeps to a helper's contract (docs/api.md, "Helpers"):
 - it exits when its stdin closes: the browser has quit, or crashed.
 
 GET /hello streams a greeting, a word at a time, as server-sent events, then
-what Neeko told it about who asked.
+what Neeko told it about who asked, and how long the secret it was sent is
+(never the secret).
 """
 
 import hmac
@@ -40,6 +41,8 @@ class Hello(http.server.BaseHTTPRequestHandler):
             "caller": self.headers.get("X-Neeko-Caller", ""),
             "container": self.headers.get("X-Neeko-Container", ""),
             "private": self.headers.get("X-Neeko-Private", "") == "1",
+            # How long its secret is, if Neeko sent one; never the secret.
+            "secret": len(self.headers.get("X-Neeko-Secret-demo-key", "")),
         }
         self.send_response(200)
         self.send_header("Content-Type", "text/event-stream")

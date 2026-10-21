@@ -124,6 +124,9 @@ browsers use.
   `helpers`: Neeko starts one when your UI or pages first ask it something,
   and carries their requests to it, streamed, with a token they never see
   and which container asks (`neeko.helper.fetch`).
+- Secrets your user gives your browser (an API key, say) go in the system's
+  keychain (`neeko.secrets`): your UI and pages can keep and check for one
+  but never read it, and Neeko hands it only to your helpers.
 - Scripts must be separate files (the page's security policy blocks inline
   scripts). They load from `chrome://neeko-ui/content/`, which maps to `ui/`.
   File names may only use letters, digits and `. _ - @ +`.

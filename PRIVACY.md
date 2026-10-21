@@ -72,6 +72,10 @@ a website.
   notice should say. To find the programs a helper may run, its first
   start asks your login shell for its search path, which runs your shell's
   profile files, as opening a terminal would.
+- **The browser's secrets**, if it keeps any (an API key you gave it, say),
+  are in your system's keychain (macOS's Keychain, or your Linux keyring),
+  never in a file of the browser's, and go only to its helpers, on your
+  computer. Keeping them connects to nothing.
 - **DNS lookups** go to your computer's usual DNS server, as for any other
   app. The browser doesn't send them to an encrypted DNS provider unless you
   choose one in Settings.

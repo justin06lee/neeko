@@ -17,6 +17,7 @@ const lazy = {};
 ChromeUtils.defineESModuleGetters(lazy, {
   AsyncShutdown: "resource://gre/modules/AsyncShutdown.sys.mjs",
   clearTimeout: "resource://gre/modules/Timer.sys.mjs",
+  readSecret: "moz-src:///browser/neeko/NeekoSecrets.sys.mjs",
   setTimeout: "resource://gre/modules/Timer.sys.mjs",
   Subprocess: "resource://gre/modules/Subprocess.sys.mjs",
 });
@@ -63,6 +64,7 @@ const PATH_MARK = "__NEEKO_PATH__";
 const REQUEST_METHODS = ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"];
 const MAX_BODY = 16 * 1024 * 1024;
 const MAX_PATH = 8192;
+const MAX_SECRETS = 16;
 // A path on the helper: from its root, no host, no backslashes (which URLs
 // read as slashes), no spaces or control characters.
 const PATH = /^\/(?!\/)[^\s\\\x00-\x1f\x7f]*$/;
@@ -398,23 +400,31 @@ function helper(name) {
 }
 
 /**
- * Checks a request for a helper: { method, headers, body }, with headers as
- * [name, value] pairs (the API's sides turn a Headers object or a plain one
- * into those) and the body a string or bytes.
+ * Checks a request for a helper: { method, headers, body, secrets }, with
+ * headers as [name, value] pairs (the API's sides turn a Headers object or a
+ * plain one into those), the body a string or bytes, and secrets the names
+ * of the profile's secrets to send along (NeekoSecrets).
  */
 function checkRequest(path, options) {
   if (typeof path != "string" || path.length > MAX_PATH || !PATH.test(path)) {
     throw new TypeError(`Expected a path on the helper, such as "/answer?q=fox".`);
   }
   if (options !== undefined && options !== null && (typeof options != "object" || Array.isArray(options))) {
-    throw new TypeError("Expected a helper request's options: { method, headers, body }.");
+    throw new TypeError("Expected a helper request's options: { method, headers, body, secrets }.");
   }
   for (let key of Object.keys(options ?? {})) {
-    if (!["method", "headers", "body"].includes(key)) {
+    if (!["method", "headers", "body", "secrets"].includes(key)) {
       throw new TypeError(`Unknown option "${key}".`);
     }
   }
-  let { method = "GET", headers = [], body = null } = options ?? {};
+  let { method = "GET", headers = [], body = null, secrets = [] } = options ?? {};
+  if (
+    !Array.isArray(secrets) ||
+    secrets.length > MAX_SECRETS ||
+    !secrets.every(secret => typeof secret == "string" && NAME.test(secret))
+  ) {
+    throw new TypeError(`Expected secrets as a list of secret names (at most ${MAX_SECRETS}).`);
+  }
   if (typeof method != "string" || !REQUEST_METHODS.includes(method.toUpperCase())) {
     throw new TypeError(`A helper request's method is one of: ${REQUEST_METHODS.join(", ")}.`);
   }
@@ -449,7 +459,7 @@ function checkRequest(path, options) {
   } else {
     body = null;
   }
-  return { path, method, headers: checked, body };
+  return { path, method, headers: checked, body, secrets: [...new Set(secrets)] };
 }
 
 export const NeekoHelpers = {
@@ -487,6 +497,20 @@ export const NeekoHelpers = {
    */
   async fetch(name, path, options, caller, signal) {
     let request = checkRequest(path, options);
+    // The secrets it names, read here and only for the helper; one the
+    // profile doesn't have is left out.
+    let secrets = {};
+    for (let secret of request.secrets) {
+      let value;
+      try {
+        value = await lazy.readSecret(secret);
+      } catch (e) {
+        throw new Error(`Couldn't read the secret "${secret}": ${e.message}`);
+      }
+      if (value !== null) {
+        secrets[`X-Neeko-Secret-${secret}`] = value;
+      }
+    }
     let { port, token } = await helper(name).ready();
     signal?.throwIfAborted();
     let url = new URL(request.path, `http://127.0.0.1:${port}`);
@@ -497,6 +521,7 @@ export const NeekoHelpers = {
       method: request.method,
       headers: {
         ...request.headers,
+        ...secrets,
         Authorization: `Bearer ${token}`,
         "X-Neeko-Caller": caller.caller,
         "X-Neeko-Container": String(caller.userContextId ?? 0),
