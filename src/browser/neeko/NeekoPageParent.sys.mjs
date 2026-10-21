@@ -17,6 +17,8 @@ import { NeekoSettings } from "moz-src:///browser/neeko/NeekoSettings.sys.mjs";
 
 const lazy = {};
 ChromeUtils.defineESModuleGetters(lazy, {
+  HelperStreams: "moz-src:///browser/neeko/NeekoHelpers.sys.mjs",
+  NeekoHelpers: "moz-src:///browser/neeko/NeekoHelpers.sys.mjs",
   SearchService: "moz-src:///toolkit/components/search/SearchService.sys.mjs",
   setTimeout: "resource://gre/modules/Timer.sys.mjs",
   ShellService: "moz-src:///browser/components/shell/ShellService.sys.mjs",
@@ -83,6 +85,8 @@ export class NeekoPageParent extends JSWindowActorParent {
   #unwatch = null;
   /** And container changes. */
   #unwatchContainers = null;
+  /** The page's requests to the app's helpers, from its first. */
+  #helperStreams = null;
 
   #allowed() {
     let context = this.browsingContext;
@@ -178,6 +182,28 @@ export class NeekoPageParent extends JSWindowActorParent {
         return NeekoContainers.remove(data.id);
       case "containers.clear":
         return NeekoContainers.clear(data.id);
+      case "helper.list":
+        return lazy.NeekoHelpers.list();
+      case "helper.stop":
+        return lazy.NeekoHelpers.stop(data.name);
+      case "helper.fetch":
+        this.#helperStreams ??= new lazy.HelperStreams((type, message) => {
+          try {
+            this.sendAsyncMessage(`helper.${type}`, message);
+          } catch (e) {
+            // The page is gone; its requests are being cancelled.
+          }
+        });
+        return this.#helperStreams.fetch(
+          data.id,
+          data.name,
+          data.path,
+          data.request,
+          this.#helperCaller()
+        );
+      case "helper.cancel":
+        this.#helperStreams?.cancel(data.id);
+        return undefined;
       case "containers.listen":
         this.#unwatchContainers ??= NeekoContainers.watch(containers =>
           this.sendAsyncMessage("containers.change", { containers })
@@ -187,7 +213,18 @@ export class NeekoPageParent extends JSWindowActorParent {
     throw new Error(`Unknown message "${name}".`);
   }
 
+  /**
+   * Who asks a helper, for the helper: this page, in its tab's container,
+   * private or not, as the parent knows them.
+   */
+  #helperCaller() {
+    let { userContextId, privateBrowsingId } = this.browsingContext.originAttributes;
+    let name = this.manager.documentPrincipal.spec.slice("about:".length).split(/[?#]/)[0];
+    return { caller: `page:${name}`, userContextId, private: privateBrowsingId > 0 };
+  }
+
   didDestroy() {
+    this.#helperStreams?.destroy();
     this.#unwatch?.();
     this.#unwatchContainers?.();
   }

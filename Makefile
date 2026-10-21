@@ -37,8 +37,11 @@ NO_RUST_LTO := MAKEFLAGS=" -- cargo_rustc_flags="
 all: build run
 
 # Dev build: an artifact build (Mozilla's prebuilt C++/Rust, about 30s).
+# mach assembles the .app afresh every time, so the app's helpers are linked
+# into it after (tools/app.ts helpers).
 build: configure
 	$(MACH) build
+	bun tools/app.ts helpers $(APP)
 
 # Same `mach run` that `surfer run` wraps, pointed at the app's UI and pages
 # folders, so changes only need a relaunch. The app's pages run in a content

@@ -63,6 +63,15 @@ a website.
   browser's bookmarks, history and passwords on this computer and connects
   to nothing. Firefox can also match another browser's extensions on
   addons.mozilla.org; browsers built on Neeko don't offer that.
+- **The browser's helpers**, if it has any: programs that come with the
+  browser (a local AI server, say), which it starts only when you use a
+  feature that needs one, never at startup, and stops when it quits. The
+  browser talks to them on your computer only (127.0.0.1), with nothing of
+  yours they aren't asked. Where a helper itself connects (an AI service
+  your question goes to, say) is up to the browser's makers, whose privacy
+  notice should say. To find the programs a helper may run, its first
+  start asks your login shell for its search path, which runs your shell's
+  profile files, as opening a terminal would.
 - **DNS lookups** go to your computer's usual DNS server, as for any other
   app. The browser doesn't send them to an encrypted DNS provider unless you
   choose one in Settings.

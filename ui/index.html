@@ -9,8 +9,8 @@
 
   This is the demo UI: a tab list, an address bar with a bookmark star, a
   menu, a find bar, a bar for permission prompts, bookmarks and downloads
-  lists, a status line for links, and a container picker for new windows,
-  built only on the Neeko API (the global
+  lists, a status line for links, a container picker for new windows, and
+  the demo app's helper answering in the tab list, built only on the Neeko API (the global
   `neeko` object, see docs/api.md). It's plain on purpose, just enough to show every API feature
   working. Replace it with your own.
 -->
@@ -38,6 +38,11 @@
       <section id="downloads" hidden>
         <h2>Downloads</h2>
         <ol></ol>
+      </section>
+      <!-- What the demo app's helper says, as it says it. -->
+      <section id="helper" hidden>
+        <h2>Helper</h2>
+        <p></p>
       </section>
       <!-- The link the pointer is over, or the page's loading status. -->
       <p id="status" hidden></p>
@@ -72,6 +77,9 @@
       <button data-command="colorScheme" data-scheme="system">System</button>
       <button data-command="colorScheme" data-scheme="light">Light</button>
       <button data-command="colorScheme" data-scheme="dark">Dark</button>
+      <p class="label" data-helper hidden>Helper</p>
+      <button data-command="askHelper" data-helper hidden>Ask the helper</button>
+      <button data-command="stopHelper" data-helper hidden>Stop the helper</button>
       <hr />
       <button data-command="fullscreen">Full screen</button>
     </div>

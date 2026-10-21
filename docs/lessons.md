@@ -91,6 +91,19 @@ Add to it whenever something costs you time.
   `Info.plist` names both `firefox.icns` and `CFBundleIconName` `AppIcon`,
   and current macOS uses the asset catalog. `tools/app.ts` compiles one with
   `xcrun actool`.
+- **mach makes the dev `.app` afresh on every build.** The tools tier
+  (`assemble_macos_bundle`) deletes the bundle and copies `dist/bin` back
+  in, so anything put in it by hand is gone after the next `mach build`, and
+  files put in `dist/bin` land in `Contents/Resources`, not
+  `Contents/MacOS`. `make build` links the app's helpers in after mach
+  (`tools/app.ts helpers`).
+- **`mach package`'s disk image holds its own copy of the app.** Files added
+  to the packaged `.app` afterwards (an app's helpers) need the disk image
+  made again: `tools/app.ts` (makeDiskImage) follows mozpack's `dmg.py`
+  with `hdiutil`, since Mozilla's `make_dmg` action needs the build's
+  config and may fetch toolchains.
+- **codesign takes no comments in an entitlements file:** "Failed to parse
+  entitlements: AMFIUnserializeXML: syntax error". Explain them elsewhere.
 - **Full builds need their own build folder,** or they'd reconfigure the
   artifact build's folder. `configs/common/mozconfig` sets
   `MOZ_OBJDIR=@TOPSRCDIR@/obj-release` when `NEEKO_FULL_BUILD` is set.
@@ -616,6 +629,31 @@ Add to it whenever something costs you time.
   the tab is busy, so Neeko clears them when it stops. The status bubble
   (`#statuspanel`) says what it shows in its `type` attribute (`overLink`,
   `status`), which `neeko.css` uses to hide the kinds the UI shows.
+- **A page's stream, fed from its actor, must be fed as the page's own.**
+  `neekoPage.helper.fetch` builds the `Response`'s body as a
+  `ReadableStream` of the page's, fed from `NeekoPageChild`. Calling its
+  controller's `enqueue`, `close` or `error` through Xrays runs them in the
+  actor's realm, so a read the page was waiting on resolved with an object
+  made there, which the page saw as `{}`: values `undefined`, `done`
+  undefined, abort reasons "Permission denied". Calling them through
+  `Cu.waiveXrays(controller)` runs them in the page's realm. Reads made
+  after the chunk arrived worked either way, which hid it in a quick test.
+  An `exportFunction`'d source is fine for `start`; `cloneInto` with
+  `cloneFunctions` handed `start` a controller the actor couldn't use.
+- **Helpers aren't spawned "disclaimed"** (`Subprocess.call`'s `disclaim`,
+  macOS): a disclaimed script helper on an external disk (the dev build
+  links to the app's file) waited for permission to read itself, which
+  nobody was asked, and never said its port. Not disclaimed, a helper is
+  part of the browser to the system's permissions, as an app's helpers
+  are.
+- **`fetch` in a system module** works for helpers: no CORS for the system
+  principal, `credentials: "omit"` and `cache: "no-store"` keep the
+  browser's cookies and cache out, and `redirect: "error"` keeps Neeko's
+  headers (the token) from following a redirect elsewhere.
+- **A new file in `src/` needs `surfer import`** (`make` does it) before
+  `mach build` can see it: Surfer links Neeko's files into `engine/` one by
+  one, so a new module listed in `moz.build` fails the build as "does not
+  exist" until then.
 - **`ownerGlobal` is undefined on nodes in module code, documents
   included** (see Hide and plug): `doc.defaultView`. It cost the context
   menu a debugging round (the watcher threw before it was set up).

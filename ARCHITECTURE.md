@@ -114,6 +114,11 @@ official startup hooks (`Neeko.manifest`):
   decides a new window's from how it was opened, keeps a window without one
   from loading until the UI picks, and every tab in its window's
   container.
+- **`NeekoHelpers.sys.mjs`** starts the app's helpers (`browser.json`'s
+  `helpers`, programs the build puts next to Firefox's) when the UI or a
+  page first asks one something, with an environment of Neeko's choosing,
+  and carries the requests to it over 127.0.0.1, streaming the answers
+  back as messages. The helper's token stays in this module.
 - **`NeekoMenus.sys.mjs`** trims Firefox's menu bar and context menu to
   what the app keeps (`browser.json`'s `menus`), in Neeko's names for them
   (`NeekoMenuNames.sys.mjs`, which the build reads too).
@@ -155,7 +160,9 @@ a throwaway profile, which `make` and the tests do.
 **Release builds** (`make release`) compile everything from source, in their
 own build folder. That takes hours, but the result carries the browser's own
 name and profile folder and has Firefox's telemetry, crash reporter and
-updater compiled out. `mach package` then makes the app and a disk image.
+updater compiled out. `mach package` then makes the app and a disk image,
+and `tools/app.ts` adds the app's helpers (`browser.json`'s `helpers`) to
+both. Dev builds link to them instead, after every `mach build`.
 
 **On Linux, `make install`** installs a browser for the user from the
 artifact build, packaged by Firefox's packager, since a full build is out of

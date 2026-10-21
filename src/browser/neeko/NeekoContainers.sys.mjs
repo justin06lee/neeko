@@ -903,6 +903,13 @@ export const NeekoContainers = {
   },
 
   /**
+   * In the parent: the user context of a container, by its id, or null.
+   */
+  userContextIdOf(id) {
+    return getStore().byId(id)?.userContextId ?? null;
+  },
+
+  /**
    * In a content process: the id of the container a user context is, from
    * what the parent shares.
    */

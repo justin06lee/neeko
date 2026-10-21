@@ -7,8 +7,9 @@ else. Web pages never get it.
 So far it covers tabs and tab groups, navigation, permission prompts, fullscreen,
 downloads, bookmarks, your UI's settings and the color scheme, containers
 (one per window), find in page,
-links and loading status, drawing over the page, the pointer at the page's edges, moving the window, and your browser's own pages
-(which get a small API of their own, `neekoPage`). And Firefox's own UI,
+links and loading status, drawing over the page, the pointer at the page's edges, moving the window, your browser's own pages
+(which get a small API of their own, `neekoPage`), and helpers, programs
+your browser ships and talks to over HTTP. And Firefox's own UI,
 where it still shows, can take your browser's look (see
 [Firefox's own UI, in your look](#firefoxs-own-ui-in-your-look)). Features get
 added one at a time as browsers built on Neeko need them. The demo UI in
@@ -745,6 +746,7 @@ let theme = await neekoPage.settings.get("theme");
 | `neekoPage.containers.list()` / `create(fields)` / `update(id, changes)` | As in `neeko.containers`, for a settings page. An `update` with `ephemeral` needs a click, since it wipes the container. |
 | `neekoPage.containers.remove(id)` / `clear(id)` | The same. Need a click. |
 | `neekoPage.containers.on("change", listener)` | Calls `listener({ containers })` when they change. Returns a function that stops it. |
+| `neekoPage.helper.fetch(name, path, options?)` / `stop(name)` / `list()` | Requests to your browser's helpers, as `neeko.helper` makes them (see [Helpers](#helpers)). |
 | `neekoPage.defaultBrowser.isDefault()` | Whether your browser is the system's default browser. Cheap: ask again when your page gets the focus back, say. |
 | `neekoPage.defaultBrowser.setDefault()` | Asks the system to make your browser the default, and resolves once the user has answered: whether it is now. On macOS the system asks in a dialog of its own (so it can take a while), and nothing changes until the user agrees. On Linux it changes at once, and only a browser installed with `make install` should be made the default: a dev build would register its bare program, which runs as Firefox. Needs a click (see below). |
 
@@ -794,6 +796,126 @@ changes only need a relaunch or a reload of the page. Firefox's content
 sandbox only lets them read their own files there because `make` passes it
 two extra read paths (`security.sandbox.content.mac.testing_read_path1` and
 `2`); packaged browsers carry their pages inside the app and need none.
+
+## Helpers
+
+A helper is a program your browser ships with: a local server for its AI
+features, say, built with `bun build --compile`. Your UI and your pages
+talk to it as they would to a web server, with `fetch`, and Neeko carries
+the requests over to it, starting it the first time one comes. It never
+starts before: a browser whose user never asks its helper anything never
+runs it, and makes no connection to it.
+
+Declare it in `browser.json`, with its program for each system it runs on
+(paths in your app's folder; see [using-neeko.md](using-neeko.md#helpers)
+for how builds package it):
+
+```json
+"helpers": {
+  "hello": {
+    "bin": {
+      "darwin-arm64": "helpers/dist/hello-darwin-arm64",
+      "linux-arm64": "helpers/dist/hello-linux-arm64"
+    }
+  }
+}
+```
+
+```js
+let answer = await neeko.helper.fetch("hello", "/hello?name=Ada", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ greeting: "hi" }),
+  signal: controller.signal,          // controller.abort() cancels it
+});
+for await (let chunk of answer.body.pipeThrough(new TextDecoderStream())) {
+  show(chunk);                         // as the helper sends it
+}
+```
+
+- **It answers with a real `Response`,** as `fetch` does: `status`,
+  `headers`, and a body to read whole (`text()`, `json()`) or as it
+  streams in (`body`, server-sent events or any chunked answer). Cancelling
+  (the `signal`, or `body.cancel()`) closes the connection to the helper.
+- **One process per helper,** for the whole session, shared by every
+  window and page. If it exits by itself, Neeko starts it again after a
+  second, then two, doubling up to 30, and after 5 exits in two minutes
+  waits for the next request. It goes when the browser quits, or when
+  your UI stops it (`neeko.helper.stop()`, when the user turns its feature
+  off, say); the next request starts it again.
+- **Neeko tells the helper who asks,** in headers it sets itself, which
+  your UI and pages can't: a request that tries is refused. Your own
+  headers go through as you set them.
+- **Paths stay on the helper:** `/` and what follows, nothing that would
+  reach another host.
+
+| Method | What it does |
+| --- | --- |
+| `neeko.helper.fetch(name, path, options?)` | Sends a request to a helper, starting it if it isn't running, and resolves with its `Response` once the answer starts. Options: `method` (GET, HEAD, POST, PUT, PATCH, DELETE or OPTIONS; GET by default), `headers` (a `Headers`, an object or pairs), `body` (text, a `Blob`, an `ArrayBuffer` or a typed array; at most 16 MB), `signal` (an `AbortSignal`) and `tabId` (whose container the helper hears about: by default the window's). Rejects if the build has no such helper for this system, or it doesn't start. |
+| `neeko.helper.stop(name)` | Stops a helper, if it runs. |
+| `neeko.helper.list()` | The helpers this build has: `[{ name, running }]`. |
+| `neekoPage.helper.fetch(name, path, options?)` / `stop(name)` / `list()` | The same, for your pages (no `tabId`: a page's request is its own tab's). A page's `Response` is the page's own. |
+
+Fallback: none needed. Firefox has nothing like it; without a helper (none
+declared, or no program for this system) requests reject, and your UI says
+so.
+
+### What a helper does
+
+A helper is any program: compiled (Bun, Go, Rust) or a script with a `#!`
+line. The demo app's `helpers/hello.py` is a short, complete one. Neeko
+runs it with no arguments, in its data folder, and it:
+
+1. **Listens on 127.0.0.1, port 0** (any free port), never on another
+   address.
+2. **Writes one line to stdout: `{"port": <port>}`,** within 15 seconds.
+   That's how Neeko knows where to send requests. Anything else goes to
+   stderr; both show in the Browser Console.
+3. **Answers only requests with `Authorization: Bearer <token>`,** the
+   token in `NEEKO_HELPER_TOKEN`, compared in constant time. The token is
+   new each time the helper starts, and never leaves Neeko's process: your
+   UI and pages never see it. Refuse everything else (401): web pages can
+   send requests to 127.0.0.1 too, just without the token. Checking the
+   `Host` header (`127.0.0.1:<port>`) and sending no CORS headers keeps
+   them out further.
+4. **Streams when it has something to say:** a chunked answer, or
+   server-sent events (`text/event-stream`). Each piece reaches the caller
+   as it's sent. When a caller cancels, its connection closes: stop
+   working on it.
+5. **Exits when its stdin closes,** or when its parent process
+   (`NEEKO_PARENT_PID`) is gone: the browser quit or crashed. Neeko sends
+   SIGTERM when it stops a helper, and SIGKILL two seconds later.
+
+Its environment is only this, nothing else of the browser's:
+
+| Variable | What it is |
+| --- | --- |
+| `NEEKO_HELPER_TOKEN` | This start's token (64 hex characters). |
+| `NEEKO_HELPER_DATA` | Its folder in the profile, `<profile>/neeko-helpers/<name>`, made for it, readable by the user only (0700); also its working folder. Each profile has its own; it goes with the profile. |
+| `NEEKO_HELPER_NAME` | Its name in `browser.json`. |
+| `NEEKO_PARENT_PID` | The browser's process id. |
+| `NEEKO_PLATFORM` | `macos`, `linux` or `windows`. |
+| `PATH` | The user's login shell's (`$SHELL -l`, asked once a session, when the first helper starts: an app opened from the Finder has a bare one), then `~/.local/bin`, `~/.bun/bin`, `~/.cargo/bin`, `~/.npm-global/bin`, `/opt/homebrew/bin`, `/usr/local/bin` and the system's folders. |
+| `HOME`, `USER`, `LOGNAME`, `SHELL`, `TMPDIR`, `TZ`, `LANG`, `LANGUAGE`, `LC_*`, `XDG_*` | The browser's, where set. |
+| `SSL_CERT_FILE`, `SSL_CERT_DIR`, `NODE_EXTRA_CA_CERTS`, `REQUESTS_CA_BUNDLE`, `CURL_CA_BUNDLE`, `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`, `NO_PROXY` (and lowercase) | The browser's, where set: how the user reaches the network. |
+
+On macOS a helper is part of your browser to the system's permissions
+(files, camera), as an app's helpers are: what the user allowed your
+browser, it may do too, and the system asks in your browser's name.
+
+Every request carries these headers, set by Neeko from what it knows
+about the caller, never by the caller:
+
+| Header | What it says |
+| --- | --- |
+| `Authorization` | `Bearer <token>`. |
+| `X-Neeko-Caller` | `ui`, or `page:<name>` for `about:<name>`. |
+| `X-Neeko-Container` | The caller's container, as Firefox's user context id: `0` is Firefox's default, the app's containers have their own (the same across sessions). For the UI, its window's container (or the `tabId`'s); for a page, its tab's. Keep per-container data apart by it. |
+| `X-Neeko-Private` | `1` from a private window, `0` otherwise. |
+
+Neeko adds nothing of the browser's (no cookies, no referrer), follows no
+redirect (a helper's redirect fails the request), and keeps nothing it
+answers (no cache).
 
 ## Drawing over the page
 
@@ -1029,6 +1151,8 @@ even where its UI has no controls yet.
   in your `theme` if you have one.
 - **Containers.** Without `containers` in `browser.json`, windows aren't in
   any and never wait for a pick.
+- **Helpers.** Without `helpers` in `browser.json` (or a program for this
+  system), `neeko.helper.fetch` rejects, and nothing starts.
 - **Menus.** Without `menus` in `browser.json`, Firefox's menu bar and
   context menu are all there. Without a `settings` `request` listener,
   Cmd+, opens Firefox's settings.
@@ -1070,6 +1194,11 @@ The API can do anything your browser's UI can, so Neeko only ever hands it
 to your UI page: the page Neeko loads from `ui/` into the window's own UI
 frame. Web pages run in separate processes and have no way to reach it.
 Every call's input is checked before Firefox acts on it.
+
+Helpers (see [Helpers](#helpers)) run as the user, outside Firefox's
+sandbox, so what your UI and pages can ask them, they can do. Only your UI
+and your pages reach them through Neeko, and only Neeko has the token they
+require: web pages can send requests to 127.0.0.1, but never with it.
 
 Stick to `neeko` in your UI code. For now your UI runs with Firefox's own
 privileges (see below), so other Firefox internals happen to be reachable,
@@ -1119,6 +1248,12 @@ The pieces:
 - `src/browser/neeko/NeekoPages.sys.mjs` serves the app's pages as `about:`
   pages, in every process; `NeekoPageChild.sys.mjs` gives them `neekoPage`,
   and `NeekoPageParent.sys.mjs` checks and carries out its calls.
+- `src/browser/neeko/NeekoHelpers.sys.mjs` starts the app's helpers and
+  carries requests to them. A request's body comes back as messages of its
+  own, `{ event: "helper.chunk", data: { stream, chunk } }` (bytes) and
+  `{ event: "helper.end", data: { stream, error } }`, for the request id
+  (`stream`) `neeko` picked; they belong to the call, so they're always
+  sent, and `neeko` builds the `Response`'s body from them.
 
 ## Testing
 

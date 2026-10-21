@@ -120,6 +120,10 @@ browsers use.
   too). They're locked-down
   web pages with a small API of their own, `neekoPage`. It's documented in
   [docs/api.md](docs/api.md), and `ui/app.js` shows all of it in use.
+- Programs your browser ships (a local AI server, say) go in `browser.json`'s
+  `helpers`: Neeko starts one when your UI or pages first ask it something,
+  and carries their requests to it, streamed, with a token they never see
+  and which container asks (`neeko.helper.fetch`).
 - Scripts must be separate files (the page's security policy blocks inline
   scripts). They load from `chrome://neeko-ui/content/`, which maps to `ui/`.
   File names may only use letters, digits and `. _ - @ +`.

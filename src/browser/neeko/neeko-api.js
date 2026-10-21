@@ -25,10 +25,30 @@
 
   let nextId = 1;
   let pending = new Map();
+  // Requests to the app's helpers, by an id picked here: the controllers of
+  // their answers' bodies, which arrive as helper.chunk and helper.end
+  // messages, maybe before the answer's start does.
+  let nextStream = 1;
+  let streams = new Map();
   // "tabs.update" -> Set of listeners
   let listeners = new Map();
 
   port.onmessage = ({ data }) => {
+    if (data.event == "helper.chunk" || data.event == "helper.end") {
+      let { stream, chunk, error } = data.data;
+      let controller = streams.get(stream);
+      if (data.event == "helper.chunk") {
+        controller?.enqueue(chunk);
+      } else if (controller) {
+        streams.delete(stream);
+        if (error) {
+          controller.error(new Error(error));
+        } else {
+          controller.close();
+        }
+      }
+      return;
+    }
     if (data.event == "settings.change") {
       let { key, value } = data.data;
       if (value === null) {
@@ -105,6 +125,84 @@
         }
       };
     };
+  }
+
+  /**
+   * A helper request's body as Neeko takes it: text or bytes.
+   */
+  async function bodyBytes(body) {
+    if (typeof body == "string") {
+      return body;
+    }
+    if (body instanceof Blob) {
+      return new Uint8Array(await body.arrayBuffer());
+    }
+    if (body instanceof ArrayBuffer) {
+      return new Uint8Array(body.slice(0));
+    }
+    if (ArrayBuffer.isView(body)) {
+      return new Uint8Array(body.buffer.slice(body.byteOffset, body.byteOffset + body.byteLength));
+    }
+    throw new TypeError("A helper request's body is text, a Blob, an ArrayBuffer or a typed array.");
+  }
+
+  // Answers that have no body, which a Response can't be given one for.
+  const NULL_BODY = [101, 103, 204, 205, 304];
+
+  /**
+   * Sends a request to one of the app's helpers, as fetch() would to a
+   * server, and resolves with a Response once the answer starts: its body
+   * streams in as the helper sends it. Options: method, headers, body,
+   * signal (an AbortSignal, to cancel it), tabId (whose container the
+   * helper hears about).
+   */
+  async function helperFetch(name, path, options) {
+    let { signal, headers, body, ...request } = options ?? {};
+    if (headers !== undefined) {
+      request.headers = [...new Headers(headers)];
+    }
+    if (body !== undefined && body !== null) {
+      request.body = await bodyBytes(body);
+    }
+    signal?.throwIfAborted();
+    let id = nextStream++;
+    let controller;
+    let stream = new ReadableStream({
+      start(c) {
+        controller = c;
+      },
+      cancel: () => cancel(),
+    });
+    streams.set(id, controller);
+    let cancel = () => {
+      if (streams.delete(id)) {
+        call("helper.cancel", id).catch(reportError);
+      }
+    };
+    let aborted;
+    let abort = () => {
+      let open = streams.get(id);
+      cancel();
+      open?.error(signal.reason);
+      aborted(signal.reason);
+    };
+    signal?.addEventListener("abort", abort, { once: true });
+    try {
+      let answer = await Promise.race([
+        call("helper.fetch", id, name, path, request),
+        new Promise((resolve, reject) => (aborted = reject)),
+      ]);
+      let empty = NULL_BODY.includes(answer.status) || /^head$/i.test(request.method ?? "");
+      return new Response(empty ? null : stream, {
+        status: answer.status,
+        statusText: answer.statusText,
+        headers: answer.headers,
+      });
+    } catch (e) {
+      streams.delete(id);
+      signal?.removeEventListener("abort", abort);
+      throw signal?.aborted ? signal.reason : e;
+    }
   }
 
   let neeko = Object.freeze({
@@ -204,6 +302,11 @@
       },
       setContainer: id => call("window.setContainer", id),
       on: events("window", ["container"]),
+    }),
+    helper: Object.freeze({
+      list: () => call("helper.list"),
+      fetch: helperFetch,
+      stop: name => call("helper.stop", name),
     }),
     colorScheme: Object.freeze({
       get: () => colorScheme,

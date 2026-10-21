@@ -116,6 +116,14 @@ get added as it needs them.
   Fallback: macOS's Move & Resize in the Window menu.
 - [x] **`make wipe`** (v0.21.0): deletes all of the app's data for the
   user, so its next launch is a first launch.
+- [x] **Helpers** (v0.22.0): programs an app ships (`browser.json`'s
+  `helpers`, packaged into dev builds, releases and Linux installs),
+  started on the first request from the UI (`neeko.helper`) or the app's
+  pages (`neekoPage.helper`), never at startup, restarted after a crash and
+  stopped at quit; requests to them on 127.0.0.1 as `fetch` makes them,
+  streamed and cancellable, with a per-start token the callers never see
+  and the caller's container and privacy in headers they can't set.
+  Fallback: none needed (no helper, requests reject).
 
 ## API features, in order
 

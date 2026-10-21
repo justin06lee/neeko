@@ -112,6 +112,20 @@ TEST_PAGES = {
     "case 'container': show('container ' + neekoPage.container); break;"
     "case 'ephemeral-now': neekoPage.containers.update(q.get('id'), { ephemeral: true })"
     ".then(() => show('updated'), fail); break;"
+    "case 'helper': neekoPage.helper.fetch('echo', '/echo', { method: 'POST', body: 'from a page',"
+    " headers: { 'X-Test': 'page' } }).then(r => r.json()).then(j => show('helper ' + JSON.stringify("
+    "[j.body, j.headers['x-test'], j.headers['x-neeko-caller'], j.headers['x-neeko-private']])), fail); break;"
+    "case 'helper-stream': neekoPage.helper.fetch('echo', '/stream?n=3').then(async r => {"
+    " let reader = r.body.getReader(), parts = 0, text = '';"
+    " for (;;) { let { done, value } = await reader.read(); if (done) break; parts++;"
+    " text += new TextDecoder().decode(value); }"
+    " show('streamed ' + parts + ' ' + JSON.stringify(text)) }).catch(fail); break;"
+    "case 'helper-reserved': neekoPage.helper.fetch('echo', '/echo', { headers: { 'X-Neeko-Caller': 'ui' } })"
+    ".then(() => show('sent'), fail); break;"
+    "case 'helper-cancel': { let c = new AbortController();"
+    " neekoPage.helper.fetch('echo', '/forever', { signal: c.signal }).then(async r => {"
+    " let reader = r.body.getReader(); await reader.read(); c.abort();"
+    " await reader.read().then(() => show('not cancelled'), e => show('cancelled ' + e.name)) }).catch(fail); break; }"
     "case 'file': onclick = () => neekoPage.import.fromFile(q.get('kind'))"
     ".then(r => show('file ' + JSON.stringify(r)), fail); show('ready'); break;"
     "}</script>",
@@ -332,6 +346,17 @@ if (NeekoPages.names.includes("start")) {
     `${ok(first == "about:privatebrowsing")} and so is a private window's first page (${first})`
   );
 }
+// And the app's own helpers inside it: the demo app's answers.
+let { NeekoHelpers } = ChromeUtils.importESModule("moz-src:///browser/neeko/NeekoHelpers.sys.mjs");
+let helpers = await NeekoHelpers.list();
+if (helpers.some(h => h.name == "hello")) {
+  let neeko = frame.contentWindow.neeko;
+  let text = await (await neeko.helper.fetch("hello", "/hello")).text().catch(e => e.message);
+  results.push(`${ok(text.includes("event: caller"))} the build's own helper answers (${text.slice(0, 40)}...)`);
+  await neeko.helper.stop("hello");
+} else {
+  results.push(`ok   the build's helpers: ${JSON.stringify(helpers)}`);
+}
 return results;
 """
 
@@ -374,6 +399,11 @@ FIREFOX_PREFS = {
 }
 
 
+# In the browser's environment, where helpers must never see it: they get
+# only what Neeko gives them.
+LEAK = "NEEKO_TEST_LEAK"
+
+
 def launch(binary, profile, prefs):
     with open(os.path.join(profile, "user.js"), "w") as f:
         for name, value in prefs.items():
@@ -383,7 +413,7 @@ def launch(binary, profile, prefs):
          "-profile", profile],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
-        env=launch_env(),
+        env={**(launch_env() or os.environ), LEAK: "1"},
     )
 
 
@@ -415,6 +445,18 @@ def run_in(binary, prefs, script, timeout=120000):
         # The pages run in a content process: let its sandbox read them, and
         # Neeko's own files, which dev builds link to in src/ (see make run).
         prefs.update(sandbox_reads(os.path.join(ROOT, "src"), pages))
+    if prefs.get("neeko.helpers.path") == "TEST_HELPERS":
+        # The test's helper as "echo", run by this Python (helpers get a
+        # PATH of the system's programs only).
+        helpers = os.path.join(profile, "helpers")
+        os.mkdir(helpers)
+        with open(os.path.join(ROOT, "tools/test_helper.py")) as f:
+            source = f.read().split("\n", 1)[1]
+        echo = os.path.join(helpers, "echo")
+        with open(echo, "w") as f:
+            f.write(f"#!{sys.executable}\n{source}")
+        os.chmod(echo, 0o755)
+        prefs["neeko.helpers.path"] = helpers
     scripts = script if isinstance(script, list) else [script]
     results = []
     browser = None
@@ -437,6 +479,16 @@ def run_in(binary, prefs, script, timeout=120000):
             except (OSError, RuntimeError, ValueError):
                 pass
             browser.wait(timeout=60)
+            if prefs.get("neeko.helpers.path"):
+                # Helpers go with the browser.
+                time.sleep(0.5)
+                left = subprocess.run(
+                    ["pgrep", "-f", os.path.join(prefs["neeko.helpers.path"], "")],
+                    capture_output=True, text=True,
+                ).stdout.split()
+                results.append(
+                    f"{'FAIL' if left else 'ok  '} no helper runs once the browser has quit ({left})"
+                )
     finally:
         if browser and browser.poll() is None:
             browser.kill()
@@ -465,6 +517,7 @@ def main():
             prefs = {
                 "neeko.ui.path": "TEST_UI",
                 "neeko.pages.path": "TEST_PAGES",
+                "neeko.helpers.path": "TEST_HELPERS",
                 "neeko.menus": json.dumps(TEST_MENUS),
                 **NO_CONTAINERS,
                 **FIREFOX_PREFS,
@@ -477,6 +530,7 @@ def main():
             containers_prefs = {
                 "neeko.ui.path": "TEST_UI",
                 "neeko.pages.path": "TEST_PAGES",
+                "neeko.helpers.path": "TEST_HELPERS",
                 "neeko.containers.builtin": json.dumps(TEST_CONTAINERS),
                 **FIREFOX_PREFS,
             }

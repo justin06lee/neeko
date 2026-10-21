@@ -6,6 +6,8 @@
  *   bun tools/app.ts config   <app>   write surfer.json (before Surfer runs)
  *   bun tools/app.ts branding <app>   write the app's Firefox branding folder
  *                                     (after `surfer import`)
+ *   bun tools/app.ts helpers  <app>   link the app's helpers into the dev build
+ *                                     (after every `mach build`)
  *   bun tools/app.ts dist     <app>   copy a finished release into <app>/dist
  *   bun tools/app.ts install  <app>   Linux: install the packaged dev build for
  *                                     this user (after its stage-package)
@@ -21,8 +23,9 @@
  *
  * browser.json can also give the browser's look for what Firefox still
  * draws itself, its "theme" (see readTheme), which of Firefox's menus and
- * items to keep, its "menus" (see readMenus), and its "containers", one per
- * window (see readContainers).
+ * items to keep, its "menus" (see readMenus), its "containers", one per
+ * window (see readContainers), and its "helpers", programs of its own that
+ * Neeko starts and passes requests to (see readHelpers).
  *   branding/     optional: icon.png (and icon.svg), prefs.js, and any
  *                 Firefox branding file to replace, at the same path
  *
@@ -34,18 +37,25 @@
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
+  accessSync,
   appendFileSync,
   chmodSync,
+  closeSync,
+  constants,
+  copyFileSync,
   cpSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
+  openSync,
   readFileSync,
+  readSync,
   readdirSync,
   renameSync,
   rmdirSync,
   rmSync,
   statSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { homedir, tmpdir } from "node:os";
@@ -78,6 +88,9 @@ type App = {
   menus: Menus | null;
   // browser.json's "containers", checked by readContainers.
   containers: Container[] | null;
+  // browser.json's "helpers", checked by readHelpers: each one's program
+  // for each platform, a path in the app folder.
+  helpers: Record<string, Record<string, string>> | null;
 };
 
 type Container = {
@@ -191,7 +204,69 @@ function readApp(dir: string): App {
     theme: json.theme === undefined ? null : readTheme(dir, file, json.theme),
     menus: json.menus === undefined ? null : readMenus(file, json.menus),
     containers: json.containers === undefined ? null : readContainers(file, json.containers),
+    helpers: json.helpers === undefined ? null : readHelpers(file, json.helpers),
   };
+}
+
+// The platforms a helper can have a program for, as Node names them
+// (process.platform-process.arch), and this computer's.
+const HELPER_PLATFORMS = ["darwin-arm64", "darwin-x64", "linux-arm64", "linux-x64"];
+const PLATFORM = `${process.platform}-${process.arch}`;
+
+/**
+ * Reads and checks browser.json's optional "helpers": programs of the app's
+ * own (a local server, say) that Neeko starts on the first request to one
+ * and passes the UI's and pages' requests to (NeekoHelpers,
+ * docs/api.md#helpers). Each names its program for the platforms it runs
+ * on, a path in the app folder:
+ *
+ *   "helpers": {
+ *     "hello": { "bin": { "darwin-arm64": "helpers/hello", "linux-x64": "helpers/hello" } }
+ *   }
+ *
+ * The build puts this platform's in the app, next to its program, at
+ * neeko-helpers/<name> (linkHelpers, copyHelpers); whether that file is
+ * there is checked then (platformHelpers).
+ */
+function readHelpers(file: string, helpers: unknown): Record<string, Record<string, string>> {
+  let where = (key: string) => `${file}: "helpers${key ? `.${key}` : ""}"`;
+  let isObject = (value: unknown): value is Record<string, unknown> =>
+    !!value && typeof value == "object" && !Array.isArray(value);
+  if (!isObject(helpers) || !Object.keys(helpers).length) {
+    fail(`${where("")} must be an object of helpers, such as { "hello": { "bin": { ... } } }`);
+  }
+  let result: Record<string, Record<string, string>> = {};
+  for (let [name, helper] of Object.entries(helpers)) {
+    if (!/^[a-z][a-z0-9-]{0,31}$/.test(name)) {
+      fail(`${where("")} has a bad name "${name}": up to 32 lowercase letters, digits and -, starting with a letter`);
+    }
+    if (!isObject(helper)) {
+      fail(`${where(name)} must be an object, such as { "bin": { ... } }`);
+    }
+    for (let key of Object.keys(helper)) {
+      if (key != "bin") {
+        fail(`${where(name)} has an unknown key "${key}" (known: bin)`);
+      }
+    }
+    let bin = helper.bin;
+    if (!isObject(bin) || !Object.keys(bin).length) {
+      fail(`${where(`${name}.bin`)} must name its program for at least one platform (${HELPER_PLATFORMS.join(", ")})`);
+    }
+    for (let [platform, path] of Object.entries(bin)) {
+      if (!HELPER_PLATFORMS.includes(platform)) {
+        fail(`${where(`${name}.bin`)} has an unknown platform "${platform}" (known: ${HELPER_PLATFORMS.join(", ")})`);
+      }
+      if (
+        typeof path != "string" ||
+        path.startsWith("/") ||
+        path.split("/").some(part => part == "" || part == "..")
+      ) {
+        fail(`${where(`${name}.bin.${platform}`)} must be a path in the app folder, such as "helpers/${name}"`);
+      }
+    }
+    result[name] = bin as Record<string, string>;
+  }
+  return result;
 }
 
 /**
@@ -983,15 +1058,138 @@ function writeBranding(app: App) {
 }
 
 // ---------------------------------------------------------------------------
+// helpers: the app's own programs, next to the browser's
+
+// Where Neeko finds them (NeekoHelpers): neeko-helpers/<name> in the
+// program's folder, Contents/MacOS in a .app.
+const HELPERS_DIR = "neeko-helpers";
+
+type Helper = { name: string; file: string };
+
+/**
+ * The app's helpers for this platform, each one's program checked to be an
+ * executable file. One without a program for this platform is left out, with
+ * a warning.
+ */
+function platformHelpers(app: App): Helper[] {
+  let helpers: Helper[] = [];
+  for (let [name, bin] of Object.entries(app.helpers ?? {})) {
+    let path = bin[PLATFORM];
+    if (!path) {
+      console.warn(`neeko: helper ${name} has no program for ${PLATFORM}; requests to it will fail.`);
+      continue;
+    }
+    let file = join(app.dir, path);
+    if (!existsSync(file) || !statSync(file).isFile()) {
+      fail(`${path}, helper ${name}'s program, isn't there: build it first.`);
+    }
+    try {
+      accessSync(file, constants.X_OK);
+    } catch (e) {
+      fail(`${path}, helper ${name}'s program, isn't executable (chmod +x).`);
+    }
+    helpers.push({ name, file });
+  }
+  return helpers;
+}
+
+/**
+ * The dev builds' program folders: in each engine/obj-* but the release's,
+ * Contents/MacOS in its newest .app (after a rename the old bundle can
+ * linger), or on Linux dist/bin.
+ */
+function devPrograms(): string[] {
+  if (!existsSync(ENGINE)) {
+    return [];
+  }
+  return globDirs(ENGINE, /^obj-(?!release$)/, "dist").flatMap(dist => {
+    if (process.platform == "linux") {
+      return existsSync(join(dist, "bin/firefox")) ? [join(dist, "bin")] : [];
+    }
+    let apps = readdirSync(dist)
+      .filter(name => name.endsWith(".app"))
+      .map(name => join(dist, name))
+      .sort((a, b) => statSync(b).mtimeMs - statSync(a).mtimeMs);
+    return apps.length ? [join(apps[0], "Contents/MacOS")] : [];
+  });
+}
+
+/**
+ * Links the app's helpers into the dev build, each a link to the app's own
+ * file, so rebuilding a helper needs no new build. mach assembles the dev
+ * .app afresh on every build, so `make build` runs this after it. Helpers no
+ * longer declared go.
+ */
+function linkHelpers(app: App) {
+  let helpers = platformHelpers(app);
+  let programs = devPrograms();
+  if (helpers.length && !programs.length) {
+    fail("no dev build in engine/obj-*/dist: run `make build`, not this script.");
+  }
+  for (let program of programs) {
+    let dir = join(program, HELPERS_DIR);
+    rmSync(dir, { recursive: true, force: true });
+    if (helpers.length) {
+      mkdirSync(dir);
+      for (let { name, file } of helpers) {
+        symlinkSync(file, join(dir, name));
+      }
+    }
+  }
+}
+
+// The first four bytes of a Mach-O program: 64- or 32-bit, in either byte
+// order, or universal.
+const MACH_O = ["cffaedfe", "cefaedfe", "feedfacf", "feedface", "cafebabe", "cafebabf"];
+
+function isMachO(file: string): boolean {
+  let fd = openSync(file, "r");
+  try {
+    let head = Buffer.alloc(4);
+    return readSync(fd, head, 0, 4, 0) == 4 && MACH_O.includes(head.toString("hex"));
+  } finally {
+    closeSync(fd);
+  }
+}
+
+/**
+ * Copies the app's helpers into a packaged program folder, as files of their
+ * own. On macOS a compiled (Mach-O) one is signed, ad hoc like the rest of
+ * the release, with the entitlements a JavaScript engine that compiles code
+ * as it runs needs once the app is signed for real (hardened runtime):
+ * configs/macos/helper.entitlements, Bun's list (its docs, "Code signing on
+ * macOS"; a program made with `bun build --compile` is one). Without the
+ * hardened runtime, as now, they change nothing. (codesign's parser takes no
+ * comments in that file.) Scripts aren't signed.
+ */
+function copyHelpers(helpers: Helper[], program: string) {
+  for (let { name, file } of helpers) {
+    let to = join(program, HELPERS_DIR, name);
+    mkdirSync(dirname(to), { recursive: true });
+    copyFileSync(file, to);
+    chmodSync(to, 0o755);
+    if (process.platform == "darwin" && isMachO(to)) {
+      run("codesign", [
+        "--force", "--sign", "-",
+        "--entitlements", join(NEEKO, "configs/macos/helper.entitlements"),
+        to,
+      ]);
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
 // dist: <app>/dist/
 
 /**
  * Copies the packaged release build into <app>/dist, named after the app: a
- * .app and a disk image on macOS, the program's archive on Linux.
+ * .app and a disk image on macOS, the program's archive on Linux. The app's
+ * helpers go in too.
  */
 function copyRelease(app: App) {
+  let helpers = platformHelpers(app);
   if (process.platform == "linux") {
-    copyLinuxRelease(app);
+    copyLinuxRelease(app, helpers);
     return;
   }
   let dist = join(ENGINE, "obj-release/dist");
@@ -1009,11 +1207,48 @@ function copyRelease(app: App) {
   rmSync(bundle, { recursive: true, force: true });
   // ditto keeps the app bundle's symlinks, permissions and signature intact.
   run("ditto", [join(dist, "firefox", apps[0]), bundle]);
-  cpSync(join(dist, images[0]), image);
+  copyHelpers(helpers, join(bundle, "Contents/MacOS"));
+  // mach's disk image holds its own copy of the app, without the helpers.
+  if (helpers.length) {
+    makeDiskImage(app, bundle, image);
+  } else {
+    cpSync(join(dist, images[0]), image);
+  }
   console.log(`neeko: ${relative(process.cwd(), bundle)}\nneeko: ${relative(process.cwd(), image)}`);
 }
 
-function copyLinuxRelease(app: App) {
+/**
+ * Makes the app's disk image from the finished .app, as `mach package` does
+ * (mozpack's dmg.py): the app, a link to Applications, and the branding's
+ * window layout, background and volume icon, in a volume named after the
+ * app.
+ */
+function makeDiskImage(app: App, bundle: string, image: string) {
+  let work = mkdtempSync(join(tmpdir(), "neeko-dmg-"));
+  try {
+    let stage = join(work, "stage");
+    mkdirSync(join(stage, ".background"), { recursive: true });
+    run("rsync", ["-a", "--copy-unsafe-links", bundle, `${stage}/`]);
+    cpSync(join(BRANDING, "dsstore"), join(stage, ".DS_Store"));
+    cpSync(join(BRANDING, "background.png"), join(stage, ".background/background.png"));
+    cpSync(join(BRANDING, "disk.icns"), join(stage, ".VolumeIcon.icns"));
+    symlinkSync("/Applications", join(stage, " "));
+    run("SetFile", ["-a", "C", stage]);
+    run("chmod", ["-R", "a+rX,a-st,u+w,go-w", stage]);
+    let hybrid = join(work, "hybrid.dmg");
+    run("hdiutil", [
+      "makehybrid", "-hfs", "-hfs-volume-name", app.displayName,
+      "-hfs-openfolder", stage, "-ov", stage, "-o", hybrid,
+    ]);
+    run("hdiutil", [
+      "convert", "-format", "UDBZ", "-imagekey", "bzip2-level=9", "-ov", hybrid, "-o", image,
+    ]);
+  } finally {
+    rmSync(work, { recursive: true, force: true });
+  }
+}
+
+function copyLinuxRelease(app: App, helpers: Helper[]) {
   let dist = join(ENGINE, "obj-release/dist");
   let archives = existsSync(dist)
     ? readdirSync(dist).filter(name => /^firefox-.*\.tar\.(xz|bz2)$/.test(name))
@@ -1027,8 +1262,35 @@ function copyLinuxRelease(app: App) {
     target,
     `${app.name}-${app.version}-linux-${machine()}.${archives[0].replace(/.*\.(tar\.\w+)$/, "$1")}`
   );
-  cpSync(join(dist, archives[0]), archive);
+  if (helpers.length) {
+    archiveWithHelpers(join(dist, archives[0]), archive, helpers);
+  } else {
+    cpSync(join(dist, archives[0]), archive);
+  }
   console.log(`neeko: ${relative(process.cwd(), archive)}`);
+}
+
+/**
+ * The program's archive again, with the app's helpers in its folder, packed
+ * as `mach package` packs it (mozbuild's package.py: owned by root, not
+ * writable by group or others).
+ */
+function archiveWithHelpers(from: string, to: string, helpers: Helper[]) {
+  let work = mkdtempSync(join(tmpdir(), "neeko-archive-"));
+  try {
+    run("tar", ["-xf", from, "-C", work]);
+    let folders = readdirSync(work);
+    if (folders.length != 1) {
+      fail(`expected one program folder in ${from}, found ${folders.join(", ")}.`);
+    }
+    copyHelpers(helpers, join(work, folders[0]));
+    run("tar", [
+      "-c", "--owner=0", "--group=0", "--numeric-owner", "--mode=go-w",
+      from.endsWith(".xz") ? "--xz" : "--bzip2", "-f", to, "-C", work, folders[0],
+    ]);
+  } finally {
+    rmSync(work, { recursive: true, force: true });
+  }
 }
 
 /** This computer's architecture, as Linux names it. */
@@ -1149,7 +1411,8 @@ function installBuildID(previous: string | null): string {
  * Installs the app from the dev build, packaged (`make install` runs
  * browser/installer's stage-package first), as the app: the launcher runs the prebuilt
  * program with the app's application.ini (appIni), so its profiles, windows
- * and everything it tells the desktop are the app's, never Firefox's.
+ * and everything it tells the desktop are the app's, never Firefox's. The
+ * app's helpers go in the program's folder (copyHelpers).
  */
 function install(app: App) {
   checkLinux("make install");
@@ -1160,6 +1423,7 @@ function install(app: App) {
     fail("no packaged build in engine/obj-*/dist/firefox: run `make install`, not this script.");
   }
   let source = packages.sort((a, b) => statSync(b).mtimeMs - statSync(a).mtimeMs)[0];
+  let helpers = platformHelpers(app);
   let paths = installPaths(app);
   if (isRunning(paths.program)) {
     console.warn(`neeko: ${app.displayName} is running: restart it for the new version.`);
@@ -1172,6 +1436,7 @@ function install(app: App) {
   rmSync(old, { recursive: true, force: true });
   mkdirSync(dirname(paths.program), { recursive: true });
   run("cp", ["-a", source, fresh]);
+  copyHelpers(helpers, fresh);
   let previous = existsSync(paths.appIni)
     ? (read(paths.appIni).match(/^BuildID=(\d+)\s*$/m)?.[1] ?? null)
     : null;
@@ -1473,7 +1738,7 @@ function wipe(app: App, yes: boolean) {
 
 let [command, appDir, ...flags] = process.argv.slice(2);
 if (!appDir) {
-  fail("usage: bun tools/app.ts config|branding|dist|install|uninstall|wipe <app folder>");
+  fail("usage: bun tools/app.ts config|branding|helpers|dist|install|uninstall|wipe <app folder>");
 }
 let app = readApp(resolve(appDir));
 switch (command) {
@@ -1482,6 +1747,9 @@ switch (command) {
     break;
   case "branding":
     writeBranding(app);
+    break;
+  case "helpers":
+    linkHelpers(app);
     break;
   case "dist":
     copyRelease(app);

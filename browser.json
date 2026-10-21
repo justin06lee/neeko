@@ -55,5 +55,15 @@
     {"id": "personal", "name": "Personal", "color": "#4a7dff", "default": true},
     {"id": "work", "name": "Work", "color": "#2dc653"},
     {"id": "private", "name": "Private", "color": "#9b5de5", "ephemeral": true}
-  ]
+  ],
+  "helpers": {
+    "hello": {
+      "bin": {
+        "darwin-arm64": "helpers/hello.py",
+        "darwin-x64": "helpers/hello.py",
+        "linux-arm64": "helpers/hello.py",
+        "linux-x64": "helpers/hello.py"
+      }
+    }
+  }
 }

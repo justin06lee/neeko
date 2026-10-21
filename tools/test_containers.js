@@ -95,6 +95,12 @@ await waitFor(
 );
 let workContext = gBrowser.selectedTab.userContextId;
 check(workContext >= 1000, `in a user context of Neeko's own (${workContext})`);
+// The app's helper hears which container asks (tools/test_api.py's "echo").
+let helperHeard = await (await neeko.helper.fetch("echo", "/echo")).json();
+check(
+  helperHeard.headers["x-neeko-container"] == String(workContext),
+  `a helper hears the window's container (${helperHeard.headers["x-neeko-container"]})`
+);
 let tab = await neeko.tabs.open(`${BASE}/one`);
 check(
   gBrowser.selectedTab.userContextId == workContext,
@@ -134,6 +140,12 @@ await waitFor(
 );
 let privateContext = privateWin.gBrowser.selectedTab.userContextId;
 check(privateContext >= 1000 && privateContext != workContext, `with a user context of its own (${privateContext})`);
+let privateHeard = await (await uiOf(privateWin).neeko.helper.fetch("echo", "/echo")).json();
+check(
+  privateHeard.headers["x-neeko-container"] == String(privateContext) &&
+    privateHeard.headers["x-neeko-private"] == "1",
+  `and its helper requests say so (${privateHeard.headers["x-neeko-container"]}, private ${privateHeard.headers["x-neeko-private"]})`
+);
 await closed(privateWin);
 
 // Picking an ephemeral container in a normal window replaces it with a
