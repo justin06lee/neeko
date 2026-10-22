@@ -1684,6 +1684,67 @@ function appData(app: App): string[] {
   return paths.filter(path => existsSync(path));
 }
 
+/**
+ * The app's secrets (NeekoSecrets), which live in the user's keychain, not
+ * in its folders: on macOS the passwords of the service "<name> secrets", on
+ * Linux the Secret Service items of Neeko's schema with the app's name,
+ * through libsecret's secret-tool. What the wipe lists for them and how it
+ * deletes them, or null where there are none (or no way to tell).
+ */
+function appSecrets(app: App): { what: string; wipe: () => void } | null {
+  if (process.platform == "darwin") {
+    let service = `${app.name} secrets`;
+    let found = spawnSync("security", ["find-generic-password", "-s", service], { stdio: "ignore" });
+    if (found.status != 0) {
+      return null;
+    }
+    return {
+      what: `its secrets in the Keychain ("${service}")`,
+      wipe: () => {
+        // One item a call, until there are none left (44).
+        let deleted;
+        do {
+          deleted = spawnSync("security", ["delete-generic-password", "-s", service], { stdio: "ignore" });
+        } while (deleted.status == 0);
+        if (deleted.status != 44) {
+          console.warn(`neeko: couldn't delete all of the Keychain's "${service}" items.`);
+        }
+      },
+    };
+  }
+  let attributes = ["xdg:schema", "neeko.Secret", "app", app.name];
+  // Lists the items' names and, for unlocked ones, values: never shown.
+  let search = () => spawnSync("secret-tool", ["search", "--all", ...attributes], { encoding: "utf8" });
+  let found = search();
+  if (found.error) {
+    console.warn(
+      `neeko: no secret-tool here (apt install libsecret-tools), so ${app.displayName}'s ` +
+        "secrets in the keyring, if it has any, can't be wiped."
+    );
+    return null;
+  }
+  if (found.status != 0) {
+    console.warn(`neeko: couldn't search the keyring for ${app.displayName}'s secrets: ${found.stderr.trim()}`);
+    return null;
+  }
+  if (!found.stdout.trim()) {
+    return null;
+  }
+  return {
+    what: `its secrets in the keyring (Secret Service items, app ${app.name})`,
+    wipe: () => {
+      // Only unlocked items go.
+      let cleared = spawnSync("secret-tool", ["clear", ...attributes], { encoding: "utf8" });
+      if (cleared.status != 0 || search().stdout?.trim()) {
+        console.warn(
+          `neeko: some of ${app.displayName}'s secrets are still in the keyring ` +
+            `(${cleared.stderr.trim() || "is it locked?"}).`
+        );
+      }
+    },
+  };
+}
+
 /** Whether the app runs now: any copy of it on macOS, or its builds here. */
 function appRunning(app: App): boolean {
   // A dev build's browser and its child processes, as `make stop` matches
@@ -1703,21 +1764,24 @@ function appRunning(app: App): boolean {
 }
 
 /**
- * Deletes the app's data (appData), after asking, unless `yes`. Not while
- * the app runs: it would write some of it back as it quits.
+ * Deletes the app's data (appData) and its secrets (appSecrets), after
+ * asking, unless `yes`. Not while the app runs: it would write some of it
+ * back as it quits.
  */
 function wipe(app: App, yes: boolean) {
   if (appRunning(app)) {
     fail(`${app.displayName} is running: quit it first (\`make stop\` quits the dev build).`);
   }
   let paths = appData(app);
-  if (!paths.length) {
+  let secrets = appSecrets(app);
+  if (!paths.length && !secrets) {
     console.log(`neeko: ${app.displayName} has no data here to wipe.`);
     return;
   }
+  let listed = [...paths, ...(secrets ? [secrets.what] : [])];
   console.log(
     `neeko: this deletes all of ${app.displayName}'s data (profiles, bookmarks, ` +
-      `history, passwords, settings):\n${paths.map(path => `  ${path}`).join("\n")}`
+      `history, passwords, settings, secrets):\n${listed.map(path => `  ${path}`).join("\n")}`
   );
   if (!yes && !confirm("Delete it?")) {
     console.log("neeko: nothing deleted. (`make wipe YES=1` doesn't ask.)");
@@ -1731,6 +1795,7 @@ function wipe(app: App, yes: boolean) {
     }
     rmSync(path, { recursive: true, force: true });
   }
+  secrets?.wipe();
   console.log(`neeko: wiped. ${app.displayName}'s next launch is a first launch.`);
 }
 

@@ -117,9 +117,9 @@ linux-only:
 	@false
 
 # Deletes all of the app's data for this user, so its next launch is a first
-# launch: its profiles and caches, what macOS keeps for it, and the dev
-# build's profile, which `make` reuses. Never while it runs. It asks first;
-# YES=1 doesn't.
+# launch: its profiles and caches, what macOS keeps for it, its secrets in
+# the keychain, and the dev build's profile, which `make` reuses. Never while
+# it runs. It asks first; YES=1 doesn't.
 wipe:
 	bun tools/app.ts wipe $(APP) $(if $(YES),--yes)
 

@@ -66,11 +66,16 @@ so its next launch is a first launch (its welcome page, say): its profiles
 and their caches (on macOS `~/Library/Application Support/<name>` and
 `~/Library/Caches/<name>`, on Linux `~/.config/mozilla/<name>` and
 `~/.cache/mozilla/<name>`), what macOS keeps for its app id (its
-preferences and saved window state), and the dev build's profile, which
-`make` reuses. It lists them and asks first (`make wipe YES=1` doesn't),
-refuses while the browser runs, and never touches Firefox's own data: a
-browser can't be named Firefox, or have an `org.mozilla.` app id.
-`python3 neeko/tools/test_wipe.py` checks it in a throwaway home.
+preferences and saved window state), its
+[secrets](api.md#secrets) in the user's keychain (on macOS the Keychain's
+`<name> secrets` items; on Linux the keyring's, through `secret-tool`
+from `libsecret-tools`, which it asks for if it isn't installed), and the
+dev build's profile, which `make` reuses. It lists them and asks first
+(`make wipe YES=1` doesn't), refuses while the browser runs, and never
+touches Firefox's own data: a browser can't be named Firefox, or have an
+`org.mozilla.` app id. `python3 neeko/tools/test_wipe.py` checks it in a
+throwaway home, with the keychain's tools faked, so the real keychain is
+never touched.
 
 **Updating Neeko** (including Firefox updates, which Neeko pins):
 `git -C neeko fetch --tags && git -C neeko checkout v0.3.0`, then commit the
