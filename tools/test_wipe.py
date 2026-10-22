@@ -7,7 +7,10 @@ Needs no build. It wipes a made-up app (WipeTest) in a throwaway home: HOME
 and the XDG folders point into a temporary folder holding the app's data
 and Firefox's, as on macOS or Linux, whichever this is. The dev build's
 profile is the one in engine/obj-*/, so the test adds two made-up builds
-there for the time it runs: one of the app's, one of another's.
+there for the time it runs: one of the app's, one of another's. The app's
+secrets are in the keychain, which a throwaway home doesn't change, so
+the keychain's tools (macOS's security, libsecret's secret-tool) are fakes
+on the PATH, over a made-up keychain with other apps' items in it too.
 """
 
 import json
@@ -24,6 +27,45 @@ MACOS = sys.platform == "darwin"
 NAME, APP_ID = "WipeTest", "dev.neeko.wipetest"
 
 results = []
+
+# The keychain's tools, faked over a JSON list of items: on macOS generic
+# passwords (service, account), on Linux Secret Service items (attributes).
+# Each item's value is SECRET, which nothing may show.
+SECRET = "hunter2-not-for-output"
+FAKE_KEYCHAIN = r"""#!/usr/bin/env python3
+import json, os, sys
+path = os.environ["NEEKO_FAKE_KEYCHAIN"]
+items = json.load(open(path))
+tool, args = os.path.basename(sys.argv[0]), sys.argv[1:]
+def save():
+    json.dump(items, open(path, "w"))
+if tool == "security":
+    command, flag, service = (args + ["", "", ""])[:3]
+    found = [i for i in items if flag == "-s" and i.get("service") == service]
+    if command == "find-generic-password":
+        sys.exit(0 if found else 44)
+    if command == "delete-generic-password":
+        if not found:
+            sys.exit(44)
+        items.remove(found[0])
+        save()
+        sys.exit(0)
+    sys.exit(1)
+command, rest = args[0], [a for a in args[1:] if not a.startswith("--")]
+query = dict(zip(rest[::2], rest[1::2]))
+found = [i for i in items if all(i.get(k) == v for k, v in query.items())]
+if command == "search":
+    for n, item in enumerate(found):
+        print(f"[/fake/{n}]")
+        print("secret = " + item["value"])
+        for k, v in item.items():
+            print(f"attribute.{k} = {v}")
+elif command == "clear":
+    items[:] = [i for i in items if i not in found]
+    save()
+else:
+    sys.exit(1)
+"""
 
 
 def check(ok, what):
@@ -67,6 +109,39 @@ def main():
         )
 
     app = app_folder(NAME, APP_ID)
+
+    # The fake keychain: the app's secrets in two profiles, and other apps'.
+    keychain = os.path.join(work, "keychain.json")
+    tools = os.path.join(work, "bin")
+    os.makedirs(tools)
+    for tool in ("security", "secret-tool"):
+        touch(os.path.join(tools, tool), FAKE_KEYCHAIN)
+        os.chmod(os.path.join(tools, tool), 0o755)
+    env["PATH"] = tools + os.pathsep + env["PATH"]
+    env["NEEKO_FAKE_KEYCHAIN"] = keychain
+    if MACOS:
+        our_secrets = [
+            {"service": f"{NAME} secrets", "account": f"{p}/key", "value": SECRET} for p in ("a", "b")
+        ]
+        other_secrets = [
+            {"service": f"{s} secrets", "account": "a/key", "value": SECRET} for s in ("Other", "Firefox")
+        ]
+    else:
+        our_secrets = [
+            {"xdg:schema": "neeko.Secret", "app": NAME, "profile": p, "name": "key", "value": SECRET}
+            for p in ("a", "b")
+        ]
+        other_secrets = [
+            {"xdg:schema": "neeko.Secret", "app": "Other", "profile": "a", "name": "key", "value": SECRET},
+            {"xdg:schema": "org.example.Other", "app": NAME, "value": SECRET},
+        ]
+    with open(keychain, "w") as f:
+        json.dump(our_secrets + other_secrets, f)
+
+    def secrets():
+        with open(keychain) as f:
+            return json.load(f)
+
     if MACOS:
         library = os.path.join(home, "Library")
         prefs = os.path.join(library, "Preferences", f"{APP_ID}.plist")
@@ -125,8 +200,9 @@ def main():
                 subprocess.run(["defaults", "write", path[: -len(".plist")], "Key", "value"], check=True)
             else:
                 touch(path)
-        everything = lambda paths: all(os.path.exists(p) for p in paths)  # noqa: E731
-        firefox_untouched = lambda: everything(firefox)  # noqa: E731
+        all_secrets = secrets()
+        everything = lambda paths: all(os.path.exists(p) for p in paths) and secrets() == all_secrets  # noqa: E731
+        firefox_untouched = lambda: all(os.path.exists(p) for p in firefox)  # noqa: E731
 
         # Firefox's names and ids are refused, whatever is there.
         for name, app_id in (("Firefox", APP_ID), ("mozilla", APP_ID), (NAME, "org.mozilla.firefox")):
@@ -180,6 +256,10 @@ def main():
         )
         unlisted = [p for p in tops if f"  {p}\n" not in asked.stdout]
         check(not unlisted, f"it lists what it would delete{unlisted and f' (not: {unlisted})' or ''}")
+        check(
+            ("  its secrets in the Keychain" if MACOS else "  its secrets in the keyring") in asked.stdout,
+            "and the app's secrets in the keychain",
+        )
 
         wiped = wipe(app, "YES=1", make=True)
         left = [p for p in ours if os.path.exists(p)]
@@ -192,9 +272,12 @@ def main():
             check(cached.returncode != 0, "and macOS's preferences cache forgets it")
         check(firefox_untouched(), "Firefox's data stays")
         check(os.path.exists(other_profile), "and so does another app's dev build profile")
+        check(secrets() == other_secrets, "the app's secrets are gone from the keychain, other apps' stay")
 
         again = wipe(app, "--yes")
         check(again.returncode == 0 and "no data" in again.stdout, "with nothing left, it says so")
+        shown = [r for r in (asked, wiped, again) if SECRET in r.stdout + r.stderr]
+        check(not shown, "and it never shows a secret's value")
     finally:
         if sleeper:
             sleeper.kill()
