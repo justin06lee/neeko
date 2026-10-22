@@ -152,5 +152,8 @@ firefox: config
 config: deps
 	bun tools/app.ts config $(APP)
 
+# Surfer's sharp builds itself against a system libvips where there is one
+# (Arch Linux has it), which needs node-gyp; its own prebuilt libvips needs
+# nothing (docs/lessons.md).
 deps:
-	@bun install --frozen-lockfile
+	@SHARP_IGNORE_GLOBAL_LIBVIPS=1 bun install --frozen-lockfile
