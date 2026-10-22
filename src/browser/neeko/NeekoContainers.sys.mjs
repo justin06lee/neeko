@@ -29,6 +29,7 @@ ChromeUtils.defineESModuleGetters(lazy, {
   NetUtil: "resource://gre/modules/NetUtil.sys.mjs",
   PrivateBrowsingUtils: "resource://gre/modules/PrivateBrowsingUtils.sys.mjs",
   SessionStore: "moz-src:///browser/components/sessionstore/SessionStore.sys.mjs",
+  setTimeout: "resource://gre/modules/Timer.sys.mjs",
 });
 
 const FILE_NAME = "neeko-containers.json";
@@ -458,6 +459,27 @@ function whenStarted(win) {
   });
 }
 
+// How long a replacement window is put back in place, if it moves.
+const PLACE_TIMEOUT = 2000;
+
+/**
+ * Puts a window at [x, y, width, height], again until it stays there, for
+ * a while. On Linux the window manager places a new window itself, and its
+ * placement may only reach Firefox after Neeko's move: meanwhile Firefox
+ * takes the window to be where it was opened, and skips a move there
+ * (nsWindow::Move), so the first move can be lost.
+ */
+async function keepPlace(win, [x, y, width, height]) {
+  for (let end = Date.now() + PLACE_TIMEOUT; Date.now() < end && !win.closed; ) {
+    if (win.screenX == x && win.screenY == y && win.outerWidth == width && win.outerHeight == height) {
+      return;
+    }
+    win.moveTo(x, y);
+    win.resizeTo(width, height);
+    await new Promise(resolve => lazy.setTimeout(resolve, 100));
+  }
+}
+
 /**
  * Replaces a window with one of the other kind (private or not) for a
  * container, at the same place and size, with the addresses it was waiting
@@ -485,8 +507,7 @@ async function replaceWindow(win, container, urls) {
   // Linux window managers place a new window where they like, and size its
   // frame their own way, but follow a move once it's shown.
   if (features && !maximized) {
-    replacement.moveTo(place[0], place[1]);
-    replacement.resizeTo(place[2], place[3]);
+    keepPlace(replacement, place).catch(console.error);
   }
   for (let url of urls.slice(1)) {
     replacement.gBrowser.addTrustedTab(url, { inBackground: true });

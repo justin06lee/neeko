@@ -638,8 +638,16 @@ check(
 // Firefox's own panels hang from the top edge of the page, 8px in, since the
 // toolbar icons they'd hang from are hidden: the address bar's panels on the
 // left, the toolbar buttons' on the right.
+// What the user sees of a panel: on Linux Firefox gives it a margin around
+// its box for the shadow (--panel-box-shadow-margin, 4px; none on macOS),
+// so its element is that much bigger than what shows.
+let panelRect = panel => {
+  let margin = parseFloat(getComputedStyle(panel).getPropertyValue("--panel-box-shadow-margin")) || 0;
+  let [left, top, right, bottom] = rectOf(panel);
+  return [left + margin, top + margin, right - margin, bottom - margin].map(Math.round);
+};
 let hangsFrom = (panel, side) => {
-  let [left, top, right] = rectOf(panel);
+  let [left, top, right] = panelRect(panel);
   let [pageLeft, pageTop, pageRight] = rectOf(tabbox);
   let inset = side == "left" ? left - pageLeft : pageRight - right;
   return (
@@ -648,7 +656,7 @@ let hangsFrom = (panel, side) => {
     Math.abs(top - pageTop - 8) <= 1
   );
 };
-let where = panel => `at ${rectOf(panel)}, the page at ${rectOf(tabbox)}`;
+let where = panel => `at ${panelRect(panel)}, the page at ${rectOf(tabbox)}`;
 
 let promptTab = await neeko.tabs.open(`${BASE}/geo`);
 let prompt = await waitFor(

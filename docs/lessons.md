@@ -217,6 +217,18 @@ Add to it whenever something costs you time.
   frames their own way, so `window.open`'s `left`, `top`, `outerWidth` and
   `outerHeight` don't stick; `moveTo` and `resizeTo` once the window is
   shown do (`replaceWindow`). (Wayland lets no program place windows.)
+  But not always the first time: Firefox's GTK `nsWindow::Move` skips a
+  move to where it thinks the window already is, and until the window
+  manager's placement reaches it, that's where the window was opened. A
+  move there made too early was lost (seen on Xvfb, 2026-10-22), so
+  `keepPlace` moves it again until it stays, for up to two seconds.
+- **A Linux panel's element is 4px bigger than what shows** on every
+  side: `--panel-box-shadow-margin` (popup.css) gives panels a negative
+  margin and their content that margin back, room for the shadow, where
+  the system can draw transparent windows (none on macOS, which draws its
+  own shadow). Firefox places the content where it's anchored, so a check
+  of where a panel hangs measures inside that margin (`panelRect` in
+  `tools/test_api.js`).
 - **The build's `certutil` needs the build's NSS** on Linux:
   `LD_LIBRARY_PATH` at its folder, or it finds the system's older one
   (`NSS_3.117 not found`). macOS finds it next to the program.
