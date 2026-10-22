@@ -135,6 +135,20 @@ Add to it whenever something costs you time.
 - **Local full builds compile Firefox's tests too** (gtests, about 140
   files). `ac_add_options --disable-tests` in the full-build branch of
   `configs/common/mozconfig` would skip them; not tried yet.
+- **A new app version recompiles all of Firefox's C/C++,** unless
+  `make release` steps in. Configure writes every value it found into the
+  build folder's `config/autoconf.mk`, the app's version
+  (`MOZ_APP_VERSION_DISPLAY`) and the shell's whole `PATH` among them, and
+  every C/C++ object depends on that file (`config/rules.mk`,
+  `$(OBJS): $(GLOBAL_DEPS)`). Surfer rewrites `browser/config/version*.txt`
+  on every build, so configure always runs again. On the 8 GB M1 that was
+  about 3 hours for a version bump. `make release` now runs `mach configure`
+  first, and where only those two lines changed, gives `autoconf.mk` its old
+  time back: the version reaches compiled code only through its folders'
+  `backend.mk` (Glean's `FOG.cpp`, `tools/performance`, AppConstants), which
+  rebuild them anyway, and `tools/test_release.py` checks it in About.
+  `config.statusd/substs/` (one file per value, rewritten only when it
+  changes) shows which values a configure changed.
 - **A release creates `~/Library/Application Support/<name>` and
   `~/Library/Caches/<name>` at startup,** even with `-profile`. The test
   tools remove them afterwards if they were new and are still empty
