@@ -19,6 +19,7 @@ const lazy = {};
 ChromeUtils.defineESModuleGetters(lazy, {
   HelperStreams: "moz-src:///browser/neeko/NeekoHelpers.sys.mjs",
   NeekoHelpers: "moz-src:///browser/neeko/NeekoHelpers.sys.mjs",
+  NeekoSecrets: "moz-src:///browser/neeko/NeekoSecrets.sys.mjs",
   SearchService: "moz-src:///toolkit/components/search/SearchService.sys.mjs",
   setTimeout: "resource://gre/modules/Timer.sys.mjs",
   ShellService: "moz-src:///browser/components/shell/ShellService.sys.mjs",
@@ -85,6 +86,8 @@ export class NeekoPageParent extends JSWindowActorParent {
   #unwatch = null;
   /** And container changes. */
   #unwatchContainers = null;
+  /** And secrets kept or deleted. */
+  #unwatchSecrets = null;
   /** The page's requests to the app's helpers, from its first. */
   #helperStreams = null;
 
@@ -209,6 +212,18 @@ export class NeekoPageParent extends JSWindowActorParent {
           this.sendAsyncMessage("containers.change", { containers })
         );
         return undefined;
+      case "secrets.has":
+        return lazy.NeekoSecrets.has(data.name);
+      // Like the import calls, only sent after a click in the page.
+      case "secrets.set":
+        return lazy.NeekoSecrets.set(data.name, data.value);
+      case "secrets.delete":
+        return lazy.NeekoSecrets.delete(data.name);
+      case "secrets.listen":
+        this.#unwatchSecrets ??= lazy.NeekoSecrets.watch((name, present) =>
+          this.sendAsyncMessage("secrets.change", { name, present })
+        );
+        return undefined;
     }
     throw new Error(`Unknown message "${name}".`);
   }
@@ -227,5 +242,6 @@ export class NeekoPageParent extends JSWindowActorParent {
     this.#helperStreams?.destroy();
     this.#unwatch?.();
     this.#unwatchContainers?.();
+    this.#unwatchSecrets?.();
   }
 }

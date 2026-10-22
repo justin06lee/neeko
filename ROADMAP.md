@@ -124,6 +124,13 @@ get added as it needs them.
   streamed and cancellable, with a per-start token the callers never see
   and the caller's container and privacy in headers they can't set.
   Fallback: none needed (no helper, requests reject).
+- [x] **Secrets** (v0.23.0): named values kept per profile in the
+  system's keychain (macOS's Keychain, libsecret on Linux) through
+  js-ctypes, never in a file; the UI (`neeko.secrets`) and pages
+  (`neekoPage.secrets`, a click to change one) keep, delete and check for
+  them and hear of changes, never read them; a helper request that names
+  one carries it in an `X-Neeko-Secret-<name>` header added in the parent.
+  Fallback: none needed (no keychain, calls reject).
 
 ## API features, in order
 

@@ -367,6 +367,44 @@ aside {
   line-height: 1.4;
 }
 
+#secret-form {
+  display: flex;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+#secret-form[hidden] {
+  display: none;
+}
+
+#secret-form input {
+  flex: 1;
+  min-width: 0;
+  height: 26px;
+  padding: 0 8px;
+  background: var(--field);
+  color: inherit;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font: inherit;
+}
+
+#secret-form input:focus {
+  outline: 2px solid #4a7dff;
+  outline-offset: -1px;
+}
+
+#secret-form button {
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: none;
+}
+
+#secret-form button:hover {
+  background: var(--menu-hover);
+}
+
 /* The link the pointer is over, or the page's loading status. */
 #status {
   margin: 0 4px;

@@ -606,6 +606,7 @@ const menuCommands = {
   fullscreen: toggleWindowFullscreen,
   askHelper: () => askHelper(),
   stopHelper: () => stopHelper(),
+  helperSecret: () => helperSecret(),
 };
 
 const tabsSide = () => neeko.settings.get("tabs") ?? "left";
@@ -636,6 +637,10 @@ function showMenu(show) {
         item.dataset.scheme == neeko.colorScheme.get()
       );
     }
+    // Asked only now, so the keychain isn't touched until the menu shows it.
+    if (!menu.querySelector("[data-command=helperSecret]").hidden) {
+      neeko.secrets.has(SECRET).then(showSecret, () => {});
+    }
   }
 }
 
@@ -664,11 +669,54 @@ neeko.settings.on("change", ({ key, value }) => {
 // program of the app's that Neeko starts on the first request, never at
 // startup. "Ask the helper" streams its greeting, a word at a time (as
 // server-sent events), into the tab list; asking again cancels the answer
-// under way. "Stop the helper" ends the program. Builds without it show
-// neither.
+// under way. "Stop the helper" ends the program. "Give it a secret" keeps
+// one in the system's keychain (neeko.secrets), which this UI can never
+// read back: Neeko sends it along with the requests that name it, and the
+// helper says only how long it is. Builds without the helper show none of
+// it.
 const helperSection = document.getElementById("helper");
 const helperText = helperSection.querySelector("p");
+const secretForm = document.getElementById("secret-form");
+const SECRET = "demo-key";
 let helperRequest = null;
+let hasSecret = false;
+
+let showSecret = present => {
+  hasSecret = present;
+  menu.querySelector("[data-command=helperSecret]").textContent = present
+    ? "Forget its secret"
+    : "Give it a secret";
+};
+neeko.secrets.on("change", ({ name, present }) => {
+  if (name == SECRET) {
+    showSecret(present);
+  }
+});
+
+async function helperSecret() {
+  helperSection.hidden = false;
+  if (hasSecret) {
+    await neeko.secrets.delete(SECRET);
+    helperText.textContent = "Its secret is gone from the keychain.";
+    return;
+  }
+  helperText.textContent = "Kept in the system's keychain, which this UI can't read back.";
+  secretForm.hidden = false;
+  secretForm.querySelector("input").focus();
+}
+
+secretForm.addEventListener("submit", async event => {
+  event.preventDefault();
+  let input = secretForm.querySelector("input");
+  try {
+    await neeko.secrets.set(SECRET, input.value);
+    secretForm.hidden = true;
+    helperText.textContent = "Saved. Ask the helper: Neeko sends it the secret.";
+  } catch (e) {
+    helperText.textContent = e.message;
+  }
+  input.value = "";
+});
 
 neeko.helper.list().then(helpers => {
   let has = helpers.some(helper => helper.name == "hello");
@@ -681,9 +729,13 @@ async function askHelper() {
   helperRequest?.abort();
   let request = (helperRequest = new AbortController());
   helperSection.hidden = false;
+  secretForm.hidden = true;
   helperText.textContent = "…";
   try {
-    let answer = await neeko.helper.fetch("hello", "/hello", { signal: request.signal });
+    let answer = await neeko.helper.fetch("hello", "/hello", {
+      signal: request.signal,
+      secrets: [SECRET],
+    });
     helperText.textContent = "";
     let pending = "";
     for await (let chunk of answer.body.pipeThrough(new TextDecoderStream())) {
@@ -696,7 +748,8 @@ async function askHelper() {
         if (name == "word") {
           helperText.textContent += (helperText.textContent ? " " : "") + data;
         } else if (name == "caller") {
-          helperText.textContent += ` (Neeko told it: ${data.caller}, container ${data.container}${data.private ? ", private" : ""}.)`;
+          let secret = data.secret ? `, a secret of ${data.secret} characters` : "";
+          helperText.textContent += ` (Neeko told it: ${data.caller}, container ${data.container}${data.private ? ", private" : ""}${secret}.)`;
         }
       }
     }
@@ -710,6 +763,7 @@ async function askHelper() {
 async function stopHelper() {
   helperRequest?.abort();
   helperSection.hidden = true;
+  secretForm.hidden = true;
   await neeko.helper.stop("hello");
 }
 

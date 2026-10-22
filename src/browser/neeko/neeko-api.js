@@ -154,7 +154,7 @@
    * server, and resolves with a Response once the answer starts: its body
    * streams in as the helper sends it. Options: method, headers, body,
    * signal (an AbortSignal, to cancel it), tabId (whose container the
-   * helper hears about).
+   * helper hears about), secrets (names of secrets to send it).
    */
   async function helperFetch(name, path, options) {
     let { signal, headers, body, ...request } = options ?? {};
@@ -307,6 +307,13 @@
       list: () => call("helper.list"),
       fetch: helperFetch,
       stop: name => call("helper.stop", name),
+    }),
+    // Never a value back: only a helper request that names a secret gets it.
+    secrets: Object.freeze({
+      has: name => call("secrets.has", name),
+      set: (name, value) => call("secrets.set", name, value),
+      delete: name => call("secrets.delete", name),
+      on: events("secrets", ["change"]),
     }),
     colorScheme: Object.freeze({
       get: () => colorScheme,

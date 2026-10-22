@@ -8,8 +8,9 @@ So far it covers tabs and tab groups, navigation, permission prompts, fullscreen
 downloads, bookmarks, your UI's settings and the color scheme, containers
 (one per window), find in page,
 links and loading status, drawing over the page, the pointer at the page's edges, moving the window, your browser's own pages
-(which get a small API of their own, `neekoPage`), and helpers, programs
-your browser ships and talks to over HTTP. And Firefox's own UI,
+(which get a small API of their own, `neekoPage`), helpers, programs
+your browser ships and talks to over HTTP, and secrets it keeps for them in
+the system's keychain. And Firefox's own UI,
 where it still shows, can take your browser's look (see
 [Firefox's own UI, in your look](#firefoxs-own-ui-in-your-look)). Features get
 added one at a time as browsers built on Neeko need them. The demo UI in
@@ -747,6 +748,7 @@ let theme = await neekoPage.settings.get("theme");
 | `neekoPage.containers.remove(id)` / `clear(id)` | The same. Need a click. |
 | `neekoPage.containers.on("change", listener)` | Calls `listener({ containers })` when they change. Returns a function that stops it. |
 | `neekoPage.helper.fetch(name, path, options?)` / `stop(name)` / `list()` | Requests to your browser's helpers, as `neeko.helper` makes them (see [Helpers](#helpers)). |
+| `neekoPage.secrets.has(name)` / `set(name, value)` / `delete(name)` / `on("change", listener)` | Your browser's secrets, as in `neeko.secrets` (see [Secrets](#secrets)): never a value back. `set` and `delete` need a click, one call per click. |
 | `neekoPage.defaultBrowser.isDefault()` | Whether your browser is the system's default browser. Cheap: ask again when your page gets the focus back, say. |
 | `neekoPage.defaultBrowser.setDefault()` | Asks the system to make your browser the default, and resolves once the user has answered: whether it is now. On macOS the system asks in a dialog of its own (so it can take a while), and nothing changes until the user agrees. On Linux it changes at once, and only a browser installed with `make install` should be made the default: a dev build would register its bare program, which runs as Firefox. Needs a click (see below). |
 
@@ -851,7 +853,7 @@ for await (let chunk of answer.body.pipeThrough(new TextDecoderStream())) {
 
 | Method | What it does |
 | --- | --- |
-| `neeko.helper.fetch(name, path, options?)` | Sends a request to a helper, starting it if it isn't running, and resolves with its `Response` once the answer starts. Options: `method` (GET, HEAD, POST, PUT, PATCH, DELETE or OPTIONS; GET by default), `headers` (a `Headers`, an object or pairs), `body` (text, a `Blob`, an `ArrayBuffer` or a typed array; at most 16 MB), `signal` (an `AbortSignal`) and `tabId` (whose container the helper hears about: by default the window's). Rejects if the build has no such helper for this system, or it doesn't start. |
+| `neeko.helper.fetch(name, path, options?)` | Sends a request to a helper, starting it if it isn't running, and resolves with its `Response` once the answer starts. Options: `method` (GET, HEAD, POST, PUT, PATCH, DELETE or OPTIONS; GET by default), `headers` (a `Headers`, an object or pairs), `body` (text, a `Blob`, an `ArrayBuffer` or a typed array; at most 16 MB), `signal` (an `AbortSignal`), `secrets` (names of secrets to send the helper, at most 16: see [Secrets](#secrets)) and `tabId` (whose container the helper hears about: by default the window's). Any other option is refused. Rejects if the build has no such helper for this system, or it doesn't start. |
 | `neeko.helper.stop(name)` | Stops a helper, if it runs. |
 | `neeko.helper.list()` | The helpers this build has: `[{ name, running }]`. |
 | `neekoPage.helper.fetch(name, path, options?)` / `stop(name)` / `list()` | The same, for your pages (no `tabId`: a page's request is its own tab's). A page's `Response` is the page's own. |
@@ -912,10 +914,77 @@ about the caller, never by the caller:
 | `X-Neeko-Caller` | `ui`, or `page:<name>` for `about:<name>`. |
 | `X-Neeko-Container` | The caller's container, as Firefox's user context id: `0` is Firefox's default, the app's containers have their own (the same across sessions). For the UI, its window's container (or the `tabId`'s); for a page, its tab's. Keep per-container data apart by it. |
 | `X-Neeko-Private` | `1` from a private window, `0` otherwise. |
+| `X-Neeko-Secret-<name>` | For each secret the request names in `secrets` that the profile has, its value (see [Secrets](#secrets)). One it doesn't have is left out. |
 
 Neeko adds nothing of the browser's (no cookies, no referrer), follows no
 redirect (a helper's redirect fails the request), and keeps nothing it
 answers (no cache).
+
+If a helper exits in the middle of an answer, the answer's body ends with
+an error, not as if it were whole: Firefox checks a streamed (chunked) or
+`Content-Length` answer's framing. An answer with neither, or one that
+isn't a 200-something, can't be told from a whole one, so a helper should
+also end its streams with a "done" of its own.
+
+## Secrets
+
+Secrets are values your browser keeps for its user by name: an API key
+the user pastes into your settings page, say. Neeko keeps them in the
+system's keychain (macOS's Keychain; on Linux, a Secret Service keyring
+such as GNOME Keyring or KWallet), never in a file of the browser's, and
+hands them only to your helpers. Your UI and pages can keep one, delete it
+and ask whether there is one, never read it back.
+
+```js
+// In your settings page, from the Save button's click handler:
+await neekoPage.secrets.set("example-api-key", input.value);
+
+// Wherever you ask your helper something that needs it:
+let answer = await neeko.helper.fetch("hello", "/answer", {
+  secrets: ["example-api-key"],
+});
+// The helper gets the header X-Neeko-Secret-example-api-key: <the key>.
+```
+
+- **Only your helpers get one.** A helper request that names secrets in
+  `secrets` carries each in an `X-Neeko-Secret-<name>` header, which Neeko
+  adds in its own process just before sending. One the profile doesn't
+  have is left out, so the helper can say what's missing. Nothing returns
+  a value to your UI or pages, and Neeko puts none in a message, an error
+  or a log.
+- **A click to change one, from a page.** `neekoPage.secrets.set` and
+  `delete` must be called from a click (or key) handler, one call per
+  click. `has` and listening need none, nor do your UI's calls.
+- **Names and values.** A name is as a helper's: lowercase letters, digits
+  and dashes, starting with a letter, at most 32. A value is text a header
+  can carry: printable ASCII with no space at either end, at most 8192
+  characters (API keys and tokens are).
+- **Each profile has its own.** In macOS's Keychain each is a password
+  item labeled `<app>: <name>`, of the service `<app> secrets`, with the
+  account `<profile folder>/<name>`. On Linux each has the attributes
+  `app`, `profile` and `name` (schema `neeko.Secret`), in the default
+  keyring.
+- **The keychain may ask the user.** A macOS keychain item remembers the
+  program that made it. When another build of your browser first reads it
+  (an update, unless your builds are signed with a Developer ID), macOS
+  asks the user whether to allow it. Neeko waits for the keychain on a
+  thread of its own, so the browser never freezes meanwhile: only the call
+  waits. If the user refuses, it rejects.
+- **No keychain, no secrets.** On a Linux without a Secret Service keyring
+  (or without libsecret), every call rejects, saying so. Neeko never keeps
+  a secret anywhere else.
+- Changes made outside Neeko (in Keychain Access, say) send no event.
+
+| Method | What it does |
+| --- | --- |
+| `neeko.secrets.has(name)` | Whether this profile has a secret of that name. |
+| `neeko.secrets.set(name, value)` | Keeps one in the system's keychain, in place of one of that name. |
+| `neeko.secrets.delete(name)` | Deletes one, if there is one. |
+| `neeko.secrets.on("change", listener)` | Calls `listener({ name, present })` when one is kept (`present: true`) or deleted (`false`), from any window or page. Returns a function that stops it. |
+| `neekoPage.secrets.has(name)` / `set(name, value)` / `delete(name)` / `on("change", listener)` | The same, for your pages. `set` and `delete` need a click. |
+
+Fallback: none needed. Firefox has nothing like it, and without a keychain
+the calls reject.
 
 ## Drawing over the page
 
@@ -1153,6 +1222,9 @@ even where its UI has no controls yet.
   any and never wait for a pick.
 - **Helpers.** Without `helpers` in `browser.json` (or a program for this
   system), `neeko.helper.fetch` rejects, and nothing starts.
+- **Secrets.** Without a keychain (a Linux without a Secret Service
+  keyring), `neeko.secrets` and `neekoPage.secrets` calls reject, and
+  nothing is kept anywhere else.
 - **Menus.** Without `menus` in `browser.json`, Firefox's menu bar and
   context menu are all there. Without a `settings` `request` listener,
   Cmd+, opens Firefox's settings.
@@ -1199,6 +1271,10 @@ Helpers (see [Helpers](#helpers)) run as the user, outside Firefox's
 sandbox, so what your UI and pages can ask them, they can do. Only your UI
 and your pages reach them through Neeko, and only Neeko has the token they
 require: web pages can send requests to 127.0.0.1, but never with it.
+
+Secrets (see [Secrets](#secrets)) only ever go one way from your UI and
+pages: into the keychain. Neeko reads one only in its own process, to send
+it to a helper in a header your UI and pages can't set themselves.
 
 Stick to `neeko` in your UI code. For now your UI runs with Firefox's own
 privileges (see below), so other Firefox internals happen to be reachable,
@@ -1254,6 +1330,10 @@ The pieces:
   `{ event: "helper.end", data: { stream, error } }`, for the request id
   (`stream`) `neeko` picked; they belong to the call, so they're always
   sent, and `neeko` builds the `Response`'s body from them.
+- `src/browser/neeko/NeekoSecrets.sys.mjs` keeps secrets in the system's
+  keychain, through `NeekoSecrets.worker.js` (js-ctypes calls to macOS's
+  Security framework or libsecret, on a thread of their own), and reads
+  them for NeekoHelpers alone.
 
 ## Testing
 
@@ -1271,4 +1351,5 @@ the downloads panel) steps in only when nobody listens. It asks for a
 location, goes fullscreen (the screen switches for a moment), downloads a
 few small files, plays a tone too quietly to hear, and crashes one test
 tab on purpose (it stops that tab's content process), all from localhost,
-in its throwaway profile.
+in its throwaway profile. It also keeps two test secrets in your keychain,
+for that profile, and deletes them again.

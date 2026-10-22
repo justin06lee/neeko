@@ -664,6 +664,17 @@ Add to it whenever something costs you time.
   principal, `credentials: "omit"` and `cache: "no-store"` keep the
   browser's cookies and cache out, and `redirect: "error"` keeps Neeko's
   headers (the token) from following a redirect elsewhere.
+- **Firefox's OSKeyStore can't keep a secret, only a key.** It stores
+  16-byte keys in the keychain and expects the encrypted data on disk,
+  which breaks "in the keychain, never in a file". NeekoSecrets calls the
+  keychain itself with js-ctypes (Security.framework's `SecItem*`, or
+  libsecret's `secret_password_*_sync`) from a ChromeWorker, which
+  `BasePromiseWorker` loads from a `moz-src:` URL like any module of
+  Neeko's. On its own thread, a keychain prompt can't freeze the browser.
+  `lib.declare(name, ctypes.voidptr_t)` reads a framework's constant
+  (`kSecClass`), and a struct type declared over a symbol gives its address
+  (`kCFTypeDictionaryKeyCallBacks.address()`). An item found without
+  `kSecReturnData` never makes macOS ask the user.
 - **A new file in `src/` needs `surfer import`** (`make` does it) before
   `mach build` can see it: Surfer links Neeko's files into `engine/` one by
   one, so a new module listed in `moz.build` fails the build as "does not

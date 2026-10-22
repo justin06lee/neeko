@@ -1896,6 +1896,166 @@ check(
 let helperAfterStop = await (await neeko.helper.fetch("echo", "/echo")).json();
 check(helperAfterStop.pid != afterCrash?.pid, "the next request starts it again");
 
+// Secrets: values kept by name in the system's keychain, for this profile.
+// The UI and the app's pages keep, delete and ask about one, never read it;
+// a helper request that names one carries it to the helper. The test's own
+// are deleted at the end, whatever happens.
+let secretName = `test-${Math.random().toString(36).slice(2, 10)}`;
+let pageSecret = `${secretName}-page`;
+try {
+  check(
+    Object.keys(neeko.secrets).sort().join() == "delete,has,on,set",
+    `nothing reads one back (${Object.keys(neeko.secrets)})`
+  );
+  check((await neeko.secrets.has(secretName)) === false, "a secret the profile doesn't have");
+  let secretEvents = [];
+  let stopSecrets = neeko.secrets.on("change", data => secretEvents.push(data));
+  await neeko.secrets.set(secretName, "s3cret value");
+  check((await neeko.secrets.has(secretName)) === true, "keeping one");
+  await waitFor(
+    () => secretEvents.some(e => e.name == secretName && e.present === true),
+    "the UI hears of it"
+  );
+  if (Services.appinfo.OS == "Darwin") {
+    // Asks for the item, not its value, which the system would ask about.
+    let { Subprocess } = ChromeUtils.importESModule("resource://gre/modules/Subprocess.sys.mjs");
+    let security = await Subprocess.call({
+      command: "/usr/bin/security",
+      arguments: [
+        "find-generic-password",
+        "-s",
+        `${Services.appinfo.name} secrets`,
+        "-a",
+        `${PathUtils.filename(PathUtils.profileDir)}/${secretName}`,
+      ],
+      stderr: "stdout",
+    });
+    let found = await security.stdout.readString();
+    let { exitCode } = await security.wait();
+    check(exitCode == 0 && found.includes(`${Services.appinfo.name}: ${secretName}`), "in the system's keychain");
+  }
+  let leaks = [];
+  let lookIn = async folder => {
+    for (let path of await IOUtils.getChildren(folder)) {
+      // The browser may delete a file meanwhile.
+      let info = await IOUtils.stat(path).catch(() => null);
+      if (info?.type == "directory") {
+        await lookIn(path);
+      } else if (info && info.size < 50_000_000) {
+        let bytes = await IOUtils.read(path).catch(() => new Uint8Array());
+        if (new TextDecoder("latin1").decode(bytes).includes("s3cret value")) {
+          leaks.push(path);
+        }
+      }
+    }
+  };
+  await lookIn(PathUtils.profileDir);
+  check(!leaks.length, `and in no file of the profile's (${leaks})`);
+  let withSecret = await (
+    await neeko.helper.fetch("echo", "/echo", { secrets: [secretName, `${secretName}-none`] })
+  ).json();
+  let secretHeaders = Object.keys(withSecret.headers).filter(h => h.startsWith("x-neeko-secret"));
+  check(
+    withSecret.headers[`x-neeko-secret-${secretName}`] == "s3cret value" && secretHeaders.length == 1,
+    `a helper request that names it carries it, and not one the profile lacks (${secretHeaders})`
+  );
+  let withoutSecret = await (await neeko.helper.fetch("echo", "/echo")).json();
+  check(
+    !Object.keys(withoutSecret.headers).some(h => h.startsWith("x-neeko-secret")),
+    "a request that doesn't name it goes without"
+  );
+  await neeko.secrets.set(secretName, "another value");
+  let replaced = await (await neeko.helper.fetch("echo", "/echo", { secrets: [secretName] })).json();
+  check(replaced.headers[`x-neeko-secret-${secretName}`] == "another value", "keeping it again replaces it");
+  for (let [name, value, what] of [
+    ["Not-a-name", "x", "a name with capitals"],
+    ["", "x", "an empty name"],
+    [secretName, "", "an empty value"],
+    [secretName, " padded", "a value with a space at the start"],
+    [secretName, "two\nlines", "a value over two lines"],
+    [secretName, "naïve", "a value that isn't ASCII"],
+    [secretName, "x".repeat(8193), "a value too long"],
+    [secretName, 42, "a value that isn't text"],
+  ]) {
+    await rejects(neeko.secrets.set(name, value), /secret's (name|value)/, `keeping ${what}`);
+  }
+  let refusal = await neeko.secrets.set(secretName, "bad\nvalue-xyz").then(() => "", e => e.message);
+  check(refusal && !refusal.includes("value-xyz"), `a refusal never says the value (${refusal})`);
+  await rejects(neeko.helper.fetch("echo", "/echo", { secrets: secretName }), /list of secret names/, "secrets not as a list");
+  await rejects(neeko.helper.fetch("echo", "/echo", { secrets: ["Bad"] }), /list of secret names/, "a secret's name that can't be one");
+
+  let listenSecretPage = await pageTest("secret-listen", t => t == "listening" || t.startsWith("refused"), "a page listening for secrets");
+  let secretNowPage = await pageTest(`secret-now&name=${pageSecret}`, t => t == "set" || t.startsWith("refused"), "a page keeping a secret without a click");
+  check(/refused.*click/.test(secretNowPage.title ?? ""), `is refused (${secretNowPage.title})`);
+  await neeko.tabs.close(secretNowPage.tab.id);
+  let secretSetPage = await pageTest(`secret-set&name=${pageSecret}`, t => t == "ready", "a page with a button to keep a secret");
+  clickPage();
+  let secretSet = await waitFor(
+    () => updated(secretSetPage.tab.id, t => t.title == "set" || t.title.startsWith("refused")),
+    "keeps it after a click"
+  );
+  check(secretSet?.tab.title == "set" && (await neeko.secrets.has(pageSecret)), `for the UI too (${secretSet?.tab.title})`);
+  await neeko.tabs.close(secretSetPage.tab.id);
+  await waitFor(
+    () => updated(listenSecretPage.tab.id, t => t.title == `change ${pageSecret} true`),
+    "and a page listening hears of it"
+  );
+  let secretHasPage = await pageTest(`secret-has&name=${pageSecret}`, t => t.startsWith("has") || t.startsWith("refused"), "neekoPage.secrets.has()");
+  check(secretHasPage.title == "has true undefined", `says there is one, and nothing reads it (${secretHasPage.title})`);
+  await neeko.tabs.close(secretHasPage.tab.id);
+  let secretHelperPage = await pageTest(`secret-helper&name=${pageSecret}`, t => t.startsWith("helper") || t.startsWith("refused"), "a page's helper request naming it");
+  check(secretHelperPage.title == "helper from a page", `carries it (${secretHelperPage.title})`);
+  await neeko.tabs.close(secretHelperPage.tab.id);
+  let secretDeletePage = await pageTest(`secret-delete&name=${pageSecret}`, t => t == "ready", "a page with a button to delete it");
+  clickPage();
+  await waitFor(() => updated(secretDeletePage.tab.id, t => t.title == "deleted"), "deletes it after a click");
+  check(!(await neeko.secrets.has(pageSecret)), "and it's gone");
+  await waitFor(
+    () => updated(listenSecretPage.tab.id, t => t.title == `change ${pageSecret} false`),
+    "which a page listening hears of too"
+  );
+  await neeko.tabs.close(secretDeletePage.tab.id);
+  await neeko.tabs.close(listenSecretPage.tab.id);
+
+  await neeko.secrets.delete(secretName);
+  check((await neeko.secrets.has(secretName)) === false, "deleting one");
+  await waitFor(
+    () => secretEvents.some(e => e.name == secretName && e.present === false),
+    "the UI hears of that too"
+  );
+  let heardSecrets = secretEvents.length;
+  await neeko.secrets.delete(secretName);
+  check(secretEvents.length == heardSecrets, "deleting one that's gone changes nothing");
+  let afterDelete = await (await neeko.helper.fetch("echo", "/echo", { secrets: [secretName] })).json();
+  check(!(`x-neeko-secret-${secretName}` in afterDelete.headers), "and requests go without it");
+  stopSecrets();
+} finally {
+  await neeko.secrets.delete(secretName).catch(() => {});
+  await neeko.secrets.delete(pageSecret).catch(() => {});
+}
+
+// A helper that dies halfway through an answer ends it with an error, not
+// as if the answer were whole.
+let halfway = await neeko.helper.fetch("echo", "/die-mid");
+let halfReader = halfway.body.getReader();
+let halfText = "";
+let halfEnd = "done";
+try {
+  for (;;) {
+    let { done, value } = await halfReader.read();
+    if (done) {
+      break;
+    }
+    halfText += new TextDecoder().decode(value);
+  }
+} catch (e) {
+  halfEnd = `error: ${e.message}`;
+}
+check(
+  halfText == "half an answer\n" && halfEnd.startsWith("error"),
+  `a helper dying mid-answer ends it with an error (${JSON.stringify(halfText)}, ${halfEnd})`
+);
+
 // Neeko sends only the events the UI listens for.
 let heardSelect = 0;
 let stopSelect = neeko.tabs.on("select", () => heardSelect++);

@@ -43,6 +43,16 @@
       <section id="helper" hidden>
         <h2>Helper</h2>
         <p></p>
+        <!-- A secret for it, kept in the system's keychain. -->
+        <form id="secret-form" hidden>
+          <input
+            type="password"
+            placeholder="A secret for the helper"
+            autocomplete="off"
+            spellcheck="false"
+          />
+          <button>Save</button>
+        </form>
       </section>
       <!-- The link the pointer is over, or the page's loading status. -->
       <p id="status" hidden></p>
@@ -80,6 +90,7 @@
       <p class="label" data-helper hidden>Helper</p>
       <button data-command="askHelper" data-helper hidden>Ask the helper</button>
       <button data-command="stopHelper" data-helper hidden>Stop the helper</button>
+      <button data-command="helperSecret" data-helper hidden>Give it a secret</button>
       <hr />
       <button data-command="fullscreen">Full screen</button>
     </div>
