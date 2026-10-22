@@ -29,8 +29,11 @@ NAME, APP_ID = "WipeTest", "dev.neeko.wipetest"
 results = []
 
 # The keychain's tools, faked over a JSON list of items: on macOS generic
-# passwords (service, account), on Linux Secret Service items (attributes).
-# Each item's value is SECRET, which nothing may show.
+# passwords (service, account), on Linux keyring items (attributes, the
+# schema as "xdg:schema", which libsecret's file backend doesn't keep).
+# secret-tool prints as libsecret 0.21's does: an item's path, label, value
+# and schema on stdout, its attributes on stderr, each line flushed. Each
+# item's value is SECRET, which nothing may show.
 SECRET = "hunter2-not-for-output"
 FAKE_KEYCHAIN = r"""#!/usr/bin/env python3
 import json, os, sys
@@ -56,10 +59,15 @@ query = dict(zip(rest[::2], rest[1::2]))
 found = [i for i in items if all(i.get(k) == v for k, v in query.items())]
 if command == "search":
     for n, item in enumerate(found):
-        print(f"[/fake/{n}]")
-        print("secret = " + item["value"])
+        schema = item.get("xdg:schema")
+        print(f"[/{n}]" if schema else "[no path]", flush=True)
+        print("label = an item", flush=True)
+        print("secret = " + item["value"], flush=True)
+        if schema:
+            print("schema = " + schema, flush=True)
         for k, v in item.items():
-            print(f"attribute.{k} = {v}")
+            if k not in ("xdg:schema", "value"):
+                print(f"attribute.{k} = {v}", file=sys.stderr, flush=True)
 elif command == "clear":
     items[:] = [i for i in items if i not in found]
     save()
@@ -127,13 +135,18 @@ def main():
             {"service": f"{s} secrets", "account": "a/key", "value": SECRET} for s in ("Other", "Firefox")
         ]
     else:
+        # One through a Secret Service, one from libsecret's file backend,
+        # which keeps no schema; and items that aren't Neeko's: another app's,
+        # another schema's, and ones with more or fewer attributes.
         our_secrets = [
-            {"xdg:schema": "neeko.Secret", "app": NAME, "profile": p, "name": "key", "value": SECRET}
-            for p in ("a", "b")
+            {"xdg:schema": "neeko.Secret", "app": NAME, "profile": "a", "name": "key", "value": SECRET},
+            {"app": NAME, "profile": "b", "name": "key", "value": SECRET},
         ]
         other_secrets = [
             {"xdg:schema": "neeko.Secret", "app": "Other", "profile": "a", "name": "key", "value": SECRET},
             {"xdg:schema": "org.example.Other", "app": NAME, "value": SECRET},
+            {"app": NAME, "profile": "c", "name": "key", "extra": "1", "value": SECRET},
+            {"app": NAME, "profile": "d", "value": SECRET},
         ]
     with open(keychain, "w") as f:
         json.dump(our_secrets + other_secrets, f)
@@ -278,6 +291,21 @@ def main():
         check(again.returncode == 0 and "no data" in again.stdout, "with nothing left, it says so")
         shown = [r for r in (asked, wiped, again) if SECRET in r.stdout + r.stderr]
         check(not shown, "and it never shows a secret's value")
+
+        if not MACOS:
+            # Clearing a secret by its attributes would take an item that has
+            # them and more with it: that secret stays, and the wipe says so.
+            shared = [
+                {"app": NAME, "profile": "e", "name": "key", "value": SECRET},
+                {"app": NAME, "profile": "e", "name": "key", "extra": "1", "value": SECRET},
+            ]
+            with open(keychain, "w") as f:
+                json.dump(shared, f)
+            kept = wipe(app, "--yes")
+            check(
+                secrets() == shared and "its attributes with another item" in kept.stderr,
+                "a secret whose attributes another item has too stays, and it says so",
+            )
     finally:
         if sleeper:
             sleeper.kill()

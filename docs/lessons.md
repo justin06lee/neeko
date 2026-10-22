@@ -240,6 +240,19 @@ Add to it whenever something costs you time.
   browser. The installer checks each type with `gio mime` before and after,
   and where it moved, sets the old app with `gio mime <type> <app>`
   (`tools/test_install.py`). `LC_ALL=C` keeps `gio`'s output parseable.
+- **`secret-tool search` splits each item across two streams:** its path
+  (`[no path]` in libsecret's file backend), label, value and schema on
+  stdout, its attributes (`attribute.<name> = <value>`) on stderr, each
+  line flushed (libsecret 0.21's `tool/secret-tool.c`). Read them as one
+  stream (`2>&1`) to know which attributes are whose. It always loads the
+  values: never show its output.
+- **libsecret's file backend keeps no schema** (`xdg:schema`) on items
+  stored through one, as a Secret Service does: a search by
+  `xdg:schema neeko.Secret` finds nothing there. It's the backend of a
+  Flatpak and of `test_api.py`'s keyring. `make wipe` finds Neeko's secrets
+  by their attributes (exactly app, profile and name), and `secret-tool
+  clear` takes every item that has the attributes it's given, so it skips a
+  secret whose attributes another item has too, with more.
 - **Other browsers' data is under the home folder** on Linux
   (`ChromeMigrationUtils`: `Home/.config/google-chrome` and so on), not
   `ULibDir`, so the import test's fake stands in for `Home` there.
