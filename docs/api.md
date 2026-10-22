@@ -748,7 +748,7 @@ let theme = await neekoPage.settings.get("theme");
 | `neekoPage.containers.remove(id)` / `clear(id)` | The same. Need a click. |
 | `neekoPage.containers.on("change", listener)` | Calls `listener({ containers })` when they change. Returns a function that stops it. |
 | `neekoPage.helper.fetch(name, path, options?)` / `stop(name)` / `list()` | Requests to your browser's helpers, as `neeko.helper` makes them (see [Helpers](#helpers)). |
-| `neekoPage.secrets.has(name)` / `set(name, value)` / `delete(name)` / `on("change", listener)` | Your browser's secrets, as in `neeko.secrets` (see [Secrets](#secrets)): never a value back. `set` and `delete` need a click, one call per click. |
+| `neekoPage.secrets.has(name)` / `set(name, value)` / `delete(name)` / `on("change" \| "waiting", listener)` | Your browser's secrets, as in `neeko.secrets` (see [Secrets](#secrets)): never a value back. `set` and `delete` need a click, one call per click. |
 | `neekoPage.defaultBrowser.isDefault()` | Whether your browser is the system's default browser. Cheap: ask again when your page gets the focus back, say. |
 | `neekoPage.defaultBrowser.setDefault()` | Asks the system to make your browser the default, and resolves once the user has answered: whether it is now. On macOS the system asks in a dialog of its own (so it can take a while), and nothing changes until the user agrees. On Linux it changes at once, and only a browser installed with `make install` should be made the default: a dev build would register its bare program, which runs as Firefox. Needs a click (see below). |
 
@@ -966,12 +966,17 @@ let answer = await neeko.helper.fetch("hello", "/answer", {
   keyring. `<app>` is `browser.json`'s `name`, in dev builds too. `make
   wipe` deletes them all (see
   "Starting afresh" in [using-neeko.md](using-neeko.md)).
-- **The keychain may ask the user.** A macOS keychain item remembers the
-  program that made it. When another build of your browser first reads it
-  (an update, unless your builds are signed with a Developer ID), macOS
-  asks the user whether to allow it. Neeko waits for the keychain on a
-  thread of its own, so the browser never freezes meanwhile: only the call
-  waits. If the user refuses, it rejects.
+- **The keychain may ask the user,** and a call waits for the answer as
+  long as it takes. A macOS keychain item remembers the program that made
+  it: when another build of your browser first reads it (an update, unless
+  your builds are signed with a Developer ID), macOS asks the user whether
+  to allow it. A Linux keyring may ask to be unlocked, or (KDE) to create a
+  wallet on first use. Neeko waits for the keychain on a thread of its own,
+  so the browser never freezes meanwhile: only the calls wait, including a
+  helper request that names a secret. Once a call has waited a second,
+  Neeko sends `waiting` (`{ waiting: true }`), and `{ waiting: false }` when
+  it's done, so you can tell the user to look for the system's dialog,
+  which can be behind your window. If the user refuses, the call rejects.
 - **No keychain, no secrets.** On a Linux without a Secret Service keyring
   (or without libsecret), every call rejects, saying so. Neeko never keeps
   a secret anywhere else.
@@ -983,10 +988,12 @@ let answer = await neeko.helper.fetch("hello", "/answer", {
 | `neeko.secrets.set(name, value)` | Keeps one in the system's keychain, in place of one of that name. |
 | `neeko.secrets.delete(name)` | Deletes one, if there is one. |
 | `neeko.secrets.on("change", listener)` | Calls `listener({ name, present })` when one is kept (`present: true`) or deleted (`false`), from any window or page. Returns a function that stops it. |
-| `neekoPage.secrets.has(name)` / `set(name, value)` / `delete(name)` / `on("change", listener)` | The same, for your pages. `set` and `delete` need a click. |
+| `neeko.secrets.on("waiting", listener)` | Calls `listener({ waiting: true })` when keychain calls have waited a second (the system is most likely asking the user something), and `listener({ waiting: false })` when they're done. Returns a function that stops it. |
+| `neekoPage.secrets.has(name)` / `set(name, value)` / `delete(name)` / `on("change" \| "waiting", listener)` | The same, for your pages. `set` and `delete` need a click. |
 
 Fallback: none needed. Firefox has nothing like it, and without a keychain
-the calls reject.
+the calls reject. If nobody listens for `waiting`, the system's dialog is
+all the user sees, as in any app.
 
 ## Drawing over the page
 
@@ -1353,5 +1360,8 @@ the downloads panel) steps in only when nobody listens. It asks for a
 location, goes fullscreen (the screen switches for a moment), downloads a
 few small files, plays a tone too quietly to hear, and crashes one test
 tab on purpose (it stops that tab's content process), all from localhost,
-in its throwaway profile. It also keeps two test secrets in your keychain,
-for that profile, and deletes them again.
+in its throwaway profile. Its secrets go to a keychain of its own, never
+yours: on macOS a throwaway keychain file (the test-only pref
+`neeko.secrets.keychain`), left out of your keychain list; on Linux
+libsecret's file backend (`SECRET_BACKEND=file`), so no keyring is asked
+anything.

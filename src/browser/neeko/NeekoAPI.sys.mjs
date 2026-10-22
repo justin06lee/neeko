@@ -239,6 +239,7 @@ const EVENTS = [
   "containers.change",
   "window.container",
   "secrets.change",
+  "secrets.waiting",
 ];
 
 // What Firefox's find reports (nsITypeAheadFind), as the API says it.
@@ -996,6 +997,9 @@ export class NeekoAPI {
       ),
       NeekoSecrets.watch((name, present) =>
         this.#emit("secrets.change", { name, present })
+      ),
+      NeekoSecrets.watchWaiting(waiting =>
+        this.#emit("secrets.waiting", { waiting })
       )
     );
   }

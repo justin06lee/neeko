@@ -692,6 +692,21 @@ neeko.secrets.on("change", ({ name, present }) => {
     showSecret(present);
   }
 });
+// The system may ask the user something before the keychain answers (macOS
+// whether this build may read the secret, a Linux keyring to be unlocked):
+// say so, since its dialog can hide behind the window.
+const KEYCHAIN_WAITING = "Waiting for the system's keychain: it may be asking you something.";
+let beforeWaiting = null;
+neeko.secrets.on("waiting", ({ waiting }) => {
+  if (waiting) {
+    beforeWaiting = { hidden: helperSection.hidden, text: helperText.textContent };
+    helperSection.hidden = false;
+    helperText.textContent = KEYCHAIN_WAITING;
+  } else if (beforeWaiting && helperText.textContent == KEYCHAIN_WAITING) {
+    helperSection.hidden = beforeWaiting.hidden;
+    helperText.textContent = beforeWaiting.text;
+  }
+});
 
 async function helperSecret() {
   helperSection.hidden = false;

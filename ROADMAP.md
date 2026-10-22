@@ -131,6 +131,8 @@ get added as it needs them.
   them and hear of changes, never read them; a helper request that names
   one carries it in an `X-Neeko-Secret-<name>` header added in the parent.
   Fallback: none needed (no keychain, calls reject).
+  v0.24.0: a `waiting` event while the system's keychain asks the user
+  something, and tests that use a keychain of their own, never the user's.
 
 ## API features, in order
 

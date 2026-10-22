@@ -86,7 +86,7 @@ export class NeekoPageParent extends JSWindowActorParent {
   #unwatch = null;
   /** And container changes. */
   #unwatchContainers = null;
-  /** And secrets kept or deleted. */
+  /** And secrets kept or deleted, and the keychain waiting on the user. */
   #unwatchSecrets = null;
   /** The page's requests to the app's helpers, from its first. */
   #helperStreams = null;
@@ -220,9 +220,17 @@ export class NeekoPageParent extends JSWindowActorParent {
       case "secrets.delete":
         return lazy.NeekoSecrets.delete(data.name);
       case "secrets.listen":
-        this.#unwatchSecrets ??= lazy.NeekoSecrets.watch((name, present) =>
-          this.sendAsyncMessage("secrets.change", { name, present })
-        );
+        if (!this.#unwatchSecrets) {
+          let stops = [
+            lazy.NeekoSecrets.watch((name, present) =>
+              this.sendAsyncMessage("secrets.change", { name, present })
+            ),
+            lazy.NeekoSecrets.watchWaiting(waiting =>
+              this.sendAsyncMessage("secrets.waiting", { waiting })
+            ),
+          ];
+          this.#unwatchSecrets = () => stops.forEach(stop => stop());
+        }
         return undefined;
     }
     throw new Error(`Unknown message "${name}".`);

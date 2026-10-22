@@ -11,8 +11,11 @@
  * them.
  *
  * Each profile has its own. A keychain call can wait for the user (macOS
- * may ask whether the browser may use an item), so they run on a thread of
- * their own (NeekoSecrets.worker.js), started on the first call.
+ * may ask whether the browser may use an item, a Linux keyring to create a
+ * wallet or be unlocked), so they run on a thread of their own
+ * (NeekoSecrets.worker.js), started on the first call, and one that takes
+ * a while says so: the app can tell the user to look for the system's
+ * dialog.
  */
 
 import { AppConstants } from "resource://gre/modules/AppConstants.sys.mjs";
@@ -20,6 +23,8 @@ import { AppConstants } from "resource://gre/modules/AppConstants.sys.mjs";
 const lazy = {};
 ChromeUtils.defineESModuleGetters(lazy, {
   BasePromiseWorker: "resource://gre/modules/PromiseWorker.sys.mjs",
+  clearTimeout: "resource://gre/modules/Timer.sys.mjs",
+  setTimeout: "resource://gre/modules/Timer.sys.mjs",
 });
 
 // A secret's name, as a helper's: it ends up in a header's name.
@@ -27,9 +32,21 @@ const NAME = /^[a-z][a-z0-9-]{0,31}$/;
 // Its value, which a header carries: printable ASCII, no space at either end.
 const VALUE = /^[\x21-\x7e](?:[\x20-\x7e]*[\x21-\x7e])?$/;
 const MAX_VALUE = 8192;
+// How long a keychain call may take before it's waiting on the user, as
+// far as anyone can tell.
+const SLOW = 1000;
+// For tests only: a keychain file to use instead of the user's (macOS), and
+// a delay before every keychain call.
+const KEYCHAIN_PREF = "neeko.secrets.keychain";
+const DELAY_PREF = "neeko.secrets.delay";
 
 const watchers = new Set();
+const waitWatchers = new Set();
 let worker = null;
+// Keychain calls under way, and whether they've been waiting a while.
+let pending = 0;
+let slowTimer = null;
+let waiting = false;
 
 function checkName(name) {
   if (typeof name != "string" || !NAME.test(name)) {
@@ -56,15 +73,45 @@ function item(name) {
     profile: PathUtils.filename(PathUtils.profileDir),
     name,
     label: `${app}: ${name}`,
+    keychain: Services.prefs.getStringPref(KEYCHAIN_PREF, "") || null,
   };
+}
+
+function setWaiting(value) {
+  if (value == waiting) {
+    return;
+  }
+  waiting = value;
+  for (let watcher of waitWatchers) {
+    try {
+      watcher(value);
+    } catch (e) {
+      console.error(e);
+    }
+  }
 }
 
 async function keychain(method, ...args) {
   worker ??= new lazy.BasePromiseWorker("moz-src:///browser/neeko/NeekoSecrets.worker.js");
+  pending++;
+  slowTimer ??= lazy.setTimeout(() => {
+    slowTimer = null;
+    setWaiting(true);
+  }, SLOW);
   try {
+    let delay = Services.prefs.getIntPref(DELAY_PREF, 0);
+    if (delay) {
+      await new Promise(resolve => lazy.setTimeout(resolve, delay));
+    }
     return await worker.post(method, args);
   } catch (e) {
     throw new Error(e.message || "The keychain didn't do it.");
+  } finally {
+    if (!--pending) {
+      lazy.clearTimeout(slowTimer);
+      slowTimer = null;
+      setWaiting(false);
+    }
   }
 }
 
@@ -110,6 +157,16 @@ export const NeekoSecrets = {
   watch(callback) {
     watchers.add(callback);
     return () => watchers.delete(callback);
+  },
+
+  /**
+   * Calls callback(true) when keychain calls have been waiting a while (the
+   * system is most likely asking the user something), and callback(false)
+   * when they're done. Returns a function that stops it.
+   */
+  watchWaiting(callback) {
+    waitWatchers.add(callback);
+    return () => waitWatchers.delete(callback);
   },
 };
 
