@@ -40,13 +40,16 @@ function checkName(name) {
   return name;
 }
 
-/** How the keychain knows a secret: the app's, this profile's, by name. */
+/**
+ * How the keychain knows a secret: the app's (browser.json's name, which
+ * dev builds' Services.appinfo.name isn't), this profile's, by name.
+ */
 function item(name) {
   checkName(name);
   if (!["macosx", "linux"].includes(AppConstants.platform)) {
     throw new Error("Secrets need macOS's Keychain or a Linux keyring.");
   }
-  let app = Services.appinfo.name;
+  let app = AppConstants.MOZ_APP_BASENAME;
   return {
     platform: AppConstants.platform,
     app,

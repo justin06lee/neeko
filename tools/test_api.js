@@ -1919,12 +1919,15 @@ try {
   if (Services.appinfo.OS == "Darwin") {
     // Asks for the item, not its value, which the system would ask about.
     let { Subprocess } = ChromeUtils.importESModule("resource://gre/modules/Subprocess.sys.mjs");
+    // browser.json's name, in dev builds too (whose appinfo says Firefox).
+    let appName = ChromeUtils.importESModule("resource://gre/modules/AppConstants.sys.mjs").AppConstants
+      .MOZ_APP_BASENAME;
     let security = await Subprocess.call({
       command: "/usr/bin/security",
       arguments: [
         "find-generic-password",
         "-s",
-        `${Services.appinfo.name} secrets`,
+        `${appName} secrets`,
         "-a",
         `${PathUtils.filename(PathUtils.profileDir)}/${secretName}`,
       ],
@@ -1932,7 +1935,10 @@ try {
     });
     let found = await security.stdout.readString();
     let { exitCode } = await security.wait();
-    check(exitCode == 0 && found.includes(`${Services.appinfo.name}: ${secretName}`), "in the system's keychain");
+    check(
+      appName != "Firefox" && exitCode == 0 && found.includes(`${appName}: ${secretName}`),
+      `in the system's keychain, as ${appName}'s`
+    );
   }
   let leaks = [];
   let lookIn = async folder => {
