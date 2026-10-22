@@ -18,7 +18,7 @@
  *     / remove(id) / clear(id) / on("change", fn)
  *   neekoPage.helper.list() / fetch(name, path, options) / stop(name)
  *   neekoPage.secrets.has(name) / set(name, value) / delete(name)
- *     / on("change", fn)
+ *     / on("change" | "waiting", fn)
  *
  * Every method returns a promise; docs/api.md documents them. Those that
  * change something outside the browser, or wipe what the user kept, need a
@@ -70,8 +70,8 @@ export class NeekoPageChild extends JSWindowActorChild {
   #listeners = new Set();
   /** And for container changes. */
   #containerListeners = new Set();
-  /** And for secrets kept or deleted. */
-  #secretListeners = new Set();
+  /** And for secrets kept or deleted, and the keychain waiting on the user. */
+  #secretListeners = { change: new Set(), waiting: new Set() };
   /**
    * The page's requests to the app's helpers, by id: the controllers of
    * their answers' bodies (page objects), which arrive as messages.
@@ -113,13 +113,14 @@ export class NeekoPageChild extends JSWindowActorChild {
       }
       return;
     }
-    if (name == "settings.change" || name == "containers.change" || name == "secrets.change") {
+    let listeners = {
+      "settings.change": this.#listeners,
+      "containers.change": this.#containerListeners,
+      "secrets.change": this.#secretListeners.change,
+      "secrets.waiting": this.#secretListeners.waiting,
+    }[name];
+    if (listeners) {
       let win = this.contentWindow;
-      let listeners = {
-        "settings.change": this.#listeners,
-        "containers.change": this.#containerListeners,
-        "secrets.change": this.#secretListeners,
-      }[name];
       for (let listener of listeners) {
         try {
           listener(Cu.cloneInto(data, win));
@@ -348,14 +349,15 @@ export class NeekoPageChild extends JSWindowActorChild {
     define(secrets, "set", (name, value) => askAfterClick("secrets.set", { name, value }));
     define(secrets, "delete", name => askAfterClick("secrets.delete", { name }));
     define(secrets, "on", (type, listener) => {
-      if (type != "change" || typeof listener != "function") {
-        throw new win.TypeError('Expected "change" and a listener.');
+      if (!["change", "waiting"].includes(type) || typeof listener != "function") {
+        throw new win.TypeError('Expected "change" or "waiting", and a listener.');
       }
-      if (!this.#secretListeners.size) {
+      let { change, waiting } = this.#secretListeners;
+      if (!change.size && !waiting.size) {
         this.sendAsyncMessage("secrets.listen");
       }
-      this.#secretListeners.add(listener);
-      return Cu.exportFunction(() => this.#secretListeners.delete(listener), win);
+      this.#secretListeners[type].add(listener);
+      return Cu.exportFunction(() => this.#secretListeners[type].delete(listener), win);
     });
 
     for (let object of [settings, search, defaultBrowser, imports, containers, helper, secrets, api]) {

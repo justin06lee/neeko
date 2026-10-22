@@ -313,7 +313,7 @@
       has: name => call("secrets.has", name),
       set: (name, value) => call("secrets.set", name, value),
       delete: name => call("secrets.delete", name),
-      on: events("secrets", ["change"]),
+      on: events("secrets", ["change", "waiting"]),
     }),
     colorScheme: Object.freeze({
       get: () => colorScheme,

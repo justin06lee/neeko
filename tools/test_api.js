@@ -1916,29 +1916,38 @@ try {
     () => secretEvents.some(e => e.name == secretName && e.present === true),
     "the UI hears of it"
   );
+  // In the test's own keychain (test_api.py), never the user's.
+  let appName = ChromeUtils.importESModule("resource://gre/modules/AppConstants.sys.mjs").AppConstants
+    .MOZ_APP_BASENAME;
   if (Services.appinfo.OS == "Darwin") {
     // Asks for the item, not its value, which the system would ask about.
     let { Subprocess } = ChromeUtils.importESModule("resource://gre/modules/Subprocess.sys.mjs");
-    // browser.json's name, in dev builds too (whose appinfo says Firefox).
-    let appName = ChromeUtils.importESModule("resource://gre/modules/AppConstants.sys.mjs").AppConstants
-      .MOZ_APP_BASENAME;
-    let security = await Subprocess.call({
-      command: "/usr/bin/security",
-      arguments: [
-        "find-generic-password",
-        "-s",
-        `${appName} secrets`,
-        "-a",
-        `${PathUtils.filename(PathUtils.profileDir)}/${secretName}`,
-      ],
-      stderr: "stdout",
-    });
-    let found = await security.stdout.readString();
-    let { exitCode } = await security.wait();
+    let testKeychain = Services.prefs.getStringPref("neeko.secrets.keychain", "");
+    let find = async (...keychains) => {
+      let security = await Subprocess.call({
+        command: "/usr/bin/security",
+        arguments: [
+          "find-generic-password",
+          "-s",
+          `${appName} secrets`,
+          "-a",
+          `${PathUtils.filename(PathUtils.profileDir)}/${secretName}`,
+          ...keychains,
+        ],
+        stderr: "stdout",
+      });
+      let found = await security.stdout.readString();
+      let { exitCode } = await security.wait();
+      return exitCode == 0 && found.includes(`${appName}: ${secretName}`);
+    };
     check(
-      appName != "Firefox" && exitCode == 0 && found.includes(`${appName}: ${secretName}`),
-      `in the system's keychain, as ${appName}'s`
+      appName != "Firefox" && testKeychain && (await find(testKeychain)),
+      `in the keychain, as ${appName}'s: the test's own (${testKeychain})`
     );
+    check(!(await find()), "and none of the user's");
+  } else {
+    let testKeyring = Services.env.get("SECRET_FILE_TEST_PATH");
+    check(testKeyring && (await IOUtils.exists(testKeyring)), `in the test's own keyring (${testKeyring})`);
   }
   let leaks = [];
   let lookIn = async folder => {
@@ -2022,6 +2031,25 @@ try {
   );
   await neeko.tabs.close(secretDeletePage.tab.id);
   await neeko.tabs.close(listenSecretPage.tab.id);
+
+  // A keychain call that takes a while (the system asking the user
+  // something) says so, to the UI and pages listening; the test makes them
+  // slow.
+  let waitingPage = await pageTest("secret-waiting", t => t == "listening", "a page listening for the keychain waiting");
+  let waitingSeen = [];
+  let stopWaiting = neeko.secrets.on("waiting", ({ waiting }) => waitingSeen.push(waiting));
+  check((await neeko.secrets.has(secretName)) && !waitingSeen.length, "a quick call isn't waiting");
+  Services.prefs.setIntPref("neeko.secrets.delay", 1600);
+  let slowStarted = Date.now();
+  let slowHas = await neeko.secrets.has(secretName);
+  Services.prefs.clearUserPref("neeko.secrets.delay");
+  check(
+    slowHas && waitingSeen.join() == "true,false",
+    `a slow one tells the UI it's waiting, then that it's done (${waitingSeen}, ${Date.now() - slowStarted} ms)`
+  );
+  await waitFor(() => updated(waitingPage.tab.id, t => t.title == "waiting true,false"), "and a page listening");
+  stopWaiting();
+  await neeko.tabs.close(waitingPage.tab.id);
 
   await neeko.secrets.delete(secretName);
   check((await neeko.secrets.has(secretName)) === false, "deleting one");

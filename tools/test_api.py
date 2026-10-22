@@ -136,6 +136,8 @@ TEST_PAGES = {
     ".then(() => show('deleted'), fail); show('ready'); break;"
     "case 'secret-listen': neekoPage.secrets.on('change',"
     " ({ name, present }) => show(`change ${name} ${present}`)); show('listening'); break;"
+    "case 'secret-waiting': { let seen = []; neekoPage.secrets.on('waiting',"
+    " ({ waiting }) => { seen.push(waiting); show('waiting ' + seen.join()) }); show('listening'); break; }"
     "case 'secret-helper': neekoPage.helper.fetch('echo', '/echo', { secrets: [q.get('name')] })"
     ".then(r => r.json()).then(j => show('helper ' + (j.headers['x-neeko-secret-' + q.get('name')] ?? 'none')), fail); break;"
     "case 'file': onclick = () => neekoPage.import.fromFile(q.get('kind'))"
@@ -416,7 +418,7 @@ FIREFOX_PREFS = {
 LEAK = "NEEKO_TEST_LEAK"
 
 
-def launch(binary, profile, prefs):
+def launch(binary, profile, prefs, env=None):
     with open(os.path.join(profile, "user.js"), "w") as f:
         for name, value in prefs.items():
             f.write(f"user_pref({json.dumps(name)}, {json.dumps(value)});\n")
@@ -425,8 +427,41 @@ def launch(binary, profile, prefs):
          "-profile", profile],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
-        env={**(launch_env() or os.environ), LEAK: "1"},
+        env={**(launch_env() or os.environ), LEAK: "1", **(env or {})},
     )
+
+
+def test_keychain():
+    """A keychain of the test's own, so secrets never touch the user's: on
+    macOS a keychain file, left out of the user's keychain list; on Linux
+    libsecret's file backend, with no Secret Service (no D-Bus, no keyring
+    prompt). Outside the profile, whose files the checks look through.
+    Returns (prefs, env, cleanup)."""
+    folder = tempfile.mkdtemp(prefix="neeko-keychain-")
+    if sys.platform == "darwin":
+        path = os.path.join(folder, "test.keychain-db")
+        listed = subprocess.run(
+            ["security", "list-keychains", "-d", "user"], capture_output=True, text=True
+        ).stdout.split()
+        subprocess.run(["security", "create-keychain", "-p", "neeko-test", path], check=True)
+        # create-keychain lists it with the user's: put their list back.
+        subprocess.run(
+            ["security", "list-keychains", "-d", "user", "-s", *[k.strip('"') for k in listed]],
+            check=True,
+        )
+        # No locking after a while, which would ask for its password.
+        subprocess.run(["security", "set-keychain-settings", path], check=True)
+        def cleanup():
+            subprocess.run(["security", "delete-keychain", path], capture_output=True)
+            shutil.rmtree(folder, ignore_errors=True)
+
+        return {"neeko.secrets.keychain": path}, {}, cleanup
+    env = {
+        "SECRET_BACKEND": "file",
+        "SECRET_FILE_TEST_PATH": os.path.join(folder, "test-keyring"),
+        "SECRET_FILE_TEST_PASSWORD": "neeko-test",
+    }
+    return {}, env, lambda: shutil.rmtree(folder, ignore_errors=True)
 
 
 def run_in(binary, prefs, script, timeout=120000):
@@ -447,6 +482,11 @@ def run_in(binary, prefs, script, timeout=120000):
     }
     if prefs.get("neeko.ui.path") == "TEST_UI":
         prefs["neeko.ui.path"] = ui
+    env = {}
+    cleanup = lambda: None
+    if prefs.pop("neeko.secrets.keychain", None) == "TEST_KEYCHAIN":
+        keychain_prefs, env, cleanup = test_keychain()
+        prefs.update(keychain_prefs)
     if prefs.get("neeko.pages.path") == "TEST_PAGES":
         pages = os.path.realpath(os.path.join(profile, "pages"))
         os.mkdir(pages)
@@ -476,7 +516,7 @@ def run_in(binary, prefs, script, timeout=120000):
         for i, one in enumerate(scripts):
             last = i == len(scripts) - 1
             port = free_port()
-            browser = launch(binary, profile, {"marionette.port": port, **prefs})
+            browser = launch(binary, profile, {"marionette.port": port, **prefs}, env)
             m = connect(port, browser)
             m.send("WebDriver:SetTimeouts", {"script": timeout})
             # The whole script is one Marionette command, so its reply can take
@@ -504,6 +544,7 @@ def run_in(binary, prefs, script, timeout=120000):
     finally:
         if browser and browser.poll() is None:
             browser.kill()
+        cleanup()
         shutil.rmtree(profile, ignore_errors=True)
     return results
 
@@ -530,6 +571,7 @@ def main():
                 "neeko.ui.path": "TEST_UI",
                 "neeko.pages.path": "TEST_PAGES",
                 "neeko.helpers.path": "TEST_HELPERS",
+                "neeko.secrets.keychain": "TEST_KEYCHAIN",
                 "neeko.menus": json.dumps(TEST_MENUS),
                 **NO_CONTAINERS,
                 **FIREFOX_PREFS,

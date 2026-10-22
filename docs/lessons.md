@@ -679,6 +679,15 @@ Add to it whenever something costs you time.
   (`kSecClass`), and a struct type declared over a symbol gives its address
   (`kCFTypeDictionaryKeyCallBacks.address()`). An item found without
   `kSecReturnData` never makes macOS ask the user.
+- **Tests keep secrets out of the user's keychain.** On macOS,
+  `security create-keychain` also adds the new file to the user's keychain
+  list, so test_api.py puts the list back at once, and NeekoSecrets finds
+  items only in that file (`kSecMatchSearchList`) and adds them there
+  (`kSecUseKeychain`) when the `neeko.secrets.keychain` pref names one. On
+  Linux, libsecret's file backend (`SECRET_BACKEND=file`, with
+  `SECRET_FILE_TEST_PATH` and `SECRET_FILE_TEST_PASSWORD`) keeps them in a
+  file without any Secret Service, so no keyring prompt can show. That
+  Linux path hasn't run here yet (no Linux machine).
 - **A new file in `src/` needs `surfer import`** (`make` does it) before
   `mach build` can see it: Surfer links Neeko's files into `engine/` one by
   one, so a new module listed in `moz.build` fails the build as "does not

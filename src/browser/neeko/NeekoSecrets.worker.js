@@ -7,7 +7,8 @@
  * error message.
  *
  * Every call gets the item NeekoSecrets describes:
- * { platform, app, profile, name, label }.
+ * { platform, app, profile, name, label, keychain }, keychain being a
+ * keychain file of the tests' own (macOS), or null for the user's.
  */
 
 "use strict";
@@ -77,6 +78,13 @@ function macKeychain() {
     { copyDescription: Ref },
     { equal: Ref },
   ]);
+  const ArrayCallBacks = ctypes.StructType("CFArrayCallBacks", [
+    { version: CFIndex },
+    { retain: Ref },
+    { release: Ref },
+    { copyDescription: Ref },
+    { equal: Ref },
+  ]);
   const UTF8 = 0x08000100;
   const errSecItemNotFound = -25300;
   const REFUSALS = new Map([
@@ -114,12 +122,15 @@ function macKeychain() {
     KeyCallBacks.ptr,
     ValueCallBacks.ptr
   );
+  let CFArrayCreate = fn(cf, "CFArrayCreate", Ref, Ref, Ref.ptr, CFIndex, ArrayCallBacks.ptr);
+  let SecKeychainOpen = fn(sec, "SecKeychainOpen", OSStatus, ctypes.char.ptr, Ref.ptr);
   let SecItemAdd = fn(sec, "SecItemAdd", OSStatus, Ref, Ref.ptr);
   let SecItemCopyMatching = fn(sec, "SecItemCopyMatching", OSStatus, Ref, Ref.ptr);
   let SecItemUpdate = fn(sec, "SecItemUpdate", OSStatus, Ref, Ref);
   let SecItemDelete = fn(sec, "SecItemDelete", OSStatus, Ref);
   let keyCallBacks = cf.declare("kCFTypeDictionaryKeyCallBacks", KeyCallBacks);
   let valueCallBacks = cf.declare("kCFTypeDictionaryValueCallBacks", ValueCallBacks);
+  let arrayCallBacks = cf.declare("kCFTypeArrayCallBacks", ArrayCallBacks);
   let constant = (lib, name) => lib.declare(name, Ref);
   let kCFBooleanTrue = constant(cf, "kCFBooleanTrue");
   let kSecClass = constant(sec, "kSecClass");
@@ -131,6 +142,8 @@ function macKeychain() {
   let kSecReturnData = constant(sec, "kSecReturnData");
   let kSecMatchLimit = constant(sec, "kSecMatchLimit");
   let kSecMatchLimitOne = constant(sec, "kSecMatchLimitOne");
+  let kSecMatchSearchList = constant(sec, "kSecMatchSearchList");
+  let kSecUseKeychain = constant(sec, "kSecUseKeychain");
 
   let check = status => {
     if (status != 0) {
@@ -140,9 +153,11 @@ function macKeychain() {
   };
 
   /**
-   * Runs body(query, keep) with the query that finds the item (its app's
-   * service, its profile and name as the account); keep() takes a Core
-   * Foundation object made for the call, released afterwards.
+   * Runs body({ query, add, keep, string, dictionary }) with the query that
+   * finds the item (its app's service, its profile and name as the
+   * account) and what adding it takes besides; keep() takes a Core
+   * Foundation object made for the call, released afterwards. In the
+   * user's keychains, or only in item.keychain if given.
    */
   let withItem = (item, body) => {
     let made = [];
@@ -181,7 +196,19 @@ function macKeychain() {
         [kSecAttrService, string(`${item.app} secrets`)],
         [kSecAttrAccount, string(`${item.profile}/${item.name}`)],
       ];
-      return body({ query, keep, string, dictionary });
+      let add = query;
+      if (item.keychain) {
+        let [path] = bytesOf(item.keychain);
+        let keychain = Ref();
+        check(SecKeychainOpen(ctypes.cast(path.address(), ctypes.char.ptr), keychain.address()));
+        keep(keychain);
+        let list = Ref.array(1)();
+        list[0] = keychain;
+        let searchList = keep(CFArrayCreate(null, list.addressOfElement(0), 1, arrayCallBacks.address()));
+        add = [...query, [kSecUseKeychain, keychain]];
+        query = [...query, [kSecMatchSearchList, searchList]];
+      }
+      return body({ query, add, keep, string, dictionary });
     } finally {
       for (let ref of made) {
         CFRelease(ref);
@@ -230,7 +257,7 @@ function macKeychain() {
     set(item, value) {
       let [buffer, length] = bytesOf(value);
       try {
-        withItem(item, ({ query, keep, string, dictionary }) => {
+        withItem(item, ({ query, add, keep, string, dictionary }) => {
           let data = keep(CFDataCreate(null, buffer.addressOfElement(0), length));
           let label = string(item.label);
           let status = SecItemUpdate(
@@ -241,10 +268,7 @@ function macKeychain() {
             ])
           );
           if (status == errSecItemNotFound) {
-            status = SecItemAdd(
-              dictionary([...query, [kSecAttrLabel, label], [kSecValueData, data]]),
-              null
-            );
+            status = SecItemAdd(dictionary([...add, [kSecAttrLabel, label], [kSecValueData, data]]), null);
           }
           check(status);
         });
