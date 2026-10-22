@@ -247,6 +247,10 @@ Add to it whenever something costs you time.
 ## Surfer quirks
 
 - It needs `src/` to exist.
+- **Its `sharp` compiles itself against a system libvips where there is
+  one** (Arch Linux has it), which needs node-gyp, so `bun install` failed
+  there. `SHARP_IGNORE_GLOBAL_LIBVIPS=1` makes it use its own prebuilt
+  libvips; the Makefile's `deps` step, Neeko's only `bun install`, sets it.
 - It creates an empty `tests/` folder.
 - On every `surfer build` it writes the brand's `displayVersion` into
   Firefox's `browser/config/version.txt` and `version_display.txt`.
