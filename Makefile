@@ -69,8 +69,31 @@ run:
 # carries the app's own name and profile folder, then packaged into the app's
 # dist/ folder as <Name>.app and <name>-<version>.dmg. Its build files live in
 # engine/obj-release, apart from the dev build's.
+#
+# A new app version alone would recompile all of Firefox's C/C++: it's a
+# line in the build folder's config/autoconf.mk, which every C/C++ object
+# depends on (Firefox's config/rules.mk), as is the PATH configure ran with,
+# which changes with the shell. So configure runs first, and where those two
+# lines are all that changed, the file keeps its old time. The version
+# reaches compiled code only through its own folders' build files (their
+# backend.mk), which rebuild them anyway, and tools/test_release.py checks it
+# in About; the compilers are their own lines, full paths. Anything else
+# that changed is listed, and everything recompiles.
+AUTOCONF := $(ENGINE)/obj-release/config/autoconf.mk
+UNCOMPILED := ^(MOZ_APP_VERSION_DISPLAY|PATH) =
 release: configure
 	@test "$(RUST_LTO)" = 1 || echo "neeko: $(MEM_GB) GB of memory, so skipping Rust LTO (RUST_LTO=1 forces it)."
+	@test ! -f $(AUTOCONF) || cp -p $(AUTOCONF) $(AUTOCONF).before
+	cd $(ENGINE) && NEEKO_FULL_BUILD=1 ./mach configure
+	@if test -f $(AUTOCONF).before && ! cmp -s $(AUTOCONF) $(AUTOCONF).before; then \
+		if test "$$(grep -Ev '$(UNCOMPILED)' $(AUTOCONF))" = "$$(grep -Ev '$(UNCOMPILED)' $(AUTOCONF).before)"; then \
+			touch -r $(AUTOCONF).before $(AUTOCONF); \
+			echo "neeko: only the app's version (and PATH) changed in the build's config, so Firefox's C/C++ isn't recompiled."; \
+		else \
+			echo "neeko: the build's config changed, so all of Firefox's C/C++ recompiles:"; \
+			diff $(AUTOCONF).before $(AUTOCONF) | grep '^[<>]' | cut -c1-160; \
+		fi; \
+	fi; rm -f $(AUTOCONF).before
 	cd $(ENGINE) && $(if $(filter 0,$(RUST_LTO)),$(NO_RUST_LTO)) NEEKO_FULL_BUILD=1 ./mach build -j$(RELEASE_JOBS)
 	cd $(ENGINE) && NEEKO_FULL_BUILD=1 ./mach package
 	bun tools/app.ts dist $(APP)
