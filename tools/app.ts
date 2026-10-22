@@ -1687,9 +1687,10 @@ function appData(app: App): string[] {
 /**
  * The app's secrets (NeekoSecrets), which live in the user's keychain, not
  * in its folders: on macOS the passwords of the service "<name> secrets", on
- * Linux the Secret Service items of Neeko's schema with the app's name,
- * through libsecret's secret-tool. What the wipe lists for them and how it
- * deletes them, or null where there are none (or no way to tell).
+ * Linux the keyring's items of Neeko's shape with the app's name (see
+ * keyringItems), through libsecret's secret-tool. What the wipe lists for
+ * them and how it deletes them, or null where there are none (or no way to
+ * tell).
  */
 function appSecrets(app: App): { what: string; wipe: () => void } | null {
   if (process.platform == "darwin") {
@@ -1712,37 +1713,93 @@ function appSecrets(app: App): { what: string; wipe: () => void } | null {
       },
     };
   }
-  let attributes = ["xdg:schema", "neeko.Secret", "app", app.name];
-  // Lists the items' names and, for unlocked ones, values: never shown.
-  let search = () => spawnSync("secret-tool", ["search", "--all", ...attributes], { encoding: "utf8" });
-  let found = search();
-  if (found.error) {
+  let found = keyringItems(app.name);
+  if ("error" in found) {
     console.warn(
-      `neeko: no secret-tool here (apt install libsecret-tools), so ${app.displayName}'s ` +
-        "secrets in the keyring, if it has any, can't be wiped."
+      found.error == "missing"
+        ? `neeko: no secret-tool here (apt install libsecret-tools), so ${app.displayName}'s ` +
+            "secrets in the keyring, if it has any, can't be wiped."
+        : `neeko: couldn't search the keyring for ${app.displayName}'s secrets: ${found.error}`
     );
     return null;
   }
-  if (found.status != 0) {
-    console.warn(`neeko: couldn't search the keyring for ${app.displayName}'s secrets: ${found.stderr.trim()}`);
-    return null;
-  }
-  if (!found.stdout.trim()) {
+  let ours = found.items.filter(isNeekoSecret);
+  if (!ours.length) {
     return null;
   }
   return {
-    what: `its secrets in the keyring (Secret Service items, app ${app.name})`,
+    what: `its secrets in the keyring (${ours.length} item${ours.length == 1 ? "" : "s"}, app ${app.name})`,
     wipe: () => {
-      // Only unlocked items go.
-      let cleared = spawnSync("secret-tool", ["clear", ...attributes], { encoding: "utf8" });
-      if (cleared.status != 0 || search().stdout?.trim()) {
+      // `secret-tool clear` takes every item with the attributes it's given:
+      // one that has them and more isn't Neeko's, so that secret stays.
+      let others = found.items.filter(item => !isNeekoSecret(item));
+      let shared = 0;
+      for (let item of ours) {
+        let query = Object.entries(item);
+        if (others.some(other => query.every(([key, value]) => other[key] == value))) {
+          shared++;
+          continue;
+        }
+        spawnSync("secret-tool", ["clear", ...query.flat()], { stdio: "ignore" });
+      }
+      let again = keyringItems(app.name);
+      let left = "items" in again ? again.items.filter(isNeekoSecret).length : ours.length;
+      if (left) {
         console.warn(
-          `neeko: some of ${app.displayName}'s secrets are still in the keyring ` +
-            `(${cleared.stderr.trim() || "is it locked?"}).`
+          `neeko: ${left} of ${app.displayName}'s secrets ${left == 1 ? "is" : "are"} still in the keyring ` +
+            (shared
+              ? `(${shared} share${shared == 1 ? "s" : ""} its attributes with another item, which clearing would delete too).`
+              : "(is it locked?).")
         );
       }
     },
   };
+}
+
+/**
+ * The keyring's items with the app's name, each as its attributes, its
+ * schema as "xdg:schema", from `secret-tool search`. That prints an item's
+ * path ([no path] in libsecret's file backend), label, value and schema on
+ * stdout but its attributes on stderr, each line flushed, so the two are
+ * read as one stream, in order. Values are never kept, nor shown.
+ */
+function keyringItems(app: string): { items: Record<string, string>[] } | { error: string } {
+  let search = spawnSync(
+    "sh",
+    ["-c", 'command -v secret-tool >/dev/null || exit 127; exec secret-tool search --all "$@" 2>&1', "sh", "app", app],
+    { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 }
+  );
+  if (search.status == 127) {
+    return { error: "missing" };
+  }
+  if (search.status != 0) {
+    let said = search.stdout.split("\n").filter(line => line.startsWith("secret-tool:"));
+    return { error: said.join(" ") || `secret-tool failed (${search.status})` };
+  }
+  let items: Record<string, string>[] = [];
+  for (let line of search.stdout.split("\n")) {
+    let attribute = line.match(/^(?:attribute\.(\S+)|schema) = (.*)$/);
+    if (line.startsWith("[")) {
+      items.push({});
+    } else if (attribute && items.length) {
+      items[items.length - 1][attribute[1] ?? "xdg:schema"] = attribute[2];
+    }
+  }
+  return { items: items.filter(item => item.app == app) };
+}
+
+/**
+ * Whether a keyring item is one of Neeko's secrets (NeekoSecrets.worker.js):
+ * exactly the attributes app, profile and name, of the schema neeko.Secret,
+ * which libsecret's file backend (a Flatpak's, the API test's keyring)
+ * doesn't keep.
+ */
+function isNeekoSecret(item: Record<string, string>): boolean {
+  let { "xdg:schema": schema, ...attributes } = item;
+  return (
+    (schema === undefined || schema == "neeko.Secret") &&
+    Object.keys(attributes).sort().join() == "app,name,profile"
+  );
 }
 
 /** Whether the app runs now: any copy of it on macOS, or its builds here. */
