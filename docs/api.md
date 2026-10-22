@@ -963,7 +963,9 @@ let answer = await neeko.helper.fetch("hello", "/answer", {
   item labeled `<app>: <name>`, of the service `<app> secrets`, with the
   account `<profile folder>/<name>`. On Linux each has the attributes
   `app`, `profile` and `name` (schema `neeko.Secret`), in the default
-  keyring.
+  keyring. `<app>` is `browser.json`'s `name`, in dev builds too. `make
+  wipe` deletes them all (see
+  "Starting afresh" in [using-neeko.md](using-neeko.md)).
 - **The keychain may ask the user.** A macOS keychain item remembers the
   program that made it. When another build of your browser first reads it
   (an update, unless your builds are signed with a Developer ID), macOS
